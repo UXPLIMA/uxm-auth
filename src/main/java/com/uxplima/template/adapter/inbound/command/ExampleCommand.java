@@ -12,7 +12,6 @@ import com.uxplima.template.application.port.ExampleRepository;
 import com.uxplima.template.domain.ExampleName;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
-import com.uxplima.uxmlib.command.annotation.annotations.Command;
 import com.uxplima.uxmlib.command.annotation.annotations.Permission;
 import com.uxplima.uxmlib.command.annotation.annotations.PlayerOnly;
 import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
@@ -27,8 +26,11 @@ import com.uxplima.uxmlib.text.message.Messages;
  * <p>The command name here is the default. An operator renames, aliases, or disables it in
  * {@code commands.conf}, and nothing in this class changes.
  */
-@Command(name = "example", description = "Manage your examples")
+@FromConfig(value = ExampleCommand.KEY, fallbackName = "example", description = "Manage your examples")
 public final class ExampleCommand {
+
+    /** The key this command is named under in {@code commands.conf}. */
+    public static final String KEY = "example";
 
     private final CreateExample createExample;
     private final ExampleRepository repository;

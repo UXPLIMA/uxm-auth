@@ -32,6 +32,10 @@ dependencies {
     // on a server that does not have them.
     compileOnly(libs.placeholderapi)
 
+    // Paper is compileOnly for the jar, because the server provides it. A test still has to
+    // link against it: a fake that implements a uxmLib port sees Location and Entity in the
+    // signatures it has to write out.
+    testImplementation(libs.paper.api)
     testImplementation(libs.mockbukkit)
     testImplementation(libs.archunit.junit)
 }
@@ -49,6 +53,12 @@ tasks.processResources {
 
 tasks.shadowJar {
     archiveClassifier.set("")
+
+    // Configurate finds its type serializers through the ServiceLoader, and a JDBC driver
+    // registers itself the same way. Without this, the several META-INF/services files of
+    // the merged dependencies overwrite each other and the loser goes quiet at runtime
+    // rather than failing at build time.
+    mergeServiceFiles()
 
     // Relocate everything we bundle into our own namespace, so that two plugins that
     // shade the same library cannot clash. Never relocate Adventure or Kyori: Paper

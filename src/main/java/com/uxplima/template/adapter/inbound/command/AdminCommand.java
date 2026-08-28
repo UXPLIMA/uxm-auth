@@ -5,15 +5,17 @@ import java.util.Objects;
 import com.uxplima.template.adapter.outbound.PluginSettings;
 import com.uxplima.template.application.message.Keys;
 import com.uxplima.uxmlib.command.Sender;
-import com.uxplima.uxmlib.command.annotation.annotations.Command;
 import com.uxplima.uxmlib.command.annotation.annotations.Permission;
 import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
 import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 
 /** The operator surface: reload the configuration, and report what the plugin is running. */
-@Command(name = "uxmtemplate", description = "Administer the plugin")
+@FromConfig(value = AdminCommand.KEY, fallbackName = "uxmtemplate", description = "Administer the plugin")
 public final class AdminCommand {
+
+    /** The key this command is named under in {@code commands.conf}. */
+    public static final String KEY = "uxmtemplate";
 
     private final PluginSettings settings;
     private final Messages messages;

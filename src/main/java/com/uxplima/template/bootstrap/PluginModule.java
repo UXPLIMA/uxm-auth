@@ -11,7 +11,9 @@ import java.util.Objects;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.template.adapter.inbound.command.AdminCommand;
+import com.uxplima.template.adapter.inbound.command.ConfiguredCommands;
 import com.uxplima.template.adapter.inbound.command.ExampleCommand;
+import com.uxplima.template.adapter.inbound.command.FromConfig;
 import com.uxplima.template.adapter.outbound.InMemoryExampleRepository;
 import com.uxplima.template.adapter.outbound.PluginSettings;
 import com.uxplima.template.application.CreateExample;
@@ -57,14 +59,25 @@ final class PluginModule {
         CreateExample createExample =
                 new CreateExample(repository, settings.current().exampleLimit());
 
-        ParamResolvers resolvers = ParamResolvers.withDefaults();
-        AnnotatedCommands.register(
-                plugin, new ExampleCommand(createExample, repository, messages), resolvers, scheduler);
-        AnnotatedCommands.register(
-                plugin,
-                new AdminCommand(settings, messages, plugin.getPluginMeta().getVersion()),
-                resolvers,
-                scheduler);
+        // commands.conf names every command. @FromConfig carries only a key, and this replacer
+        // rewrites it into the @Command the DSL expects. A handler must never also declare
+        // @Command: uxmLib keeps a declared annotation over a produced one, so the file would be
+        // read and then ignored, which is worse than not reading it at all.
+        ConfiguredCommands commands =
+                ConfiguredCommands.load(plugin.getDataFolder().toPath().resolve("commands.conf"));
+        ParamResolvers resolvers = ParamResolvers.withDefaults().replacer(FromConfig.class, commands.replacer());
+
+        if (commands.isEnabled(ExampleCommand.KEY, "example")) {
+            AnnotatedCommands.register(
+                    plugin, new ExampleCommand(createExample, repository, messages), resolvers, scheduler);
+        }
+        if (commands.isEnabled(AdminCommand.KEY, "uxmtemplate")) {
+            AnnotatedCommands.register(
+                    plugin,
+                    new AdminCommand(settings, messages, plugin.getPluginMeta().getVersion()),
+                    resolvers,
+                    scheduler);
+        }
     }
 
     private Messages buildMessages() {

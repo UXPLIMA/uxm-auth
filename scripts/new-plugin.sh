@@ -61,6 +61,7 @@ git mv "src/main/java/com/uxplima/${slug}/bootstrap/TemplatePlugin.java" \
 while IFS= read -r -d '' file; do
     sed -i \
         -e "s/com\.uxplima\.template/com.uxplima.${slug}/g" \
+        -e "s|com/uxplima/template|com/uxplima/${slug}|g" \
         -e "s/TemplatePlugin/${prefix}Plugin/g" \
         -e "s/uxmTemplate/uxm${prefix}/g" \
         -e "s/uxmtemplate/${root}/g" \
@@ -75,4 +76,6 @@ echo "  1. Delete the worked example: ExampleName, ExampleEvent, ExampleReposito
 echo "     CreateExample, InMemoryExampleRepository, ExampleCommand and their tests."
 echo "  2. Strip the example keys from Keys.java and from both message catalogs."
 echo "  3. Write docs/01-architecture.md for what this plugin actually does."
-echo "  4. ./gradlew spotlessApply && ./gradlew build"
+echo "  4. Rewrite README.md: it describes the template, not your plugin."
+echo "  5. Delete this script. A real plugin is not a template."
+echo "  6. ./gradlew spotlessApply && ./gradlew build"

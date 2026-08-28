@@ -31,5 +31,6 @@ Then delete the worked example, and read `docs/00-README.md`.
 - Seven ArchUnit fences and a source guard against untranslatable text, each one proved to
   fail before it was committed.
 - A message key enum with English and Turkish catalogs, and a per-key default.
-- A typed configuration snapshot, and `commands.conf` for renaming any command.
+- A typed configuration snapshot, and a `commands.conf` that is actually read, with a test
+  that proves the label reaches the built Brigadier node.
 - uxmLib shaded and relocated, so the jar runs on its own.
