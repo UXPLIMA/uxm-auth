@@ -10,6 +10,15 @@ plugins {
 
 val libs = the<org.gradle.accessors.dm.LibrariesForLibs>()
 
+// Mockito 5 attaches its inline mock maker to the running JVM by itself. The JDK already
+// answers that with "Dynamic loading of agents will be disallowed by default in a future
+// release", and a later JDK will refuse it. The agent is passed on the command line here,
+// so the warning goes away and the tests keep working when the refusal arrives.
+val mockitoAgent: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(libs.versions.java.get().toInt())
@@ -30,6 +39,7 @@ dependencies {
     "testImplementation"(libs.bundles.testing)
     // Gradle 9 no longer puts junit-platform-launcher on the test runtime classpath.
     "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+    mockitoAgent(libs.mockito.core) { isTransitive = false }
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -84,6 +94,7 @@ configure<com.diffplug.gradle.spotless.SpotlessExtension> {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-javaagent:" + mockitoAgent.asPath) })
     testLogging {
         events("passed", "failed", "skipped")
         showStandardStreams = false

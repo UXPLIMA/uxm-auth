@@ -24,9 +24,10 @@ dependencies {
 
     // uxmLib is our foundation, and it is shaded into the jar. The plugin must run as a
     // standalone jar, without another plugin on the server. See docs/02-build.md.
+    // The bundle is a starting point, not a rule. A plugin with no menu takes the four
+    // modules one by one and leaves uxmlib-gui out. See docs/02-build.md.
     implementation(libs.bundles.uxmlib)
     implementation(libs.configurate.hocon)
-    implementation(libs.bstats.bukkit)
 
     // Soft dependencies. Touched only past a plugin-present guard, so the plugin loads
     // on a server that does not have them.
@@ -64,9 +65,16 @@ tasks.shadowJar {
     // shade the same library cannot clash. Never relocate Adventure or Kyori: Paper
     // bundles them, and relocating breaks the server's own serializers.
     relocate("com.uxplima.uxmlib", "com.uxplima.template.libs.uxmlib")
-    relocate("org.bstats", "com.uxplima.template.libs.bstats")
     relocate("com.typesafe.config", "com.uxplima.template.libs.typesafe")
     relocate("org.spongepowered.configurate", "com.uxplima.template.libs.configurate")
+
+    // These three arrive with the libraries above and nothing here names them. They were
+    // left in their own namespace by the first version of this list, which is exactly the
+    // clash the list exists to prevent. geantyref is the one that matters: Configurate
+    // reads a generic type through it at runtime.
+    relocate("io.leangen.geantyref", "com.uxplima.template.libs.geantyref")
+    relocate("org.checkerframework", "com.uxplima.template.libs.checkerframework")
+    relocate("com.google.errorprone.annotations", "com.uxplima.template.libs.errorprone")
 
     // minimize() is deliberately not enabled. uxmLib reaches Brigadier, the registries
     // and MiniMessage reflectively, and Configurate finds its codecs through the

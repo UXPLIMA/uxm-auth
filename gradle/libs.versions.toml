@@ -44,6 +44,8 @@ uxmlib-item       = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-item",        
 uxmlib-gui        = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-gui",          version.ref = "uxmlib" }
 configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
 jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }
+# bstats is here for the plugin that wants metrics. Nothing in the template builds a
+# Metrics, so the template does not take it: an unused library is weight in every jar.
 bstats-bukkit     = { module = "org.bstats:bstats-bukkit",                       version.ref = "bstats" }
 placeholderapi    = { module = "me.clip:placeholderapi",                         version.ref = "placeholderapi" }
 

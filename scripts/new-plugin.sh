@@ -74,12 +74,19 @@ done < <(find . -type f \
 # date". Rewriting the template name inside it makes the note claim that your plugin
 # did it. History is not renamed.
 
+# The comment over rootProject.name explains a script that step 5 below tells you to
+# delete. Rewrite it now, while the script is still here to do it.
+sed -i 's|^// The plugin id\. scripts/new-plugin\.sh rewrites it, along with the package root$|// The plugin id.|' settings.gradle.kts
+sed -i '/^\/\/ and the jar name, when the template becomes a real plugin\.$/d' settings.gradle.kts
+
 echo
 echo "Done. Next:"
 echo "  1. Delete the worked example: ExampleName, ExampleEvent, ExampleRepository,"
 echo "     CreateExample, InMemoryExampleRepository, ExampleCommand and their tests."
 echo "  2. Strip the example keys from Keys.java and from both message catalogs."
 echo "  3. Write docs/01-architecture.md for what this plugin actually does."
-echo "  4. Rewrite README.md: it describes the template, not your plugin."
-echo "  5. Delete this script. A real plugin is not a template."
-echo "  6. ./gradlew spotlessApply && ./gradlew build"
+echo "  4. Rewrite the examples in docs/03-conventions.md, docs/04-i18n.md and"
+echo "     docs/05-testing.md. They name the classes that step 1 deletes."
+echo "  5. Rewrite README.md: it describes the template, not your plugin."
+echo "  6. Delete this script. A real plugin is not a template."
+echo "  7. ./gradlew spotlessApply && ./gradlew build"
