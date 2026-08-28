@@ -1,0 +1,19 @@
+name: uxmTemplate
+version: '${version}'
+main: com.uxplima.template.bootstrap.TemplatePlugin
+api-version: '1.21'
+authors: ['UXPLIMA']
+description: 'The starting point for a UXPLIMA plugin.'
+website: 'https://github.com/INOVIXI/uxm-plugin-template'
+
+# Every scheduler call goes through the uxmLib Scheduler port, which routes to the
+# right global, region, entity or async scheduler. Nothing calls BukkitScheduler.
+folia-supported: true
+
+# Optional integrations. The plugin runs fully without any of them, because every
+# third-party symbol is reached only past a plugin-present guard.
+dependencies:
+  server:
+    PlaceholderAPI:
+      load: BEFORE
+      required: false

@@ -1,0 +1,95 @@
+import net.ltgt.gradle.errorprone.errorprone
+import net.ltgt.gradle.nullaway.nullaway
+
+plugins {
+    id("java-library")
+    id("com.diffplug.spotless")
+    id("net.ltgt.errorprone")
+    id("net.ltgt.nullaway")
+}
+
+val libs = the<org.gradle.accessors.dm.LibrariesForLibs>()
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(libs.versions.java.get().toInt())
+        vendor = JvmVendorSpec.ADOPTIUM
+    }
+}
+
+dependencies {
+    "compileOnly"(libs.jspecify)
+    "testCompileOnly"(libs.jspecify)
+    // @Retention(CLASS) markers that the compiler reads and nothing needs at runtime.
+    "compileOnly"(libs.errorprone.annos)
+    "testCompileOnly"(libs.errorprone.annos)
+    "errorprone"(libs.errorprone.core)
+    "errorprone"(libs.nullaway)
+
+    "testImplementation"(platform(libs.junit.bom))
+    "testImplementation"(libs.bundles.testing)
+    // Gradle 9 no longer puts junit-platform-launcher on the test runtime classpath.
+    "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release = libs.versions.java.get().toInt()
+    options.encoding = "UTF-8"
+    options.compilerArgs.addAll(
+        listOf(
+            "-Xlint:all",
+            "-Xlint:-processing",
+            "-Xlint:-serial",
+            // JDK 23+ flags a /** */ comment that is used as a section marker rather
+            // than attached to a declaration. That is style, not correctness.
+            "-Xlint:-dangling-doc-comments",
+            "-Werror",
+            "-parameters",
+        ),
+    )
+    options.errorprone {
+        disableWarningsInGeneratedCode.set(true)
+        // Would rewrite a deliberate descriptive unused-catch-variable name to `_`.
+        disable("UnnamedVariable")
+        // Style checks that Error Prone 2.50 turned on by default. They fire on correct
+        // code. Correctness checks stay on.
+        disable("RefactorSwitch")
+        disable("ReferenceEquality")
+        disable("EffectivelyPrivate")
+    }
+}
+
+extensions.configure<net.ltgt.gradle.nullaway.NullAwayExtension> {
+    onlyNullMarked.set(true)
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.errorprone.nullaway {
+        severity.set(net.ltgt.gradle.errorprone.CheckSeverity.ERROR)
+    }
+}
+
+configure<com.diffplug.gradle.spotless.SpotlessExtension> {
+    java {
+        palantirJavaFormat(libs.versions.palantir.fmt.get())
+        removeUnusedImports()
+        formatAnnotations()
+        importOrder("java", "javax", "org.bukkit", "io.papermc", "net.kyori", "")
+        trimTrailingWhitespace()
+        endWithNewline()
+        toggleOffOn()
+    }
+    kotlinGradle { ktlint("1.5.0") }
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "failed", "skipped")
+        showStandardStreams = false
+    }
+    systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+    // Pinned, because an unset max heap is a quarter of the host RAM. A CI runner then
+    // gets far less than a workstation, and the parallel MockBukkit servers run out.
+    maxHeapSize = "2g"
+}

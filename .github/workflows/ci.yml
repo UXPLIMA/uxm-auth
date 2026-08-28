@@ -1,0 +1,64 @@
+name: CI
+
+# Runs the same gate that CLAUDE.md asks for locally, on a machine nobody has
+# configured. The shaded jar is assembled here on purpose: a relocation problem
+# only appears in the assembled artifact, and no unit test can see it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Writing style
+        run: scripts/check-style.sh
+
+      - name: Documentation index
+        run: scripts/check-docs.py
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Assemble the shaded jar
+        run: ./gradlew shadowJar
+
+      # A relocation mistake ships silently otherwise. Adventure must never be
+      # bundled, and no uxmLib class may keep its original package.
+      - name: Verify the relocation
+        run: |
+          jar="$(ls build/libs/*.jar | head -1)"
+          if unzip -l "$jar" | grep -q 'net/kyori'; then
+            echo "Adventure is bundled. Paper provides it; remove it from the jar." >&2
+            exit 1
+          fi
+          if unzip -l "$jar" | grep -qE ' com/uxplima/uxmlib/'; then
+            echo "uxmLib is present un-relocated. Check the relocate() call." >&2
+            exit 1
+          fi
+          echo "Relocation is correct."
+
+      - name: Upload the test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/
+          retention-days: 7
