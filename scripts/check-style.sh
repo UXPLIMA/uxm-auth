@@ -29,8 +29,13 @@ cd "$(dirname "$0")/.." || exit 2
 em_dash=$'\u2014'
 en_dash=$'\u2013'
 
+# Only files that we write are checked. A build directory holds compiled output
+# and a downloaded dependency, and neither is ours to correct. The guard was
+# green over these directories by luck, not by design.
 hits="$(grep -rn "[${em_dash}${en_dash}]" . \
     --exclude-dir=.git \
+    --exclude-dir=.gradle \
+    --exclude-dir=build \
     --exclude-dir=node_modules \
     --binary-files=without-match)"
 status=$?
