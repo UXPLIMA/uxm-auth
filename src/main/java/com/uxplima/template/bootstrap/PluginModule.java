@@ -80,6 +80,20 @@ final class PluginModule {
         }
     }
 
+    /**
+     * Give back everything that the server does not take back by itself. A reload disables and
+     * enables the plugin again, so anything left open here is leaked once per reload.
+     *
+     * <p>The template opens nothing, so this method is empty. It is here because the plugin that
+     * opens a database, installs the GUI listener or starts a repeating task needs one obvious
+     * place to close it, and a place that has to be invented is a place that gets forgotten.
+     * Close in the reverse order of {@link #wire()}: a task that touches the database is
+     * cancelled before the database is closed.
+     */
+    void shutdown() {
+        // Nothing is open yet. Close your database, your GUI listener and your timers here.
+    }
+
     private Messages buildMessages() {
         Path messagesFolder = plugin.getDataFolder().toPath().resolve("messages");
         Map<Locale, ConfigurationNode> trees = new HashMap<>();
