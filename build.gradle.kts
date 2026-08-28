@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 // No root `plugins {}` block. Spotless, Error Prone and NullAway reach every
 // subproject through the buildSrc convention plugin. Declaring them again here
 // with `apply false` makes Gradle 9 fail with "plugin already on classpath".
@@ -68,13 +70,20 @@ tasks.shadowJar {
     relocate("com.typesafe.config", "com.uxplima.template.libs.typesafe")
     relocate("org.spongepowered.configurate", "com.uxplima.template.libs.configurate")
 
-    // These three arrive with the libraries above and nothing here names them. They were
-    // left in their own namespace by the first version of this list, which is exactly the
-    // clash the list exists to prevent. geantyref is the one that matters: Configurate
-    // reads a generic type through it at runtime.
+    // geantyref arrives with Configurate, which reads a generic type through it at runtime,
+    // so it is a real library and it is relocated like the rest.
     relocate("io.leangen.geantyref", "com.uxplima.template.libs.geantyref")
-    relocate("org.checkerframework", "com.uxplima.template.libs.checkerframework")
-    relocate("com.google.errorprone.annotations", "com.uxplima.template.libs.errorprone")
+
+    dependencies {
+        // Paper already has slf4j, and a second copy of the API with no binding behind it makes
+        // logging go quiet rather than fail. Take the server's.
+        exclude(dependency("org.slf4j:.*:.*"))
+        // Annotations that a compiler reads and a runtime never loads. They arrive with the
+        // libraries above and only add weight.
+        exclude(dependency("com.google.errorprone:.*:.*"))
+        exclude(dependency("org.checkerframework:.*:.*"))
+        exclude(dependency("org.jspecify:.*:.*"))
+    }
 
     // minimize() is deliberately not enabled. uxmLib reaches Brigadier, the registries
     // and MiniMessage reflectively, and Configurate finds its codecs through the
@@ -82,6 +91,58 @@ tasks.shadowJar {
 }
 
 tasks.assemble { dependsOn(tasks.shadowJar) }
+
+// Every builder of a plugin audited the jar by hand with unzip, and a hand audit is only
+// correct on the day somebody ran it. These are the packages that must never ship inside a
+// plugin jar: the server owns them, or they are shaded and must carry our namespace. The
+// SQLite driver is the one exception, and it is named as such.
+val forbiddenJarEntries =
+    listOf(
+        "net/kyori/" to "Paper owns Adventure. A shaded copy breaks the server's own serializers.",
+        "org/slf4j/" to "Paper owns slf4j. A second API with no binding makes logging go quiet.",
+        "com/uxplima/uxmlib/" to "uxmLib must be relocated. This entry is un-relocated.",
+        "org/spongepowered/" to "Configurate must be relocated.",
+        "com/typesafe/" to "Typesafe Config must be relocated.",
+        "io/leangen/" to "geantyref must be relocated.",
+        "org/bstats/" to "bstats must be relocated when it is taken at all.",
+    )
+
+val verifyJar =
+    tasks.register("verifyJar") {
+        description = "Fail the build when the shaded jar carries a package it must not."
+        group = "verification"
+        // shadowJar writes over the plain jar, because its classifier is empty, so Gradle sees the
+        // file as the output of both tasks and refuses to guess which one has to run first.
+        dependsOn(tasks.shadowJar, tasks.jar)
+        val jar = tasks.shadowJar.flatMap { shadow -> shadow.archiveFile }
+        inputs.file(jar)
+        doLast {
+            val names = mutableListOf<String>()
+            ZipFile(jar.get().asFile).use { archive ->
+                val entries = archive.entries()
+                while (entries.hasMoreElements()) {
+                    names.add(entries.nextElement().name)
+                }
+            }
+            val found = mutableListOf<String>()
+            for ((prefix, why) in forbiddenJarEntries) {
+                var count = 0
+                for (name in names) {
+                    if (name.startsWith(prefix)) {
+                        count++
+                    }
+                }
+                if (count > 0) {
+                    found.add("  " + prefix + " (" + count + " entries): " + why)
+                }
+            }
+            if (found.isNotEmpty()) {
+                throw GradleException("The jar carries packages it must not:\n" + found.joinToString("\n"))
+            }
+        }
+    }
+
+tasks.check { dependsOn(verifyJar) }
 
 tasks.runServer {
     minecraftVersion("1.21.11")
