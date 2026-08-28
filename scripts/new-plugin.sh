@@ -68,7 +68,11 @@ while IFS= read -r -d '' file; do
         "$file"
 done < <(find . -type f \
     \( -name '*.java' -o -name '*.kts' -o -name '*.yml' -o -name '*.conf' -o -name '*.md' -o -name '*.toml' \) \
-    -not -path './build/*' -not -path './.git/*' -print0)
+    -not -path './build/*' -not -path './.git/*' -not -path './docs/notes/*' -print0)
+
+# docs/notes/ is a record of what happened. A note says "the template did X on this
+# date". Rewriting the template name inside it makes the note claim that your plugin
+# did it. History is not renamed.
 
 echo
 echo "Done. Next:"
