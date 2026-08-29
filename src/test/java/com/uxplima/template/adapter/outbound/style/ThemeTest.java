@@ -53,6 +53,21 @@ final class ThemeTest {
     }
 
     @Test
+    @DisplayName("a language the file leaves out keeps the shipped answer")
+    void keepsTheDefaultForALanguageTheFileDoesNotName() throws ConfigurateException {
+        ConfigurationNode node = CommentedConfigurationNode.root();
+        node.node("small-caps", "tr").set(false);
+        Theme theme = Theme.from(node);
+        assertThat(theme.smallCaps(Locale.ENGLISH))
+                .describedAs("naming one language must not switch every other one off")
+                .isTrue();
+        assertThat(theme.smallCaps(Locale.of("tr"))).isFalse();
+        assertThat(theme.smallCaps(Locale.of("el")))
+                .describedAs("a language nobody has answered for keeps its own letters")
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("an invalid colour is a defect at load, not a black message in the game")
     void refusesAnInvalidColour() throws ConfigurateException {
         ConfigurationNode node = CommentedConfigurationNode.root();

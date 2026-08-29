@@ -33,7 +33,12 @@ public final class Theme {
 
     private static final String DEFAULT_SEPARATOR = "▶";
 
-    /** Small capitals exist for the Latin alphabet only, so a language with letters of its own turns them off. */
+    /**
+     * The languages that are written in small capitals unless the file says otherwise. Small capitals exist
+     * for the Latin alphabet only, so the safe default is English and nothing else: a language with letters
+     * of its own keeps them until somebody who reads that language decides otherwise. A key in
+     * {@code theme.conf} overrides one language, and the languages it leaves out keep this default.
+     */
     private static final Set<String> DEFAULT_SMALL_CAPS = Set.of("en");
 
     private final Map<String, TextColor> colours;
@@ -77,13 +82,16 @@ public final class Theme {
         String separator = node.node("prefix", "separator").getString(DEFAULT_SEPARATOR);
         Map<Object, ? extends ConfigurationNode> languages =
                 node.node("small-caps").childrenMap();
-        Set<String> smallCaps = new java.util.HashSet<>();
+        Set<String> smallCaps = new java.util.HashSet<>(DEFAULT_SMALL_CAPS);
         for (var child : languages.entrySet()) {
+            String language = String.valueOf(child.getKey()).toLowerCase(Locale.ROOT);
             if (child.getValue().getBoolean()) {
-                smallCaps.add(String.valueOf(child.getKey()).toLowerCase(Locale.ROOT));
+                smallCaps.add(language);
+            } else {
+                smallCaps.remove(language);
             }
         }
-        return new Theme(colours, categories, separator, languages.isEmpty() ? DEFAULT_SMALL_CAPS : smallCaps);
+        return new Theme(colours, categories, separator, smallCaps);
     }
 
     /** The colour of {@code role}, or the body colour when the role is unknown to this theme. */
