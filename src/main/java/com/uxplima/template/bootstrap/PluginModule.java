@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -16,7 +18,10 @@ import com.uxplima.template.adapter.inbound.command.ExampleCommand;
 import com.uxplima.template.adapter.inbound.command.FromConfig;
 import com.uxplima.template.adapter.outbound.InMemoryExampleRepository;
 import com.uxplima.template.adapter.outbound.PluginSettings;
+import com.uxplima.template.adapter.outbound.style.Styler;
+import com.uxplima.template.adapter.outbound.style.Theme;
 import com.uxplima.template.application.CreateExample;
+import com.uxplima.template.application.message.Keys;
 import com.uxplima.template.application.port.ExampleRepository;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
 import com.uxplima.uxmlib.command.annotation.ParamResolvers;
@@ -26,6 +31,7 @@ import com.uxplima.uxmlib.text.message.LocaleSource;
 import com.uxplima.uxmlib.text.message.MessageCatalog;
 import com.uxplima.uxmlib.text.message.MessageCatalogLoader;
 import com.uxplima.uxmlib.text.message.Messages;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
 
@@ -42,6 +48,8 @@ final class PluginModule {
 
     private final JavaPlugin plugin;
     private final PluginSettings settings;
+
+    private @Nullable Styler styler;
 
     PluginModule(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -94,6 +102,32 @@ final class PluginModule {
         // Nothing is open yet. Close your database, your GUI listener and your timers here.
     }
 
+    /**
+     * The palette, read once. The menus need it for the parts of a tile that are not text, and the message
+     * catalog needs it for every line, so it is built here and handed to both.
+     */
+    private Styler styler() {
+        if (styler == null) {
+            styler = new Styler(loadTheme());
+        }
+        return styler;
+    }
+
+    private Theme loadTheme() {
+        Path file = plugin.getDataFolder().toPath().resolve("theme.conf");
+        if (!Files.isRegularFile(file)) {
+            return Theme.defaults();
+        }
+        try {
+            return Theme.from(
+                    HoconConfigurationLoader.builder().path(file).build().load());
+        } catch (IOException | IllegalArgumentException unreadableTheme) {
+            // A broken palette must not stop a server. The shipped colours are always correct.
+            plugin.getSLF4JLogger().warn("Cannot read theme.conf. The shipped palette is used.", unreadableTheme);
+            return Theme.defaults();
+        }
+    }
+
     private Messages buildMessages() {
         Path messagesFolder = plugin.getDataFolder().toPath().resolve("messages");
         Map<Locale, ConfigurationNode> trees = new HashMap<>();
@@ -116,13 +150,47 @@ final class PluginModule {
 
         Locale defaultLocale = Locale.forLanguageTag(settings.current().locale());
         MessageCatalog catalog = MessageCatalogLoader.fromNodes(trees, defaultLocale);
-        return new Messages(catalog, LocaleSource.ofDefault(defaultLocale));
+        Map<Locale, Map<String, String>> files = new HashMap<>();
+        for (var entry : trees.entrySet()) {
+            files.put(entry.getKey(), flatten(entry.getValue()));
+        }
+        MessageCatalog styled = styler().style(catalog, List.of(Keys.values()), files, defaultLocale);
+        return new Messages(styled, LocaleSource.ofDefault(defaultLocale));
+    }
+
+    /**
+     * Every path a language file holds, flattened to {@code a.b.c -> template}.
+     *
+     * <p>The style pass covers what the key enum knows and what the file adds. A plugin can build a key at
+     * run time: one lore line of several, one cosmetic of a pack, one lobby of a network. A path like that is
+     * in no enum, so without this the line an operator wrote themselves would be the one line that reached a
+     * player with its tokens unexpanded.
+     */
+    private static Map<String, String> flatten(ConfigurationNode node) {
+        Map<String, String> flat = new LinkedHashMap<>();
+        collect(node, "", flat);
+        return flat;
+    }
+
+    private static void collect(ConfigurationNode node, String path, Map<String, String> into) {
+        if (node.isMap()) {
+            for (var child : node.childrenMap().entrySet()) {
+                String childPath = path.isEmpty() ? String.valueOf(child.getKey()) : path + "." + child.getKey();
+                collect(child.getValue(), childPath, into);
+            }
+            return;
+        }
+        String template = node.getString();
+        if (template != null && !path.isEmpty()) {
+            into.put(path, template);
+        }
     }
 
     /** Write the shipped defaults on first run. An existing file is never overwritten. */
     private void extractDefaults(Path dataFolder) {
         saveIfAbsent(dataFolder, "config.conf");
         saveIfAbsent(dataFolder, "commands.conf");
+        saveIfAbsent(dataFolder, "theme.conf");
         for (String tag : SHIPPED_LOCALES) {
             saveIfAbsent(dataFolder, "messages/messages_" + tag + ".conf");
         }

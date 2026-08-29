@@ -10,20 +10,20 @@ import com.uxplima.uxmlib.text.message.MessageKey;
  * {@code NoInlineTextTest} fails the build over one.
  */
 public enum Keys implements MessageKey {
-    PREFIX("prefix", "<gradient:#5eead4:#38bdf8><bold>uxm</bold></gradient> <dark_gray>|</dark_gray> "),
+    VERSION("admin.version", "<tag:'TEMPLATE'> <body>uxmTemplate <value><version>"),
+    RELOADED("admin.reloaded", "<tag:'TEMPLATE'> <body>The configuration is loaded again, in <value><ms><body> ms."),
+    RELOAD_FAILED("admin.reload-failed", "<etag:'ERROR'> <body>The reload failed. The console holds the reason."),
 
-    VERSION("admin.version", "<gray>uxmTemplate <white><version></white>"),
-    RELOADED("admin.reloaded", "<green>Configuration reloaded in <white><ms></white> ms."),
-    RELOAD_FAILED("admin.reload-failed", "<red>The reload failed. Read the console for the reason."),
-    NO_PERMISSION("error.no-permission", "<red>You do not have permission to do that."),
-    PLAYER_ONLY("error.player-only", "<red>Only a player can run this command."),
-    INVALID_NAME("error.invalid-name", "<red>A name uses lower-case letters, digits and a hyphen only."),
+    NO_PERMISSION("error.no-permission", "<etag:'ERROR'> <body>You do not have permission to do that."),
+    PLAYER_ONLY("error.player-only", "<etag:'ERROR'> <body>Only a player can run this command."),
+    INVALID_NAME(
+            "error.invalid-name", "<etag:'ERROR'> <body>A name holds lower-case letters, digits and hyphens only."),
 
-    EXAMPLE_CREATED("example.created", "<green>Created <white><name></white>."),
-    EXAMPLE_EXISTS("example.exists", "<red>You already have <white><name></white>."),
-    EXAMPLE_LIMIT("example.limit", "<red>You have reached your limit of <white><limit></white>."),
-    EXAMPLE_LIST_EMPTY("example.list-empty", "<gray>You have nothing yet."),
-    EXAMPLE_LIST("example.list", "<gray>Yours: <white><names></white>");
+    EXAMPLE_CREATED("example.created", "<tag:'TEMPLATE'> <body><value><name><body> is created."),
+    EXAMPLE_EXISTS("example.exists", "<etag:'ERROR'> <body>You already have <value><name><body>."),
+    EXAMPLE_LIMIT("example.limit", "<etag:'ERROR'> <body>You have reached your limit of <value><limit><body>."),
+    EXAMPLE_LIST_EMPTY("example.list-empty", "<tag:'TEMPLATE'> <body>You have nothing yet."),
+    EXAMPLE_LIST("example.list", "<tag:'TEMPLATE'> <body>Yours: <value><names>");
 
     private final String path;
     private final String defaultTemplate;
