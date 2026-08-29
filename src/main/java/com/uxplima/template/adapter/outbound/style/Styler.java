@@ -22,12 +22,14 @@ import com.uxplima.uxmlib.text.message.MessageKey;
  * already applied. That is what makes the English default compiled into a key look exactly like the file: the
  * default is a template like any other, and it goes through the same two steps.
  *
- * <p>When uxmLib lets {@code Messages} carry a resolver of its own, this class becomes that resolver and the
- * load time pass is deleted. Nothing in the message files changes on that day.
+ * <p>uxmLib 0.10.0 lets {@code Messages} carry a base resolver, and this class still does not become one.
+ * Only half of the pass can: {@link StyleTokens} expands tags, but {@link Typography} rewrites literal text,
+ * and a {@code TagResolver} cannot do that. Splitting one pass across load and render would buy nothing,
+ * because a reload rebuilds the whole catalog anyway. See /home/uxm-briefs/UXMLIB-FOLLOWUP.md.
  */
 public final class Styler {
 
-    private final Theme theme;
+    private volatile Theme theme;
 
     public Styler(Theme theme) {
         this.theme = Objects.requireNonNull(theme, "theme");
@@ -36,6 +38,18 @@ public final class Styler {
     /** The palette this styler paints with. Menus need it for the parts of a tile that are not text. */
     public Theme theme() {
         return theme;
+    }
+
+    /**
+     * Take a new palette.
+     *
+     * <p>Every holder of this styler sees it at once, which is the point: a menu asks for the theme each time
+     * it builds a tile, so an operator who edits {@code theme.conf} and reloads sees the menus repaint with
+     * the chat. Building a second styler instead would repaint the chat and leave every menu on the old
+     * colours, which is the half repainted screen the canon forbids.
+     */
+    public void reload(Theme theme) {
+        this.theme = Objects.requireNonNull(theme, "theme");
     }
 
     /** One template, styled for {@code locale}. */

@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.template.adapter.inbound.command.AdminCommand;
@@ -51,6 +52,8 @@ final class PluginModule {
 
     private @Nullable Styler styler;
 
+    private @Nullable Messages messages;
+
     PluginModule(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         Path dataFolder = plugin.getDataFolder().toPath();
@@ -62,6 +65,8 @@ final class PluginModule {
     void wire() {
         Scheduler scheduler = new PaperScheduler(plugin);
         Messages messages = buildMessages();
+        this.messages = messages;
+        settings.afterReload(this::reloadMessages);
 
         ExampleRepository repository = new InMemoryExampleRepository();
         CreateExample createExample =
@@ -129,6 +134,35 @@ final class PluginModule {
     }
 
     private Messages buildMessages() {
+        return new Messages(loadCatalog(), LocaleSource.ofDefault(defaultLocale()));
+    }
+
+    /** The locale a player without one of their own reads, as {@code config.conf} names it. */
+    private Locale defaultLocale() {
+        return Locale.forLanguageTag(settings.current().locale());
+    }
+
+    /**
+     * Re-read the words and the palette, and hand them to the {@link Messages} that every port already holds.
+     *
+     * <p>The locale source travels with them, because an operator who edits {@code locale} changes which
+     * language a player without one of their own reads. All four parts go in even though the catalog is
+     * usually the only one that changed: a reload that repaints half of what a player sees is worse than one
+     * that repaints none. See UI-STYLE.md section 14.1.
+     *
+     * <p>The styler takes the new palette rather than being replaced, because every menu holds this one
+     * instance and asks it for the theme each time it builds a tile. Replacing it would repaint the chat and
+     * leave the menus on the old colours.
+     */
+    private void reloadMessages() {
+        if (messages == null) {
+            return;
+        }
+        styler().reload(loadTheme());
+        messages.reload(loadCatalog(), LocaleSource.ofDefault(defaultLocale()), Map.of(), TagResolver.empty());
+    }
+
+    private MessageCatalog loadCatalog() {
         Path messagesFolder = plugin.getDataFolder().toPath().resolve("messages");
         Map<Locale, ConfigurationNode> trees = new HashMap<>();
 
@@ -148,14 +182,14 @@ final class PluginModule {
             }
         }
 
-        Locale defaultLocale = Locale.forLanguageTag(settings.current().locale());
+        Locale defaultLocale = defaultLocale();
         MessageCatalog catalog = MessageCatalogLoader.fromNodes(trees, defaultLocale);
         Map<Locale, Map<String, String>> files = new HashMap<>();
         for (var entry : trees.entrySet()) {
             files.put(entry.getKey(), flatten(entry.getValue()));
         }
         MessageCatalog styled = styler().style(catalog, List.of(Keys.values()), files, defaultLocale);
-        return new Messages(styled, LocaleSource.ofDefault(defaultLocale));
+        return styled;
     }
 
     /**

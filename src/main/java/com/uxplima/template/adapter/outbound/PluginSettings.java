@@ -1,5 +1,7 @@
 package com.uxplima.template.adapter.outbound;
 
+import java.util.List;
+import java.util.ArrayList;
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -41,12 +43,29 @@ public final class PluginSettings {
         return current;
     }
 
+    /** What runs at the end of every reload, in the order it was registered. */
+    private final List<Runnable> afterReload = new ArrayList<>();
+
+    /**
+     * Run {@code action} after every reload, once the new snapshot is in place.
+     *
+     * <p>The words and the palette are read by the module rather than here, and they have to move at the same
+     * moment as the numbers: a reload that repaints half of what a player sees is worse than one that repaints
+     * none. See UI-STYLE.md section 14.1.
+     */
+    public void afterReload(Runnable action) {
+        afterReload.add(Objects.requireNonNull(action, "action"));
+    }
+
     /**
      * Re-read the file. A parse error propagates, and the previous snapshot stays in place, so the server
      * keeps running on the last configuration that was known to be good.
      */
     public void reload() {
         this.current = read();
+        for (Runnable action : afterReload) {
+            action.run();
+        }
     }
 
     private Snapshot read() {
