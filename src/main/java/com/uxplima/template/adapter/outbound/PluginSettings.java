@@ -1,8 +1,8 @@
 package com.uxplima.template.adapter.outbound;
 
-import java.util.List;
-import java.util.ArrayList;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import com.uxplima.uxmlib.config.HoconConfig;
@@ -51,7 +51,7 @@ public final class PluginSettings {
      *
      * <p>The words and the palette are read by the module rather than here, and they have to move at the same
      * moment as the numbers: a reload that repaints half of what a player sees is worse than one that repaints
-     * none. See UI-STYLE.md section 14.1.
+     * none. See UI-STYLE.md section 14.2.
      */
     public void afterReload(Runnable action) {
         afterReload.add(Objects.requireNonNull(action, "action"));

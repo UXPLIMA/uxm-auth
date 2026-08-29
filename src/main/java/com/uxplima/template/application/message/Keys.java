@@ -23,7 +23,32 @@ public enum Keys implements MessageKey {
     EXAMPLE_EXISTS("example.exists", "<etag:'ERROR'> <body>You already have <value><name><body>."),
     EXAMPLE_LIMIT("example.limit", "<etag:'ERROR'> <body>You have reached your limit of <value><limit><body>."),
     EXAMPLE_LIST_EMPTY("example.list-empty", "<tag:'TEMPLATE'> <body>You have nothing yet."),
-    EXAMPLE_LIST("example.list", "<tag:'TEMPLATE'> <body>Yours: <value><names>");
+    EXAMPLE_LIST("example.list", "<tag:'TEMPLATE'> <body>Yours: <value><names>"),
+
+    COMMAND_PLAYER_ONLY("command.player-only", "<etag:'ERROR'> <body>Only a player can run this command."),
+    COMMAND_INVALID_VALUE(
+            "command.invalid-value",
+            "<etag:'ERROR'> <body><value><input><body> is not a valid <value><argument><body>."),
+    COMMAND_INVALID_VALUE_WHY(
+            "command.invalid-value-why",
+            "<etag:'ERROR'> <body><value><input><body> is not a valid <value><argument><body>: <subtext><reason>"),
+    COMMAND_NOT_ONE_OF(
+            "command.not-one-of",
+            "<etag:'ERROR'> <body><value><input><body> is not a valid <value><argument><body>. Try one of <value><allowed><body>."),
+    COMMAND_INVALID_ARGUMENT("command.invalid-argument", "<etag:'ERROR'> <body><detail>"),
+    COMMAND_BAD_ARGUMENT("command.bad-argument", "<etag:'ERROR'> <body>That argument is not valid."),
+    COMMAND_INTERNAL_ERROR(
+            "command.internal-error",
+            "<etag:'ERROR'> <body>Something went wrong while running this command. The console holds the reason."),
+    COMMAND_ON_COOLDOWN(
+            "command.on-cooldown", "<etag:'ERROR'> <body>Wait <value><time><body> before you use this again."),
+    COMMAND_HELP_HEADER(
+            "command.help-header", "<h:'Help'> <dim>/<value><command> <dim>(<value><page><dim>/<value><pages><dim>)"),
+    COMMAND_HELP_COMMAND("command.help-command", "<value><command>"),
+    COMMAND_HELP_SEPARATOR("command.help-separator", "<dim> : "),
+    COMMAND_HELP_DESCRIPTION("command.help-description", "<subtext><description>"),
+    COMMAND_HELP_FILL_HINT("command.help-fill-hint", "<subtext>Click to write this command."),
+    COMMAND_HELP_PAGE_HINT("command.help-page-hint", "<subtext>Page <value><page>");
 
     private final String path;
     private final String defaultTemplate;

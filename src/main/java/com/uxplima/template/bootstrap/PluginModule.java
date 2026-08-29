@@ -10,10 +10,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+
 import com.uxplima.template.adapter.inbound.command.AdminCommand;
+import com.uxplima.template.adapter.inbound.command.CommandLines;
 import com.uxplima.template.adapter.inbound.command.ConfiguredCommands;
 import com.uxplima.template.adapter.inbound.command.ExampleCommand;
 import com.uxplima.template.adapter.inbound.command.FromConfig;
@@ -78,7 +80,9 @@ final class PluginModule {
         // read and then ignored, which is worse than not reading it at all.
         ConfiguredCommands commands =
                 ConfiguredCommands.load(plugin.getDataFolder().toPath().resolve("commands.conf"));
-        ParamResolvers resolvers = ParamResolvers.withDefaults().replacer(FromConfig.class, commands.replacer());
+        ParamResolvers resolvers = ParamResolvers.withDefaults()
+                .messages(new CommandLines(messages))
+                .replacer(FromConfig.class, commands.replacer());
 
         if (commands.isEnabled(ExampleCommand.KEY, "example")) {
             AnnotatedCommands.register(
@@ -148,7 +152,7 @@ final class PluginModule {
      * <p>The locale source travels with them, because an operator who edits {@code locale} changes which
      * language a player without one of their own reads. All four parts go in even though the catalog is
      * usually the only one that changed: a reload that repaints half of what a player sees is worse than one
-     * that repaints none. See UI-STYLE.md section 14.1.
+     * that repaints none. See UI-STYLE.md section 14.2.
      *
      * <p>The styler takes the new palette rather than being replaced, because every menu holds this one
      * instance and asks it for the theme each time it builds a tile. Replacing it would repaint the chat and
