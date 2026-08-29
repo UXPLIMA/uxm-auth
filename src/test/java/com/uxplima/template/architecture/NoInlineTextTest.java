@@ -32,12 +32,6 @@ final class NoInlineTextTest {
     /** Where a template literal legitimately lives: the key enum carries every default. */
     private static final String KEY_ENUM = "application/message/Keys.java";
 
-    /**
-     * The style package writes the tags themselves. It holds colour tags and glyphs and never a
-     * sentence, which is what the catalog guard in CatalogStyleTest proves from the other side.
-     */
-    private static final String STYLE_PACKAGE = "adapter/outbound/style/";
-
     @Test
     @DisplayName("no source file outside the key enum holds a MiniMessage literal")
     void noInlineMiniMessageLiterals() throws IOException {
@@ -47,7 +41,7 @@ final class NoInlineTextTest {
             for (Path file :
                     sources.filter(path -> path.toString().endsWith(".java")).toList()) {
                 String relative = SOURCE_ROOT.relativize(file).toString().replace('\\', '/');
-                if (relative.endsWith(KEY_ENUM) || relative.contains(STYLE_PACKAGE)) {
+                if (relative.endsWith(KEY_ENUM)) {
                     continue;
                 }
                 offenders.addAll(findLiterals(file, relative));
