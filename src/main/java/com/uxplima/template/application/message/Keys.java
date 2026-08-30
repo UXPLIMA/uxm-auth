@@ -10,6 +10,7 @@ import com.uxplima.uxmlib.text.message.MessageKey;
  * {@code NoInlineTextTest} fails the build over one.
  */
 public enum Keys implements MessageKey {
+    USAGE("admin.usage", "<tag:'TEMPLATE'> <body>Add <value>help<body> after this command to see everything it does."),
     VERSION("admin.version", "<tag:'TEMPLATE'> <body>uxmTemplate <value><version>"),
     RELOADED("admin.reloaded", "<tag:'TEMPLATE'> <body>The configuration is loaded again, in <value><ms><body> ms."),
     RELOAD_FAILED("admin.reload-failed", "<etag:'ERROR'> <body>The reload failed. The console holds the reason."),

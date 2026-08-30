@@ -27,6 +27,18 @@ public final class AdminCommand {
         this.version = Objects.requireNonNull(version, "version");
     }
 
+    /**
+     * The bare command answers in our own words.
+     *
+     * <p>A root with no executor is answered by the server itself, in its own English and its own red. Every
+     * line a person reads is ours, so the root says what the command is and where the rest of it is written.
+     */
+    @Subcommand("")
+    @Permission("uxmtemplate.admin.version")
+    public void root(Sender sender) {
+        messages.send(sender.bukkit(), Keys.USAGE);
+    }
+
     @Subcommand("reload")
     @Permission("uxmtemplate.admin.reload")
     public void reload(Sender sender) {
