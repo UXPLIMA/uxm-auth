@@ -35,9 +35,9 @@ final class CatalogStyleTest {
 
     /** The palette. A colour in shipped content must be one of these, so example content cannot drift. */
     private static final Set<String> PALETTE = Set.of(
-            "#ff6b6b", "#ff7aa8", "#ff9359", "#ffc93c", "#ffe15c", "#b5e85f", "#5be38c", "#45d9a6", "#38d6c4",
-            "#4fd6e8", "#38b6ff", "#8fd9ff", "#5b8def", "#8a8dff", "#b68cff", "#d67cff", "#ff8fd0", "#ffffff",
-            "#dde8f0", "#93a4b3", "#8a93a1", "#6b7886", "#565f6b");
+            "#ff6b8b", "#ff9eb5", "#ffa07a", "#ffc4a3", "#ffe66d", "#fff3a8", "#4ecca3", "#8fe0c4", "#48cae4",
+            "#4fd6e8", "#8fddee", "#6c8dfb", "#9fb4ff", "#b388ff", "#d4b8ff", "#ffffff", "#e8ecf5", "#dde8f0",
+            "#9aa5be", "#8a93a1", "#6b7886", "#565f6b", "#2a3045");
 
     private static final Pattern HEX = Pattern.compile("#[0-9a-fA-F]{6}");
 
