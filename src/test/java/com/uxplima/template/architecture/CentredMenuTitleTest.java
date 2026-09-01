@@ -56,7 +56,7 @@ final class CentredMenuTitleTest {
         String text = Files.readString(file, StandardCharsets.UTF_8);
         Matcher call = TITLE_CALL.matcher(text);
         while (call.find()) {
-            if (isAccessor(text, call.end()) || isScreenTitle(text, call.start())) {
+            if (isAccessor(text, call.end()) || isScreenTitle(text, call.start()) || isEmbedTitle(text, call.start())) {
                 continue;
             }
             if (!text.startsWith(CENTRE, call.end())) {
@@ -69,6 +69,17 @@ final class CentredMenuTitleTest {
     /** Whether the call reads a title rather than sets one, as {@code feedback.title()} does. */
     private static boolean isAccessor(String text, int argument) {
         return argument < text.length() && text.charAt(argument) == ')';
+    }
+
+    /**
+     * Whether the receiver is a Discord embed, which Discord lays out itself.
+     *
+     * <p>An embed title is read in a chat client and not in a chest window, so centring it with the font
+     * widths of a Minecraft menu would move it off the middle rather than onto it.
+     */
+    private static boolean isEmbedTitle(String text, int dot) {
+        String before = text.substring(Math.max(0, dot - 80), dot);
+        return before.contains("DiscordEmbed.builder()");
     }
 
     /** Whether the receiver is Adventure {@code Title}, which the client centres on its own. */
