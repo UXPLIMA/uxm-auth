@@ -92,6 +92,12 @@ tasks.shadowJar {
 
 tasks.assemble { dependsOn(tasks.shadowJar) }
 
+// The plain jar takes a classifier of its own. Both tasks used to write
+// build/libs/<name>.jar, so whichever ran last won, and a build that happened to end with
+// the plain jar shipped a small file with no library in it. The server then loaded the
+// plugin and failed at the first uxmLib class. Found on the first install of uxmBackup.
+tasks.jar { archiveClassifier.set("thin") }
+
 // Every builder of a plugin audited the jar by hand with unzip, and a hand audit is only
 // correct on the day somebody ran it. These are the packages that must never ship inside a
 // plugin jar: the server owns them, or they are shaded and must carry our namespace. The
@@ -105,6 +111,15 @@ val forbiddenJarEntries =
         "com/typesafe/" to "Typesafe Config must be relocated.",
         "io/leangen/" to "geantyref must be relocated.",
         "org/bstats/" to "bstats must be relocated when it is taken at all.",
+    )
+
+// What the jar must carry. A plugin that runs standalone holds a relocated copy of the
+// library, and a jar without one loads and dies at its first uxmLib class. The forbidden
+// list alone cannot see this: a jar that carries nothing passes it.
+val requiredJarEntries =
+    listOf(
+        "com/uxplima/template/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
+        "com/uxplima/template/bootstrap/" to "The plugin's own classes are missing.",
     )
 
 val verifyJar =
@@ -138,6 +153,21 @@ val verifyJar =
             }
             if (found.isNotEmpty()) {
                 throw GradleException("The jar carries packages it must not:\n" + found.joinToString("\n"))
+            }
+            val missing = mutableListOf<String>()
+            for ((prefix, why) in requiredJarEntries) {
+                var count = 0
+                for (name in names) {
+                    if (name.startsWith(prefix)) {
+                        count++
+                    }
+                }
+                if (count == 0) {
+                    missing.add("  " + prefix + ": " + why)
+                }
+            }
+            if (missing.isNotEmpty()) {
+                throw GradleException("The jar is missing packages it must carry:\n" + missing.joinToString("\n"))
             }
         }
     }
