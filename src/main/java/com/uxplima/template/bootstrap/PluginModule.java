@@ -1,6 +1,7 @@
 package com.uxplima.template.bootstrap;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -34,7 +35,9 @@ import com.uxplima.uxmlib.text.message.MessageCatalogLoader;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.uxplima.uxmlib.text.style.Styler;
 import com.uxplima.uxmlib.text.style.Theme;
+import com.uxplima.uxmlib.text.style.ThemeFiles;
 import org.jspecify.annotations.Nullable;
+import org.spongepowered.configurate.ConfigurateException;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
 
@@ -123,14 +126,10 @@ final class PluginModule {
     }
 
     private Theme loadTheme() {
-        Path file = plugin.getDataFolder().toPath().resolve("theme.conf");
-        if (!Files.isRegularFile(file)) {
-            return Theme.defaults();
-        }
+        Path dataFolder = plugin.getDataFolder().toPath();
         try {
-            return Theme.from(
-                    HoconConfigurationLoader.builder().path(file).build().load());
-        } catch (IOException | IllegalArgumentException unreadableTheme) {
+            return ThemeFiles.load(ThemeFiles.shared(dataFolder), dataFolder.resolve("theme.conf"));
+        } catch (ConfigurateException | IllegalArgumentException unreadableTheme) {
             // A broken palette must not stop a server. The shipped colours are always correct.
             plugin.getSLF4JLogger().warn("Cannot read theme.conf. The shipped palette is used.", unreadableTheme);
             return Theme.defaults();
@@ -228,9 +227,36 @@ final class PluginModule {
     private void extractDefaults(Path dataFolder) {
         saveIfAbsent(dataFolder, "config.conf");
         saveIfAbsent(dataFolder, "commands.conf");
-        saveIfAbsent(dataFolder, "theme.conf");
+        saveSharedTheme(dataFolder);
         for (String tag : SHIPPED_LOCALES) {
             saveIfAbsent(dataFolder, "messages/messages_" + tag + ".conf");
+        }
+    }
+
+    /**
+     * Write the shipped palette where every plugin of ours reads it, on first run.
+     *
+     * <p>It goes beside this plugin's folder rather than inside it, so the second plugin a server installs
+     * finds the file the first one wrote and the whole suite reads one look. An existing file is never
+     * touched, whoever wrote it.
+     */
+    private void saveSharedTheme(Path dataFolder) {
+        Path shared = ThemeFiles.shared(dataFolder);
+        if (Files.isRegularFile(shared)) {
+            return;
+        }
+        try (InputStream shipped = plugin.getResource("theme.conf")) {
+            if (shipped == null) {
+                return;
+            }
+            Path folder = shared.getParent();
+            if (folder != null) {
+                Files.createDirectories(folder);
+            }
+            Files.copy(shipped, shared);
+        } catch (IOException unwritable) {
+            plugin.getSLF4JLogger()
+                    .warn("Cannot write the theme to {}. The shipped palette is used.", shared, unwritable);
         }
     }
 
