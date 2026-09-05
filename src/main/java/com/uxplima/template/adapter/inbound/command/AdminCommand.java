@@ -5,6 +5,7 @@ import java.util.Objects;
 import com.uxplima.template.adapter.outbound.PluginSettings;
 import com.uxplima.template.application.message.Keys;
 import com.uxplima.uxmlib.command.Sender;
+import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 import com.uxplima.uxmlib.command.annotation.annotations.Permission;
 import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
 import com.uxplima.uxmlib.text.Text;

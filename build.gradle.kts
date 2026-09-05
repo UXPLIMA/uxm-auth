@@ -16,6 +16,7 @@ version = project.findProperty("projectVersion")?.toString() ?: "0.1.0-SNAPSHOT"
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    mavenLocal() // uxmLib, while a release is still on its way to JitPack
     maven("https://jitpack.io") // uxmLib
     maven("https://repo.extendedclip.com/releases/") // PlaceholderAPI
 }

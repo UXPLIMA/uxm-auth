@@ -3,9 +3,12 @@ package com.uxplima.template.adapter.outbound;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import com.uxplima.uxmlib.config.HoconConfig;
+import com.uxplima.uxmlib.text.language.LanguageSettings;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The typed view of {@code config.conf}. The file is read once on enable and once per reload, and the
@@ -17,13 +20,18 @@ import com.uxplima.uxmlib.config.HoconConfig;
 public final class PluginSettings {
 
     /** One immutable snapshot of the file. */
-    public record Snapshot(String locale, int exampleLimit) {
+    public record Snapshot(LanguageSettings language, int exampleLimit) {
 
         public Snapshot {
-            Objects.requireNonNull(locale, "locale");
+            Objects.requireNonNull(language, "language");
             if (exampleLimit < 1) {
                 throw new IllegalArgumentException("example-limit must be at least 1, got: " + exampleLimit);
             }
+        }
+
+        /** The language every message falls back to. */
+        public Locale defaultLocale() {
+            return language.defaultLocale();
         }
     }
 
@@ -70,6 +78,28 @@ public final class PluginSettings {
 
     private Snapshot read() {
         HoconConfig config = HoconConfig.load(file);
-        return new Snapshot(config.getString("locale", "en"), config.getInt("example.limit", 3));
+        return new Snapshot(language(config), config.getInt("example.limit", 3));
+    }
+
+    /**
+     * How a player's language is answered.
+     *
+     * <p>The three keys are the same in every plugin of ours, and uxmLib holds the order they are read in.
+     * See {@code docs/04-i18n.md}.
+     */
+    private static LanguageSettings language(HoconConfig config) {
+        return new LanguageSettings(
+                localeOf(config.getString("language.default", "en"), Locale.ENGLISH),
+                config.getBoolean("language.follow-client", true),
+                forcedLocale(config.getString("language.force", "")));
+    }
+
+    private static @Nullable Locale forcedLocale(String tag) {
+        return tag.isBlank() ? null : localeOf(tag, Locale.ENGLISH);
+    }
+
+    private static Locale localeOf(String tag, Locale fallback) {
+        Locale locale = Locale.forLanguageTag(tag.trim().replace('_', '-'));
+        return locale.getLanguage().isEmpty() ? fallback : locale;
     }
 }

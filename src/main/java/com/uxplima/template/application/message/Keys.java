@@ -26,6 +26,19 @@ public enum Keys implements MessageKey {
     EXAMPLE_LIST_EMPTY("example.list-empty", "<tag:'TEMPLATE'> <body>You have nothing yet."),
     EXAMPLE_LIST("example.list", "<tag:'TEMPLATE'> <body>Yours: <value><names>"),
 
+    LANGUAGE_CURRENT("language.current", "<tag:'TEMPLATE'> <body>You read this in <value><language><body>."),
+    LANGUAGE_CHOICES("language.choices", "<tag:'TEMPLATE'> <body>You may read it in <value><languages><body>."),
+    LANGUAGE_CHANGED("language.changed", "<tag:'TEMPLATE'> <body>You now read this in <value><language><body>."),
+    LANGUAGE_ALREADY("language.already", "<tag:'TEMPLATE'> <body>You already read this in <value><language><body>."),
+    LANGUAGE_RESET("language.reset", "<tag:'TEMPLATE'> <body>Your language follows your client again."),
+    LANGUAGE_SEPARATOR("language.separator", "<dim>, "),
+    LANGUAGE_UNKNOWN(
+            "language.unknown",
+            "<etag:'ERROR'> <body>This server has no <value><input><body>. It has <value><languages><body>."),
+    LANGUAGE_FORCED(
+            "language.forced",
+            "<etag:'ERROR'> <body>This server reads one language, and it is <value><language><body>."),
+
     COMMAND_PLAYER_ONLY("command.player-only", "<etag:'ERROR'> <body>Only a player can run this command."),
     COMMAND_INVALID_VALUE(
             "command.invalid-value",
