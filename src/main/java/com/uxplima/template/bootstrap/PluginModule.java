@@ -55,6 +55,13 @@ final class PluginModule {
 
     private static final String MESSAGES = "messages";
 
+    /**
+     * The folder beside the plugins that our suite keeps its one theme file in. The library asks for the
+     * name rather than choosing it, because which plugins form a suite is our convention and not its
+     * business.
+     */
+    private static final String THEME_FOLDER = "uxmTheme";
+
     /** How often the choices a player made reach the disk. A leave writes nothing on its own. */
     private static final Duration SAVE_PERIOD = Duration.ofMinutes(5);
 
@@ -226,7 +233,7 @@ final class PluginModule {
     private Theme loadTheme() {
         Path dataFolder = plugin.getDataFolder().toPath();
         try {
-            return ThemeFiles.load(ThemeFiles.shared(dataFolder), dataFolder.resolve("theme.conf"));
+            return ThemeFiles.load(ThemeFiles.shared(dataFolder, THEME_FOLDER), ThemeFiles.own(dataFolder));
         } catch (ConfigurateException | IllegalArgumentException unreadableTheme) {
             // A broken palette must not stop a server. The shipped colours are always correct.
             plugin.getSLF4JLogger().warn("Cannot read theme.conf. The shipped palette is used.", unreadableTheme);
@@ -289,7 +296,7 @@ final class PluginModule {
      * touched, whoever wrote it.
      */
     private void saveSharedTheme(Path dataFolder) {
-        Path shared = ThemeFiles.shared(dataFolder);
+        Path shared = ThemeFiles.shared(dataFolder, THEME_FOLDER);
         if (Files.isRegularFile(shared)) {
             return;
         }
