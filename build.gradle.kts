@@ -31,6 +31,9 @@ dependencies {
     // modules one by one and leaves uxmlib-gui out. See docs/02-build.md.
     implementation(libs.bundles.uxmlib)
     implementation(libs.configurate.hocon)
+    // bStats, so the estate can see how many servers run this and on what. The operator opts out in
+    // plugins/bStats/config.yml, which is the switch every bStats plugin shares.
+    implementation(libs.bstats.bukkit)
 
     // Soft dependencies. Touched only past a plugin-present guard, so the plugin loads
     // on a server that does not have them.
@@ -68,6 +71,7 @@ tasks.shadowJar {
     // shade the same library cannot clash. Never relocate Adventure or Kyori: Paper
     // bundles them, and relocating breaks the server's own serializers.
     relocate("com.uxplima.uxmlib", "com.uxplima.template.libs.uxmlib")
+    relocate("org.bstats", "com.uxplima.template.libs.bstats")
     relocate("com.typesafe.config", "com.uxplima.template.libs.typesafe")
     relocate("org.spongepowered.configurate", "com.uxplima.template.libs.configurate")
 
