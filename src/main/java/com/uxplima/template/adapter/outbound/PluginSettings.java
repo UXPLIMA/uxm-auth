@@ -1,5 +1,6 @@
 package com.uxplima.template.adapter.outbound;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,24 @@ import org.jspecify.annotations.Nullable;
  * <p>Nothing in this plugin reads a configuration value by string path outside this class.
  */
 public final class PluginSettings {
+
+    /**
+     * Add the keys this release ships to a file an operator already has.
+     *
+     * <p>It lives here because this is the one class that reads the configuration file, and the guard that
+     * says so is the reason: a second class touching {@code HoconConfig} is a second place the file surface
+     * can drift. Nothing a person wrote is changed, and the file as it was is kept beside it.
+     *
+     * @return whether anything was added, so the caller can say so once in the console
+     */
+    public static boolean bringUpToDate(Path file, ClassLoader resources) {
+        Objects.requireNonNull(file, "file");
+        Objects.requireNonNull(resources, "resources");
+        if (!Files.isRegularFile(file)) {
+            return false;
+        }
+        return HoconConfig.load(file).mergeDefaults("config.conf", resources);
+    }
 
     /** One immutable snapshot of the file. */
     public record Snapshot(LanguageSettings language, int exampleLimit) {

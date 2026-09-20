@@ -290,9 +290,36 @@ final class PluginModule {
         messages.reload(styledCatalog());
     }
 
+    /**
+     * Give an operator who already has the file the keys this release added.
+     *
+     * <p>A plugin that only writes its config on the first run hands every later knob to a new server and
+     * to no existing one: the operator who has run it longest is the one who never gets it, and they find
+     * out by reading a changelog. The merge adds what is absent and changes no value anybody wrote, and it
+     * keeps the file as it was beside it before it renders the document again.
+     */
+    private void mergeShippedConfig(Path dataFolder) {
+        Path file = dataFolder.resolve("config.conf");
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        try {
+            if (PluginSettings.bringUpToDate(file, getClass().getClassLoader())) {
+                plugin.getSLF4JLogger()
+                        .info("config.conf has the keys this release adds. Nothing you wrote changed, and the"
+                                + " file as it was is beside it as config.conf.bak.");
+            }
+        } catch (RuntimeException unreadable) {
+            // A merge that cannot run must not stop a server: the file the operator has still loads, and a
+            // key they are missing is a knob they do not have rather than a server that does not start.
+            plugin.getSLF4JLogger().warn("config.conf could not be brought up to date: {}", unreadable.getMessage());
+        }
+    }
+
     /** Write the shipped defaults on first run. An existing file is never overwritten. */
     private void extractDefaults(Path dataFolder) {
         saveIfAbsent(dataFolder, "config.conf");
+        mergeShippedConfig(dataFolder);
         saveIfAbsent(dataFolder, "commands.conf");
         saveSharedTheme(dataFolder);
         // The language files are discovered in the jar rather than named in a list here. A plugin gains a
