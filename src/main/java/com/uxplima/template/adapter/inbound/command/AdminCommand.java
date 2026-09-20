@@ -1,6 +1,8 @@
 package com.uxplima.template.adapter.inbound.command;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import com.uxplima.template.adapter.outbound.PluginSettings;
 import com.uxplima.template.application.message.Keys;
@@ -8,6 +10,9 @@ import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 import com.uxplima.uxmlib.command.annotation.annotations.Permission;
 import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
+import com.uxplima.uxmlib.health.HealthCheck;
+import com.uxplima.uxmlib.health.HealthReport;
+import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 
@@ -22,10 +27,20 @@ public final class AdminCommand {
     private final Messages messages;
     private final String version;
 
-    public AdminCommand(PluginSettings settings, Messages messages, String version) {
+    private final Scheduler scheduler;
+    private final Supplier<List<HealthCheck>> health;
+
+    public AdminCommand(
+            PluginSettings settings,
+            Messages messages,
+            String version,
+            Scheduler scheduler,
+            Supplier<List<HealthCheck>> health) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.version = Objects.requireNonNull(version, "version");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        this.health = Objects.requireNonNull(health, "health");
     }
 
     /**
@@ -60,5 +75,34 @@ public final class AdminCommand {
     @Permission("uxmtemplate.admin.version")
     public void version(Sender sender) {
         messages.send(sender.bukkit(), Keys.VERSION, Text.placeholder("version", version));
+    }
+    /**
+     * Say how this plugin is, in one line per thing that can be wrong.
+     *
+     * <p>Everything this plugin could not read at boot went to the console and nowhere else, so an operator
+     * who was not watching it had no way to ask again. The checks are read only and one of them opens a
+     * connection, so the whole run is on the lane and only the answer comes back.
+     */
+    @Subcommand("doctor")
+    @Permission("uxmtemplate.admin.doctor")
+    public void doctor(Sender sender) {
+        messages.send(sender.bukkit(), Keys.DOCTOR_HEADER);
+        scheduler.async(() -> say(sender, HealthReport.run(health.get())));
+    }
+
+    /** One line per check, and a closing line that says whether anything needs an operator. */
+    private void say(Sender sender, HealthReport report) {
+        for (HealthReport.Entry entry : report.entries()) {
+            messages.send(
+                    sender.bukkit(),
+                    switch (entry.result().status()) {
+                        case OK -> Keys.DOCTOR_OK;
+                        case WARN -> Keys.DOCTOR_WARN;
+                        case FAIL -> Keys.DOCTOR_FAIL;
+                    },
+                    Text.placeholder("check", entry.name()),
+                    Text.placeholder("said", entry.result().message()));
+        }
+        messages.send(sender.bukkit(), report.hasFailure() ? Keys.DOCTOR_UNWELL : Keys.DOCTOR_WELL);
     }
 }

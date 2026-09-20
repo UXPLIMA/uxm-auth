@@ -6,11 +6,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import com.uxplima.template.adapter.inbound.command.AdminCommand;
 import com.uxplima.template.adapter.outbound.PluginSettings;
+import com.uxplima.template.testing.DirectScheduler;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.ParamResolvers;
@@ -50,7 +52,8 @@ final class CommandRenameTest {
         ConfiguredCommands commands = ConfiguredCommands.load(file);
         ParamResolvers resolvers = ParamResolvers.withDefaults().replacer(FromConfig.class, commands.replacer());
 
-        AdminCommand handler = new AdminCommand(settingsIn(folder), messages(), "test");
+        AdminCommand handler =
+                new AdminCommand(settingsIn(folder), messages(), "test", new DirectScheduler(), List::of);
 
         assertThat(AnnotatedCommands.buildNode(handler, resolvers).getLiteral()).isEqualTo("renamed");
     }

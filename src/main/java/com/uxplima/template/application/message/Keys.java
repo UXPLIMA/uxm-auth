@@ -62,8 +62,18 @@ public enum Keys implements MessageKey {
     COMMAND_HELP_SEPARATOR("command.help-separator", "<dim> : "),
     COMMAND_HELP_DESCRIPTION("command.help-description", "<subtext><description>"),
     COMMAND_HELP_FILL_HINT("command.help-fill-hint", "<subtext>Click to write this command."),
-    COMMAND_HELP_PAGE_HINT("command.help-page-hint", "<subtext>Page <value><page>");
+    COMMAND_HELP_PAGE_HINT("command.help-page-hint", "<subtext>Page <value><page>"),
 
+    // The doctor: one line per thing that can be wrong, and a closing line that says whether anything
+    // needs an operator. Every plugin of ours answers this in the same six lines.
+    DOCTOR_HEADER("admin.doctor.header", "<h:'How this plugin is'>"),
+    DOCTOR_OK("admin.doctor.ok", "<good>ok<body>  <value><check><body>: <subtext><said>"),
+    DOCTOR_WARN("admin.doctor.warn", "<warn>warn<body>  <value><check><body>: <subtext><said>"),
+    DOCTOR_FAIL("admin.doctor.fail", "<bad>fail<body>  <value><check><body>: <subtext><said>"),
+    DOCTOR_WELL("admin.doctor.well", "<tag:'TEMPLATE'> <body>Everything answered."),
+    DOCTOR_UNWELL(
+            "admin.doctor.unwell",
+            "<etag:'ERROR'> <body>Something is wrong above. The console carries the whole of it.");
     private final String path;
     private final String defaultTemplate;
 

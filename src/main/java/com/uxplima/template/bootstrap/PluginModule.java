@@ -18,6 +18,7 @@ import com.uxplima.template.adapter.inbound.command.ExampleCommand;
 import com.uxplima.template.adapter.inbound.command.LanguageSuggestions;
 import com.uxplima.template.adapter.inbound.listener.LanguageListener;
 import com.uxplima.template.adapter.outbound.InMemoryExampleRepository;
+import com.uxplima.template.adapter.outbound.PluginHealth;
 import com.uxplima.template.adapter.outbound.PluginSettings;
 import com.uxplima.template.application.CreateExample;
 import com.uxplima.template.application.message.Keys;
@@ -123,6 +124,16 @@ final class PluginModule {
     }
 
     /**
+     * What this plugin says about itself when an operator asks.
+     *
+     * <p>Asked for on every run rather than built once, so a reload that fixed a file is a doctor run that
+     * says so. Every check is read only, which is why the branch runs the whole list on the lane.
+     */
+    private java.util.List<com.uxplima.uxmlib.health.HealthCheck> healthChecks() {
+        return java.util.List.of(PluginHealth.content(() -> settings.current().exampleLimit()));
+    }
+
+    /**
      * Give back everything that the server does not take back by itself. A reload disables and enables the
      * plugin again, so anything left open here is leaked once per reload.
      *
@@ -183,7 +194,8 @@ final class PluginModule {
         if (commands.isEnabled(AdminCommand.KEY, "uxmtemplate")) {
             AnnotatedCommands.register(
                     plugin,
-                    new AdminCommand(settings, messages, plugin.getPluginMeta().getVersion()),
+                    new AdminCommand(
+                            settings, messages, plugin.getPluginMeta().getVersion(), scheduler, this::healthChecks),
                     resolvers,
                     scheduler);
         }
