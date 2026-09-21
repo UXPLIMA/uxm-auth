@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Fails when a condition list or an action list is read with the operands left as they were written.
@@ -57,6 +58,27 @@ final class OperandsResolvePlaceholdersTest {
 
         assertThat(offenders)
                 .describedAs("Resolve the operands, so a placeholder an operator wrote means what it says.")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the reader sees both spellings, so a clean pass means there are none rather than none seen")
+    void thereaderSeesBothSpellings(@TempDir Path folder) throws IOException {
+        // The test above passes when the scan finds nothing, and it finds nothing the day either pattern
+        // stops matching: a renamed builder, a moved resolver, a new spelling of the identity call. Two
+        // files, one of each kind, are the cheapest proof that it can still tell them apart.
+        Path blind = Files.writeString(
+                folder.resolve("Blind.java"), "ActionContext.builder(OperandResolver.identity()).build();");
+        Path resolved = Files.writeString(
+                folder.resolve("Resolved.java"),
+                "ActionContext.builder(OperandResolver.ofBiFunction(PlaceholderApi::apply)).build();");
+
+        assertThat(unresolvedIn(blind))
+                .describedAs("a list read with the operands left unresolved is the whole subject of this"
+                        + " guard, so a reader that cannot see one guards nothing")
+                .isNotEmpty();
+        assertThat(unresolvedIn(resolved))
+                .describedAs("a list that does resolve its operands is not an offender")
                 .isEmpty();
     }
 
