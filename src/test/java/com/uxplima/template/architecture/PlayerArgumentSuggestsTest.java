@@ -58,6 +58,22 @@ class PlayerArgumentSuggestsTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("the reader sees both shapes, so a clean pass means there are none rather than none seen")
+    void thereaderSeesBothShapes() {
+        // The test above passes when the scan finds nothing, and it finds nothing the day the shape it
+        // looks for changes: a rename of the argument, a new annotation order, a different suggestion
+        // class. Feeding it one line of each kind is the cheapest proof that it can still tell them apart.
+        assertThat(takesANameBlind("public void pay(@Arg(\"player\") String who) {"))
+                .describedAs("an argument that takes a name and offers nothing is the whole subject of this"
+                        + " guard, so a reader that cannot see one guards nothing")
+                .isTrue();
+        assertThat(takesANameBlind(
+                        "public void pay(@Arg(\"player\") @SuggestUsing(PlayerNames.KEY) String who) {"))
+                .describedAs("an argument that does carry the suggestion is not an offender")
+                .isFalse();
+    }
+
     /**
      * Whether this line declares a player argument that takes a name and offers none.
      *
