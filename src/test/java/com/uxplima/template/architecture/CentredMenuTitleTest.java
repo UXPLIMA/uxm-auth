@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Fails when a menu window is titled without centring the title.
@@ -48,6 +49,25 @@ final class CentredMenuTitleTest {
 
         assertThat(offenders)
                 .describedAs("Wrap each menu title in MenuTitles.centre, so the window reads from the middle.")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the reader sees both spellings, so a clean pass means there are none rather than none seen")
+    void thereaderSeesBothSpellings(@TempDir Path folder) throws IOException {
+        // The test above passes when the scan finds nothing, and it finds nothing the day the title call
+        // is spelled another way or the centring helper is renamed. A plugin whose windows are all
+        // centred and a reader that recognises no title read the same.
+        Path raw = Files.writeString(folder.resolve("Raw.java"), "spec.title(words.of(MenuKeys.TITLE));");
+        Path centred = Files.writeString(
+                folder.resolve("Centred.java"), "spec.title(MenuTitles.centre(words.of(MenuKeys.TITLE)));");
+
+        assertThat(rawTitles(raw))
+                .describedAs("a title set without the centring helper is the whole subject of this guard,"
+                        + " so a reader that cannot see one guards nothing")
+                .isNotEmpty();
+        assertThat(rawTitles(centred))
+                .describedAs("a title that is centred is not an offender")
                 .isEmpty();
     }
 
