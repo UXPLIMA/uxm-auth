@@ -65,6 +65,23 @@ final class EveryNodeIsDeclaredTest {
     }
 
     @Test
+    @DisplayName("both sides are read, so this cannot pass by finding nothing")
+    void bothsidesAreRead() throws IOException {
+        // Neither test above can fail when a scan comes back empty, and a scan comes back empty the day
+        // somebody renames the node family and leaves the pattern behind. It happened: this guard was
+        // copied into uxmMOTD with uxmParkour's prefix still in it and passed twice over four undeclared
+        // nodes. A guard that cannot fail reports that by passing.
+        assertThat(nodesInCode())
+                .describedAs("this plugin asks about permission nodes, so a scan that finds none is a"
+                        + " broken scan: check that the pattern still names this plugin's own family")
+                .isNotEmpty();
+        assertThat(declaredNodes())
+                .describedAs("this plugin declares its nodes, so a descriptor read that finds none is a"
+                        + " broken read")
+                .isNotEmpty();
+    }
+
+    @Test
     @DisplayName("the descriptor declares no node this plugin never asks about")
     void thedescriptorDeclaresNothingExtra() throws IOException {
         Set<String> used = nodesInCode();
