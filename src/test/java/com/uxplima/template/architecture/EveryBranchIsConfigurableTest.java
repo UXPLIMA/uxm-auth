@@ -43,6 +43,15 @@ final class EveryBranchIsConfigurableTest {
     /** A branch the file cannot reach: a bare {@code @Subcommand} naming a word. */
     private static final Pattern COMPILED_IN = Pattern.compile("@Subcommand\\(\\s*(?:value\\s*=\\s*)?\"([^\"]+)\"");
 
+    /**
+     * A root the file cannot reach: a handler carrying the produced annotation itself.
+     *
+     * <p>Whatever string the annotation holds is captured rather than a named element, because
+     * {@code @Command} names its label {@code name} and a pattern written for {@code value} would match
+     * nothing and report that by passing.
+     */
+    private static final Pattern COMPILED_ROOT = Pattern.compile("(?m)^@Command\\([^)]*\"([^\"]+)\"");
+
     /** A branch the file can reach, by the key it is named under. */
     private static final Pattern CONFIGURED = Pattern.compile("@FromConfig\\(\\s*value\\s*=\\s*\"([^\"]+)\"");
 
@@ -76,6 +85,27 @@ final class EveryBranchIsConfigurableTest {
                 .describedAs("commands.conf promises an operator can rename, alias or disable any command."
                         + " A bare @Subcommand is compiled in, so the rename does nothing and"
                         + " enabled = false leaves the word in the tree. Write @FromConfig.")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("no root is compiled in either, so the file can rename the command itself")
+    void norootIsCompiledIn() throws IOException {
+        // The same trap one level up, and every CLAUDE.md in this estate names it: a handler that
+        // carries @Command keeps the label it was compiled with. uxmLib keeps a declared annotation
+        // over a produced one, so a handler with both reads the file and then ignores it, which is
+        // worse than either. Nothing in the estate does this today; this is what keeps it that way.
+        List<String> compiledIn = new ArrayList<>();
+        for (Path file : sources()) {
+            Matcher root = COMPILED_ROOT.matcher(Files.readString(file, StandardCharsets.UTF_8));
+            while (root.find()) {
+                compiledIn.add(file.getFileName() + ": " + root.group(1));
+            }
+        }
+
+        assertThat(compiledIn)
+                .describedAs("a handler carries @FromConfig, never @Command: the label belongs to"
+                        + " commands.conf and a compiled-in one cannot be renamed")
                 .isEmpty();
     }
 
