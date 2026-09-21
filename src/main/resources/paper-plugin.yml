@@ -17,3 +17,34 @@ dependencies:
     PlaceholderAPI:
       load: BEFORE
       required: false
+
+permissions:
+  # What a player has by default. The template ships the two verbs a player is expected to
+  # have, so a plugin copied from it starts with the right shape rather than with everything
+  # behind op.
+  uxmtemplate.language:
+    description: Choose the language you read this plugin in
+    default: true
+  uxmtemplate.example.list:
+    description: Read the example list this template ships
+    default: true
+
+  # What a server grants rather than gives: anything that writes.
+  uxmtemplate.example.create:
+    description: Add to the example list this template ships
+    default: op
+
+  # What an operator does. Off unless the server grants it, and admin.* grants the family
+  # in one line.
+  uxmtemplate.admin.*:
+    description: Everything an operator does with this plugin
+    default: op
+  uxmtemplate.admin.doctor:
+    description: Ask how this plugin is
+    default: op
+  uxmtemplate.admin.version:
+    description: Read the version this server runs
+    default: op
+  uxmtemplate.admin.reload:
+    description: Read the configuration again
+    default: op
