@@ -49,8 +49,17 @@ final class EveryBranchIsConfigurableTest {
     /** The constant a command handler declares for the key its root is named under. */
     private static final Pattern ROOT_KEY = Pattern.compile("String KEY = \"([^\"]+)\"");
 
-    /** One key under a {@code subcommands} block of the shipped file. */
-    private static final Pattern SHOWN = Pattern.compile("(?m)^\\s{4,}([a-z][a-z0-9-]*)\\s*\\{");
+    /**
+     * One key under a {@code subcommands} block of the shipped file.
+     *
+     * <p>A word under a word is written two ways in this estate and both are read here. uxmCrates writes
+     * the key with a hyphen and the name with a space, {@code key-give { name = "key give" }}; uxmSkills
+     * writes the key itself with a space, quoted, {@code "lang set" { name = "lang set" }}. The library
+     * matches the key against what the annotation declares either way, so a reader that knew only one of
+     * them reported a branch as hidden that was shown on the line above.
+     */
+    private static final Pattern SHOWN =
+            Pattern.compile("(?m)^\\s{4,}(?:\"([a-z][a-z0-9 -]*)\"|([a-z][a-z0-9-]*))\\s*\\{");
 
     @Test
     @DisplayName("no branch is compiled in, so the file can reach every one of them")
@@ -135,7 +144,7 @@ final class EveryBranchIsConfigurableTest {
         }
         Matcher key = SHOWN.matcher(withoutComments.toString());
         while (key.find()) {
-            keys.add(key.group(1));
+            keys.add(key.group(1) != null ? key.group(1) : key.group(2));
         }
         return keys;
     }
