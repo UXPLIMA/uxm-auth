@@ -37,6 +37,8 @@ public enum Keys implements MessageKey {
             "language.forced",
             "<etag:'ERROR'> <body>This server reads one language, and it is <value><language><body>."),
 
+    COMMAND_NO_PERMISSION("command.no-permission", "<etag:'ERROR'> <body>You do not have permission to do that."),
+
     COMMAND_PLAYER_ONLY("command.player-only", "<etag:'ERROR'> <body>Only a player can run this command."),
     COMMAND_INVALID_VALUE(
             "command.invalid-value",
