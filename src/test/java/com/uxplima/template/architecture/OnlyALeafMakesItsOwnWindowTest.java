@@ -3,8 +3,13 @@ package com.uxplima.template.architecture;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -76,6 +81,39 @@ final class OnlyALeafMakesItsOwnWindowTest {
                 .describedAs("a name here that matches no class exempts nothing and hides that the fence"
                         + " has widened. Remove it, or correct it to the class it was renamed to")
                 .isEmpty();
+    }
+
+    /**
+     * A plugin that ships windows guards their Bedrock face.
+     *
+     * <p>This is the rot this fence cannot see on its own. A plugin with no {@code menus/} folder needs no
+     * Bedrock guard, and five of the family have none. The day one of them gains a window, nothing would
+     * remind anybody that a window is also a form, and the first Bedrock player to open it gets a chest.
+     * So the two are tied together here: windows on disk mean {@code BedrockFormsTest} in the tests.
+     */
+    @Test
+    @DisplayName("a plugin that ships windows also guards their Bedrock face")
+    void windowsComeWithTheirBedrockGuard() throws IOException {
+        Path menus = Path.of("src", "main", "resources", "menus");
+        if (!Files.isDirectory(menus)) {
+            return;
+        }
+        try (Stream<Path> files = Files.list(menus)) {
+            if (files.noneMatch(file -> file.toString().endsWith(".conf"))) {
+                return;
+            }
+        }
+
+        List<Path> guard = new ArrayList<>();
+        try (Stream<Path> tests = Files.walk(Path.of("src", "test", "java"))) {
+            tests.filter(path -> path.endsWith("BedrockFormsTest.java")).forEach(guard::add);
+        }
+
+        assertThat(guard)
+                .describedAs("this plugin ships windows, and a window is a form on a Bedrock client."
+                        + " Copy BedrockFormsTest from a plugin that has one: it is the same file but the"
+                        + " package and the bootstrap path")
+                .isNotEmpty();
     }
 
     private static ArchCondition<JavaClass> buildOrOpenARawInventory() {
