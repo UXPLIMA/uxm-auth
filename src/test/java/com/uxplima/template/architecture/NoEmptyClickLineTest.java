@@ -68,4 +68,20 @@ final class NoEmptyClickLineTest {
                 .describedAs("A line nobody draws is a line a translator paid for.")
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName("both sides are read, so a clean pass means there is none rather than nothing read")
+    void bothsidesAreRead() throws IOException {
+        // Both tests above pass when they find nothing, and the second finds nothing the day the messages
+        // folder moves or the walk breaks. An absence proves something only when the reading happened.
+        try (Stream<Path> files = Files.walk(MESSAGES)) {
+            assertThat(files.filter(Files::isRegularFile).toList())
+                    .describedAs("English and Turkish are the floor, so a walk that finds fewer than two"
+                            + " catalogues is a broken walk rather than a clean plugin")
+                    .hasSizeGreaterThan(1);
+        }
+        assertThat(Keys.values())
+                .describedAs("this plugin has words, so an enum with nothing in it is a broken read")
+                .isNotEmpty();
+    }
 }
