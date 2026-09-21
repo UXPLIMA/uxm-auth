@@ -1,7 +1,7 @@
 name: uxmTemplate
 version: '${version}'
 main: com.uxplima.template.bootstrap.TemplatePlugin
-api-version: '1.21'
+api-version: '26.2'
 authors: ['UXPLIMA']
 description: 'The starting point for a UXPLIMA plugin.'
 website: 'https://github.com/INOVIXI/uxm-plugin-template'
