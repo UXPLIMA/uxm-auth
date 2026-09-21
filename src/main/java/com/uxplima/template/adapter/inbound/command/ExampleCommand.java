@@ -61,7 +61,7 @@ public final class ExampleCommand {
         this.settings = Objects.requireNonNull(settings, "settings");
     }
 
-    @Subcommand("create")
+    @Subcommand(value = "create", description = "Make one example and keep it")
     @Permission("uxmtemplate.example.create")
     @PlayerOnly
     public void create(Sender sender, @Arg("name") String rawName) {
@@ -91,7 +91,7 @@ public final class ExampleCommand {
         }
     }
 
-    @Subcommand("list")
+    @Subcommand(value = "list", description = "Every example this server has")
     @Permission("uxmtemplate.example.list")
     @PlayerOnly
     public void list(Sender sender) {
@@ -113,7 +113,7 @@ public final class ExampleCommand {
      * plugins that each registered {@code /lang} would collide and the last one enabled would win. A server
      * that runs uxmLang gets one command for the whole network as well, and this branch still answers.
      */
-    @Subcommand("lang")
+    @Subcommand(value = "lang", description = "Say what language this player reads, and what else this server has")
     @Permission("uxmtemplate.language")
     @PlayerOnly
     public void language(Sender sender) {
@@ -126,7 +126,7 @@ public final class ExampleCommand {
     }
 
     /** Read this plugin in one language, whatever the client is set to. */
-    @Subcommand("lang set")
+    @Subcommand(value = "lang set", description = "Read this plugin in one language, whatever the client is set to")
     @Permission("uxmtemplate.language")
     @PlayerOnly
     public void setLanguage(Sender sender, @Arg("language") @SuggestUsing(LanguageSuggestions.KEY) String language) {
@@ -154,7 +154,9 @@ public final class ExampleCommand {
     }
 
     /** Follow the client again, as a player who never chose anything does. */
-    @Subcommand("lang reset")
+    @Subcommand(
+            value = "lang reset",
+            description = "Follow the client again, as a player who never chose anything does")
     @Permission("uxmtemplate.language")
     @PlayerOnly
     public void resetLanguage(Sender sender) {
