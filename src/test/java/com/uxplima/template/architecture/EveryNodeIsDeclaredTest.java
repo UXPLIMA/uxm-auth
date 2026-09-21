@@ -76,8 +76,8 @@ final class EveryNodeIsDeclaredTest {
                         + " broken scan: check that the pattern still names this plugin's own family")
                 .isNotEmpty();
         assertThat(declaredNodes())
-                .describedAs("this plugin declares its nodes, so a descriptor read that finds none is a"
-                        + " broken read")
+                .describedAs(
+                        "this plugin declares its nodes, so a descriptor read that finds none is a" + " broken read")
                 .isNotEmpty();
     }
 

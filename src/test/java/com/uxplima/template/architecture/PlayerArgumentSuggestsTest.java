@@ -68,8 +68,7 @@ class PlayerArgumentSuggestsTest {
                 .describedAs("an argument that takes a name and offers nothing is the whole subject of this"
                         + " guard, so a reader that cannot see one guards nothing")
                 .isTrue();
-        assertThat(takesANameBlind(
-                        "public void pay(@Arg(\"player\") @SuggestUsing(PlayerNames.KEY) String who) {"))
+        assertThat(takesANameBlind("public void pay(@Arg(\"player\") @SuggestUsing(PlayerNames.KEY) String who) {"))
                 .describedAs("an argument that does carry the suggestion is not an offender")
                 .isFalse();
     }
