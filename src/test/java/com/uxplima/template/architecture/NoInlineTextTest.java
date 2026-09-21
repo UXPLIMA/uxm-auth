@@ -66,6 +66,28 @@ final class NoInlineTextTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("the scan can see a literal, so a clean pass means there are none rather than none seen")
+    void thescanCanSeeALiteral() throws IOException {
+        // The test above passes when the scan finds nothing, and a scan finds nothing the day its pattern
+        // stops matching. The key enum is the one file that legitimately holds MiniMessage defaults, so
+        // reading it is the cheapest proof that the pattern still recognises one.
+        Path keys = keyEnum();
+        assertThat(findLiterals(keys, KEY_ENUM))
+                .describedAs("every default in the key enum is MiniMessage, so a scan of it that finds"
+                        + " nothing is a broken pattern rather than a clean plugin")
+                .isNotEmpty();
+    }
+
+    /** Where the key enum is, found the same way the scan above finds it. */
+    private static Path keyEnum() throws IOException {
+        try (Stream<Path> sources = Files.walk(SOURCE_ROOT)) {
+            return sources.filter(path -> path.toString().replace('\\', '/').endsWith(KEY_ENUM))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("this plugin has no key enum at " + KEY_ENUM));
+        }
+    }
+
     private static List<String> findLiterals(Path file, String relative) throws IOException {
         List<String> found = new ArrayList<>();
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
