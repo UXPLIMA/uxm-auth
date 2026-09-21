@@ -22,7 +22,6 @@ import com.uxplima.uxmlib.command.annotation.annotations.Arg;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 import com.uxplima.uxmlib.command.annotation.annotations.Permission;
 import com.uxplima.uxmlib.command.annotation.annotations.PlayerOnly;
-import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
 import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.language.LanguageChoices;
 import com.uxplima.uxmlib.text.language.LanguageNames;
@@ -61,7 +60,7 @@ public final class ExampleCommand {
         this.settings = Objects.requireNonNull(settings, "settings");
     }
 
-    @Subcommand(value = "create", description = "Make one example and keep it")
+    @FromConfig(value = "create", fallbackName = "create", description = "Make one example and keep it")
     @Permission("uxmtemplate.example.create")
     @PlayerOnly
     public void create(Sender sender, @Arg("name") String rawName) {
@@ -91,7 +90,7 @@ public final class ExampleCommand {
         }
     }
 
-    @Subcommand(value = "list", description = "Every example this server has")
+    @FromConfig(value = "list", fallbackName = "list", description = "Every example this server has")
     @Permission("uxmtemplate.example.list")
     @PlayerOnly
     public void list(Sender sender) {
@@ -113,7 +112,10 @@ public final class ExampleCommand {
      * plugins that each registered {@code /lang} would collide and the last one enabled would win. A server
      * that runs uxmLang gets one command for the whole network as well, and this branch still answers.
      */
-    @Subcommand(value = "lang", description = "Say what language this player reads, and what else this server has")
+    @FromConfig(
+            value = "lang",
+            fallbackName = "lang",
+            description = "Say what language this player reads, and what else this server has")
     @Permission("uxmtemplate.language")
     @PlayerOnly
     public void language(Sender sender) {
@@ -126,7 +128,10 @@ public final class ExampleCommand {
     }
 
     /** Read this plugin in one language, whatever the client is set to. */
-    @Subcommand(value = "lang set", description = "Read this plugin in one language, whatever the client is set to")
+    @FromConfig(
+            value = "lang-set",
+            fallbackName = "lang set",
+            description = "Read this plugin in one language, whatever the client is set to")
     @Permission("uxmtemplate.language")
     @PlayerOnly
     public void setLanguage(Sender sender, @Arg("language") @SuggestUsing(LanguageSuggestions.KEY) String language) {
@@ -154,8 +159,9 @@ public final class ExampleCommand {
     }
 
     /** Follow the client again, as a player who never chose anything does. */
-    @Subcommand(
-            value = "lang reset",
+    @FromConfig(
+            value = "lang-reset",
+            fallbackName = "lang reset",
             description = "Follow the client again, as a player who never chose anything does")
     @Permission("uxmtemplate.language")
     @PlayerOnly

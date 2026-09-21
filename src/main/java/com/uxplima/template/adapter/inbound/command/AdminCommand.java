@@ -55,7 +55,7 @@ public final class AdminCommand {
         messages.send(sender.bukkit(), Keys.USAGE);
     }
 
-    @Subcommand(value = "reload", description = "Read the configuration and the content again")
+    @FromConfig(value = "reload", fallbackName = "reload", description = "Read the configuration and the content again")
     @Permission("uxmtemplate.admin.reload")
     public void reload(Sender sender) {
         long startedAt = System.nanoTime();
@@ -71,7 +71,7 @@ public final class AdminCommand {
         messages.send(sender.bukkit(), Keys.RELOADED, Text.placeholder("ms", String.valueOf(millis)));
     }
 
-    @Subcommand(value = "version", description = "Read the version this server runs")
+    @FromConfig(value = "version", fallbackName = "version", description = "Read the version this server runs")
     @Permission("uxmtemplate.admin.version")
     public void version(Sender sender) {
         messages.send(sender.bukkit(), Keys.VERSION, Text.placeholder("version", version));
@@ -83,7 +83,10 @@ public final class AdminCommand {
      * who was not watching it had no way to ask again. The checks are read only and one of them opens a
      * connection, so the whole run is on the lane and only the answer comes back.
      */
-    @Subcommand(value = "doctor", description = "Say how this plugin is, in one line per thing that can be wrong")
+    @FromConfig(
+            value = "doctor",
+            fallbackName = "doctor",
+            description = "Say how this plugin is, in one line per thing that can be wrong")
     @Permission("uxmtemplate.admin.doctor")
     public void doctor(Sender sender) {
         messages.send(sender.bukkit(), Keys.DOCTOR_HEADER);
