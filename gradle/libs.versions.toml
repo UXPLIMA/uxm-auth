@@ -7,7 +7,7 @@ java           = "25"
 paper          = "26.2.build.112-stable"   # io.papermc.paper:paper-api (verified 2026-08-28)
 
 # our foundation
-uxmlib         = "0.95.0"                  # com.github.UXPLIMA.uxm-lib (workspace .m2, published 2026-09-21)
+uxmlib         = "0.96.0"                  # com.github.UXPLIMA.uxm-lib (workspace .m2, published 2026-09-21)
 
 # runtime libraries
 configurate    = "4.1.2"
