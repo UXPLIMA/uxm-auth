@@ -15,8 +15,6 @@ public enum Keys implements MessageKey {
     RELOADED("admin.reloaded", "<tag:'TEMPLATE'> <body>The configuration is loaded again, in <value><ms><body> ms."),
     RELOAD_FAILED("admin.reload-failed", "<etag:'ERROR'> <body>The reload failed. The console holds the reason."),
 
-    NO_PERMISSION("error.no-permission", "<etag:'ERROR'> <body>You do not have permission to do that."),
-    PLAYER_ONLY("error.player-only", "<etag:'ERROR'> <body>Only a player can run this command."),
     INVALID_NAME(
             "error.invalid-name", "<etag:'ERROR'> <body>A name holds lower-case letters, digits and hyphens only."),
 
