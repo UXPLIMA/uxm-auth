@@ -95,6 +95,9 @@ final class EveryKeyIsReadTest {
     private static final Pattern BUILT =
             Pattern.compile("\"([a-z0-9.-]+\\.)\"\\s*\\+[^;\\n]*?\\+\\s*\"(\\.[a-z0-9.-]+)\"");
 
+    /** A path built from a stem and a number, as {@code "item.bow-lore-" + line} is. */
+    private static final Pattern BUILT_FROM_A_STEM = Pattern.compile("\"([a-z0-9.-]+[.-])\"\\s*\\+");
+
     /** A family read off the enum by its prefix, as the feedback channels are. */
     private static final Pattern BY_PREFIX = Pattern.compile("startsWith\\(\\s*\"([a-z0-9.-]+\\.)\"");
 
@@ -104,16 +107,23 @@ final class EveryKeyIsReadTest {
     /**
      * Whether the code builds this path rather than naming the constant that carries it.
      *
-     * <p>Two shapes, and both are real here. A path is concatenated from an id the operator chose, which
-     * is how a lobby's own name is read; or a whole family is taken off the enum by its prefix and handed
-     * back keyed by what follows, which is how a feedback channel is found. Neither can name a constant,
-     * and neither is dead.
+     * <p>Three shapes, and all of them are real here. A path is concatenated from an id the operator
+     * chose, which is how a lobby's own name is read; a path is built from a stem and a number, which is
+     * how the ninth line of an item's lore is found; or a whole family is taken off the enum by its
+     * prefix and handed back keyed by what follows, which is how a feedback channel is found. None of the
+     * three can name a constant, and none of them is dead.
      */
     private static boolean builtInCode(List<String> sources, Keys key) {
         for (String source : sources) {
             Matcher built = BUILT.matcher(source);
             while (built.find()) {
                 if (key.path().startsWith(built.group(1)) && key.path().endsWith(built.group(2))) {
+                    return true;
+                }
+            }
+            Matcher stem = BUILT_FROM_A_STEM.matcher(source);
+            while (stem.find()) {
+                if (key.path().startsWith(stem.group(1))) {
                     return true;
                 }
             }
@@ -171,7 +181,7 @@ final class EveryKeyIsReadTest {
     }
 
     /**
-     * Every path a shipped file names, including the block a tile draws.
+     * Every path a shipped file names, including the block a tile draws and the ones it offers.
      *
      * <p>A window writes {@code @menu.ability} and the tile behind it holds {@code menu.ability.locked}, so
      * a name in a file covers every key under it. That is the same reading {@code MenuFilesTest} does in the
@@ -185,9 +195,10 @@ final class EveryKeyIsReadTest {
                     continue;
                 }
                 for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                    if (line.strip().startsWith("#")) {
-                        continue;
-                    }
+                    // Comments count. A shipped file teaches by example, and an example an operator
+                    // uncomments is the tile it draws: uxmCosmetics ships the way to its mystery boxes
+                    // commented out with a paragraph saying why, and the words for it have to exist
+                    // before they take the hashes off.
                     collectNames(line, named);
                 }
             }
