@@ -48,7 +48,17 @@ if [[ ! -d src/main/java/com/uxplima/template ]]; then
     exit 2
 fi
 
-echo "Renaming the template to ${prefix} (package com.uxplima.${slug}, command /${root})"
+# The word a chat line opens with. It was left as TEMPLATE until 2026-09-22, so every plugin
+# made from here shipped every line saying TEMPLATE until somebody noticed on a live server:
+# uxmJobs shipped nine such lines and uxmCrates forty two, in both languages, and a full review
+# and a product read missed all of them because nobody ran the command. The workspace's
+# check-style.sh caught it afterwards, but that script is not the one a new plugin runs.
+#
+# The class prefix upper cased is a starting point and not an answer. uxmTeleportBow reads
+# better as BOW than as TELEPORTBOW, so step 4 below asks for a look at it.
+tag=$(printf '%s' "${prefix}" | tr '[:lower:]' '[:upper:]')
+
+echo "Renaming the template to ${prefix} (package com.uxplima.${slug}, command /${root}, prefix ${tag})"
 
 # Move the package before rewriting, so that the rewrite sees the final paths.
 git mv src/main/java/com/uxplima/template "src/main/java/com/uxplima/${slug}"
@@ -65,6 +75,8 @@ while IFS= read -r -d '' file; do
         -e "s/TemplatePlugin/${prefix}Plugin/g" \
         -e "s/uxmTemplate/uxm${prefix}/g" \
         -e "s/uxmtemplate/${root}/g" \
+        -e "s/tag:'TEMPLATE'/tag:'${tag}'/g" \
+        -e "s/etag:'TEMPLATE'/etag:'${tag}'/g" \
         "$file"
 done < <(find . -type f \
     \( -name '*.java' -o -name '*.kts' -o -name '*.yml' -o -name '*.conf' -o -name '*.md' -o -name '*.toml' \) \
