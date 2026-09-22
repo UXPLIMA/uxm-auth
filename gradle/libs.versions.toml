@@ -42,6 +42,7 @@ uxmlib-common     = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-common",      
 uxmlib-command    = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-command",      version.ref = "uxmlib" }
 uxmlib-item       = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-item",         version.ref = "uxmlib" }
 uxmlib-gui        = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-gui",          version.ref = "uxmlib" }
+uxmlib-integration = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-integration", version.ref = "uxmlib" }
 configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
 jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }
 # bstats is here for the plugin that wants metrics. Nothing in the template builds a

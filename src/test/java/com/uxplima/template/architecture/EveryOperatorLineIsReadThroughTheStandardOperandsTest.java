@@ -7,9 +7,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import com.uxplima.uxmlib.content.ContentHooks;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +30,7 @@ import org.junit.jupiter.api.Test;
  * <p>uxmLib is relocated into every plugin, so the skill source is a static each plugin holds for
  * itself. Nothing installed by another plugin of ours reaches this one. A plugin that reads through
  * {@code Operands} installs the source at enable, forgets it at disable, and asks the server to load
- * mcMMO first, or the source it installs answers nothing.
+ * every skill plugin the library reads first, or the source it installs answers nothing.
  */
 final class EveryOperatorLineIsReadThroughTheStandardOperandsTest {
 
@@ -38,9 +41,6 @@ final class EveryOperatorLineIsReadThroughTheStandardOperandsTest {
 
     private static final List<String> BYPASSES = List.of(
             "builder(OperandResolver.ofBiFunction(PlaceholderApi::apply))", "builder(OperandResolver.identity())");
-
-    private static final Pattern MCMMO_FIRST =
-            Pattern.compile("\\n\\s+mcMMO:\\s*\\n\\s+load: BEFORE\\s*\\n\\s+required: false");
 
     @Test
     @DisplayName("every context and every request reads an operator's line through Operands")
@@ -85,17 +85,31 @@ final class EveryOperatorLineIsReadThroughTheStandardOperandsTest {
     }
 
     @Test
-    @DisplayName("a plugin that installs the skill source asks the server to load mcMMO first")
-    void mcMmoLoadsFirstWhereASkillIsRead() throws IOException {
+    @DisplayName("a plugin that installs the skill source declares every skill plugin the library reads, first")
+    void everySkillPluginLoadsFirstWhereASkillIsRead() throws IOException {
         if (!everySource().contains("Operands.readingSkills(")) {
             return;
         }
-        String descriptor = Files.readString(Path.of("src", "main", "resources", "paper-plugin.yml"));
+        String descriptor = Files.readString(Path.of("src", "main", "resources", "paper-plugin.yml"))
+                .toLowerCase(Locale.ROOT);
+        Set<String> vendors = ContentHooks.skillVendors();
+        List<String> missing = new ArrayList<>();
+        for (String vendor : vendors) {
+            Pattern first = Pattern.compile("\\n\\s+" + Pattern.quote(vendor.toLowerCase(Locale.ROOT))
+                    + ":\\s*\\n\\s+load: before\\s*\\n\\s+required: false");
+            if (!first.matcher(descriptor).find()) {
+                missing.add(vendor);
+            }
+        }
 
-        assertThat(MCMMO_FIRST.matcher(descriptor).find())
-                .describedAs("a source installed before mcMMO enables finds no skill plugin and answers nothing;"
-                        + " paper-plugin.yml needs mcMMO with load: BEFORE and required: false")
-                .isTrue();
+        assertThat(vendors)
+                .describedAs("the library reads at least one skill plugin, or this case proves nothing")
+                .isNotEmpty();
+        assertThat(missing)
+                .describedAs("a source installed before its skill plugin enables finds nothing and answers nothing."
+                        + " The list is the library's, so a skill plugin it learns tomorrow is asked for here."
+                        + " Declare each with load: BEFORE and required: false")
+                .isEmpty();
     }
 
     private static String everySource() throws IOException {
