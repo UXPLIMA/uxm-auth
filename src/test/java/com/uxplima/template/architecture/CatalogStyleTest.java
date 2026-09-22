@@ -21,7 +21,7 @@ import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
 
 /**
- * Fails when a shipped file breaks the UI style canon (/home/uxm-briefs/UI-STYLE.md).
+ * Fails when a shipped file breaks the UI style canon (uxm-briefs/UI-STYLE.md).
  *
  * <p>The canon is a set of rules a reviewer can only keep by reading every line, so the rules that a machine
  * can check are checked here. What is left to the reviewer is the shape of a sentence and the layout of a
