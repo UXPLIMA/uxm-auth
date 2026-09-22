@@ -106,12 +106,17 @@ final class AsyncLaneAsksNoRegionTest {
      * <p>The shape that is right costs one hop: read the roster on the global lane, keep the ids, and hand
      * those to the async lane. A caller that then needs something off a player asks that player's own
      * region for it. Both are one line more than the version that is wrong.
+     * <p>A command is the same. Paper runs one on the main thread and refuses one from anywhere else, and
+     * Folia runs a console command on the global region. A contest's prize commands were dispatched from the
+     * settlement sweep on the async lane, so the first one threw, and it threw after the result was written:
+     * the places after it were never paid, and a settled contest is never settled again.
+     *
      */
     private static final Map<String, Set<String>> GLOBAL_ONLY = Map.of(
             "org.bukkit.Server",
-            Set.of("getOnlinePlayers"),
+            Set.of("getOnlinePlayers", "dispatchCommand"),
             "org.bukkit.Bukkit",
-            Set.of("getOnlinePlayers"),
+            Set.of("getOnlinePlayers", "dispatchCommand"),
             "org.bukkit.World",
             Set.of("getPlayers", "getEntities", "getLivingEntities", "getEntitiesByClass"));
 
@@ -350,7 +355,7 @@ final class AsyncLaneAsksNoRegionTest {
                 } else if (letter == ')') {
                     depth--;
                     if (depth == 0) {
-                        return Optional.of(new int[] {line, index + 1});
+                        return Optional.of(new int[] {line, index + 1, at, column});
                     }
                 }
             }
@@ -442,7 +447,7 @@ final class AsyncLaneAsksNoRegionTest {
                 if (!isACall(access)) {
                     continue;
                 }
-                if (access.isDeclaredInLambda()) {
+                if (access.isDeclaredInLambda() && !runsWhereItIsWritten(next, access)) {
                     // Written inside a closure, which is how this plugin says "not on this thread".
                     continue;
                 }
@@ -469,6 +474,103 @@ final class AsyncLaneAsksNoRegionTest {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * The calls that run the closure they are handed there and then, on the thread that called them.
+     *
+     * <p>Every closure used to read as "not on this thread", which is right for the scheduler and for a
+     * callback of ours and wrong for these. A contest's prize commands were dispatched inside
+     * {@code Optional.ifPresent} on the settlement sweep, which runs on the async lane: the walk stopped at
+     * the closure and never saw the command, and Paper refuses a command from any thread but the main one.
+     */
+    private static final Map<String, Set<String>> SAME_THREAD = Map.of(
+            "java.util.Optional",
+            Set.of("ifPresent", "ifPresentOrElse", "map", "flatMap", "filter", "orElseGet", "or"),
+            "java.lang.Iterable",
+            Set.of("forEach"),
+            "java.util.Collection",
+            Set.of("forEach", "removeIf"),
+            "java.util.List",
+            Set.of("forEach", "removeIf", "replaceAll"),
+            "java.util.Set",
+            Set.of("forEach", "removeIf"),
+            "java.util.Map",
+            Set.of("forEach", "computeIfAbsent", "computeIfPresent", "compute", "merge"),
+            "java.util.stream.Stream",
+            Set.of("forEach", "map", "filter", "flatMap", "anyMatch", "allMatch", "noneMatch", "peek"));
+
+    /**
+     * Whether a call written inside a closure runs on the thread of the method it is written in.
+     *
+     * <p>A closure runs here when some call around it runs it in place, {@code ifPresent} or {@code forEach},
+     * and no call around it hands it on: one handed to the scheduler or to a callback of ours runs wherever
+     * that sends it, and so does everything nested inside it. A call that does neither, a logger holding the
+     * access as an argument, is neutral; counting it as a hand-off hid a dispatch written inside a log line
+     * (found by the uxm-plots session). Reading only the innermost call got both
+     * directions wrong once each: a {@code forEach} inside {@code scheduler.entity} read as here, and a tie
+     * between two calls on one line picked whichever came first. A closure with no call around it that can be
+     * found is read as it always was, as somewhere else.
+     */
+    private static boolean runsWhereItIsWritten(JavaCodeUnit unit, JavaAccess<?> access) {
+        int line = access.getLineNumber();
+        List<String> source = sourceOf(unit.getOwner());
+        // Where the access itself opens on its line. A call that opens there or further right is one of its
+        // arguments or comes after it, never a call around it: getConsoleSender( inside a one-line
+        // lines.forEach(line -> server.dispatchCommand(server.getConsoleSender(), line)) must not win.
+        int column = line >= 1 && line <= source.size()
+                ? source.get(line - 1).indexOf(access.getTarget().getName() + "(")
+                : -1;
+        boolean enclosed = false;
+        for (JavaAccess<?> around : everyAccessOf(unit)) {
+            if (!isACall(around) || around.equals(access)) {
+                continue;
+            }
+            if (around.getLineNumber() == line
+                    && around.getTarget().getName().equals(access.getTarget().getName())) {
+                continue;
+            }
+            int[] span = spanOf(unit.getOwner(), around.getTarget().getName(), around.getLineNumber())
+                    .orElse(null);
+            if (span == null || !encloses(span, line, column)) {
+                continue;
+            }
+            // A call that hands its closure on, the scheduler or a method of ours, sends everything inside it
+            // somewhere else, however many in-place calls sit between: a forEach inside scheduler.entity runs
+            // on the entity's thread. A call that runs its closure in place keeps it here. Anything else, a
+            // logger or a message call holding the access as an argument, says nothing about the thread.
+            JavaClass owner = around.getTargetOwner();
+            if (sendsElsewhere(owner)) {
+                return false;
+            }
+            if (isIn(SAME_THREAD, owner, around)) {
+                enclosed = true;
+            }
+        }
+        return enclosed;
+    }
+
+    /** Whether a call hands the closure it is given to another thread, or to code of ours that may. */
+    private static boolean sendsElsewhere(JavaClass owner) {
+        return owner.getName().startsWith(OURS) || owner.isAssignableTo(SCHEDULER);
+    }
+
+    /**
+     * Whether a call's argument list holds a position, to the column when the column is known.
+     *
+     * <p>Lines alone are not enough: {@code List.of("x").forEach(line -> dispatch(line))} is one line, and
+     * {@code List.of(} opens and closes on it before the dispatch, so by lines it held the dispatch and hid it.
+     */
+    private static boolean encloses(int[] span, int line, int column) {
+        if (line < span[0] || line > span[1]) {
+            return false;
+        }
+        if (column < 0) {
+            return true;
+        }
+        boolean afterStart = line > span[0] || column > span[2];
+        boolean beforeEnd = line < span[1] || column < span[3];
+        return afterStart && beforeEnd;
     }
 
     /** Whether this access is one of the calls that only a ticking region answers. */
