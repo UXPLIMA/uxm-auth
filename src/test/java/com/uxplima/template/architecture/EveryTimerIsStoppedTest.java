@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.uxplima.template.testing.SourcePaths;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -35,8 +36,7 @@ import org.junit.jupiter.api.Test;
  */
 final class EveryTimerIsStoppedTest {
 
-    private static final Path ROOT =
-            Path.of("src", "main", "java", "com", "uxplima", "template", "bootstrap", "PluginModule.java");
+    private static final Path ROOT = SourcePaths.of(EveryTimerIsStoppedTest.class, "bootstrap", "PluginModule.java");
 
     /** A field the root assigns from a repeating task: {@code this.saveTask = scheduler.asyncTimer(...)}. */
     private static final Pattern STARTED =

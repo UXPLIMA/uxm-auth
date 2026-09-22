@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.uxplima.template.testing.SourcePaths;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.spongepowered.configurate.ConfigurateException;
@@ -34,7 +35,7 @@ import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
 final class EverySettingIsShownTest {
 
     private static final Path READER =
-            Path.of("src", "main", "java", "com", "uxplima", "template", "adapter", "outbound", "PluginSettings.java");
+            SourcePaths.of(EverySettingIsShownTest.class, "adapter", "outbound", "PluginSettings.java");
 
     private static final Path RESOURCES = Path.of("src", "main", "resources");
 
