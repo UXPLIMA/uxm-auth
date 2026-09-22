@@ -159,7 +159,12 @@ final class EveryKeyIsReadTest {
             }
             // A switch over Keys inside the message package names the constant without the type, as
             // TermKeys does. A word boundary keeps MENU_ABILITY_OPEN from matching MENU_ABILITY_OPENED.
-            if (source.contains("com.uxplima.template.application.message") && namesBare(source, bare)) {
+            //
+            // The package declaration and not a mention of the package. Reading it as a mention let any
+            // file that imports Keys claim a key it never sends, and one did: uxmCrates has a Refusal
+            // enum with a NO_PERMISSION of its own, a presenter that switches over it beside an import
+            // of Keys, and a dead error.no-permission key that this guard called alive for months.
+            if (source.contains("package com.uxplima.template.application.message;") && namesBare(source, bare)) {
                 return true;
             }
         }

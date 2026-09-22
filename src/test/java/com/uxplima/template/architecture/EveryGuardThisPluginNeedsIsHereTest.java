@@ -127,6 +127,20 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     }
 
     @Test
+    @DisplayName("a plugin that ships a message catalogue guards that every key is read")
+    void thedeadKeyGuardIsHere() throws IOException {
+        if (!shipsACatalogue()) {
+            return;
+        }
+        assertThat(guardExists("EveryKeyIsReadTest"))
+                .describedAs("a key nothing sends is a line a translator was paid for and a player can"
+                        + " never be shown, and the other catalogue guards cannot see it: one proves the"
+                        + " languages agree with each other, the other proves a window names nothing"
+                        + " unwritten. uxmMOTD shipped error.no-permission that way for months")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("the scan reads this plugin, so it cannot pass by finding nothing")
     void thescanReadsThePlugin() throws IOException {
         assertThat(java())
@@ -209,6 +223,12 @@ final class EveryGuardThisPluginNeedsIsHereTest {
             }
         }
         return found;
+    }
+
+    /** Whether this plugin ships words of its own, which is where a key nothing sends hides. */
+    private static boolean shipsACatalogue() throws IOException {
+        return under(RESOURCES, ".conf").stream()
+                .anyMatch(path -> path.toString().replace('\\', '/').contains("/messages/"));
     }
 
     private static List<Path> under(Path root, String suffix) throws IOException {
