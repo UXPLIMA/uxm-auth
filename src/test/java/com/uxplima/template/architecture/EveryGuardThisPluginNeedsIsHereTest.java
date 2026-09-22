@@ -101,6 +101,19 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     }
 
     @Test
+    @DisplayName("a plugin that builds an action context guards the command sinks")
+    void thecommandSinkGuardIsHere() throws IOException {
+        if (!sourceHolds("ActionContext.builder(")) {
+            return;
+        }
+        assertThat(guardNamed("EveryCommandVerbHasASinkTest"))
+                .describedAs("[console] and [player] dispatch through a sink the caller wires, and the"
+                        + " library discarded the line when it was not. Four plugins were relying on that"
+                        + " without knowing, and none of the four shipped a console line of its own")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("a plugin that writes an action line guards that the line is readable")
     void thereadableLineGuardIsHere() throws IOException {
         if (!shippedMatches(ACTION_LINE)) {
