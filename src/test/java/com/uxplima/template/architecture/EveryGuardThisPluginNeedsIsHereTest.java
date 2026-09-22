@@ -141,6 +141,20 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     }
 
     @Test
+    @DisplayName("a plugin that ships a window guards the keys that window names")
+    void thewindowKeyGuardIsHere() throws IOException {
+        if (under(RESOURCES, ".conf").stream()
+                .noneMatch(path -> path.toString().replace('\\', '/').contains("/menus/"))) {
+            return;
+        }
+        assertThat(guardNamed("WindowKeyIsWritten"))
+                .describedAs("a window names no words of its own, and a key nobody wrote is drawn as the key"
+                        + " itself on the tile: a player reads a dotted path in a window that otherwise looks"
+                        + " finished")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("the scan reads this plugin, so it cannot pass by finding nothing")
     void thescanReadsThePlugin() throws IOException {
         assertThat(java())
