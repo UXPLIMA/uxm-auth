@@ -53,6 +53,9 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     private static final Pattern MATERIAL =
             Pattern.compile("(?m)(material|icon|item)[a-z-]*\\s*=\\s*\"?[A-Z][A-Z0-9_]{2,}");
 
+    /** A tile, which draws a title and a label and a value for every fact it names. */
+    private static final Pattern TILE = Pattern.compile("\"tile:");
+
     @Test
     @DisplayName("a plugin that builds an action context guards the boss bar")
     void thebossBarGuardIsHere() throws IOException {
@@ -217,6 +220,19 @@ final class EveryGuardThisPluginNeedsIsHereTest {
         assertThat(guardExists("EveryVendorLoadsFirstTest"))
                 .describedAs("a content seam is resolved once at enable, and the hand written map of seams"
                         + " to plugin names in SoftDependenciesTest has never known this one")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("a plugin that ships a tile guards every line the tile draws")
+    void thetileFactGuardIsHere() throws IOException {
+        if (!shippedMatches(TILE)) {
+            return;
+        }
+        assertThat(guardExists("EveryTileFactIsWrittenTest"))
+                .describedAs("a fact the catalogue does not hold is drawn as its own path, and the window key guard"
+                        + " lets a block answer for every fact under it. uxm-plots shipped 172 such rows per"
+                        + " language with that guard green")
                 .isTrue();
     }
 
