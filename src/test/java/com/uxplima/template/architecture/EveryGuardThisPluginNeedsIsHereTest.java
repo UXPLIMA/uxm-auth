@@ -236,6 +236,18 @@ final class EveryGuardThisPluginNeedsIsHereTest {
                 .isTrue();
     }
 
+    @Test
+    @DisplayName("a plugin that ships a window guards that every id it names is registered")
+    void themenuIdGuardIsHere() throws IOException {
+        if (!Files.isDirectory(RESOURCES.resolve("menus"))) {
+            return;
+        }
+        assertThat(guardExists("EveryMenuIdTheSpecNamesIsRegisteredTest"))
+                .describedAs("an id a window names and no code registers is a button that does nothing when"
+                        + " clicked; seven of twenty windowed plugins carried this guard until 2026-09-23")
+                .isTrue();
+    }
+
     private static boolean sourceHolds(String token) throws IOException {
         for (Path file : java()) {
             if (withoutSpaces(Files.readString(file, StandardCharsets.UTF_8)).contains(token)) {
