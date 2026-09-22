@@ -265,11 +265,70 @@ final class EveryKeyIsReadTest {
         try (Stream<Path> files = Files.walk(SOURCE_ROOT)) {
             for (Path file :
                     files.filter(path -> path.toString().endsWith(".java")).toList()) {
-                String text = Files.readString(file, StandardCharsets.UTF_8);
+                String text = withoutComments(Files.readString(file, StandardCharsets.UTF_8));
                 sources.add(file.toString().replace('\\', '/').endsWith(KEY_ENUM) ? withoutDeclarations(text) : text);
             }
         }
         return sources;
+    }
+
+    /**
+     * The source with every comment taken out, string literals left alone.
+     *
+     * <p>A javadoc is not a sender. Without this, a key enum whose class comment names a constant as the
+     * example of the naming convention vouches for that constant, and uxmEssentials had exactly that:
+     * MUTE_APPLIED read as alive off the sentence explaining what a key is called, while nothing sent it.
+     *
+     * <p>Written as a walk rather than a pattern: the obvious block-comment regular expression backtracks
+     * deeply enough on a large file to overflow the stack.
+     */
+    private static String withoutComments(String source) {
+        StringBuilder kept = new StringBuilder(source.length());
+        int at = 0;
+        while (at < source.length()) {
+            char here = source.charAt(at);
+            char next = at + 1 < source.length() ? source.charAt(at + 1) : '\0';
+            if (here == '"') {
+                at = copyLiteral(source, at, '"', kept);
+            } else if (here == '\'') {
+                at = copyLiteral(source, at, '\'', kept);
+            } else if (here == '/' && next == '/') {
+                while (at < source.length() && source.charAt(at) != '\n') {
+                    at++;
+                }
+            } else if (here == '/' && next == '*') {
+                at += 2;
+                while (at + 1 < source.length() && !(source.charAt(at) == '*' && source.charAt(at + 1) == '/')) {
+                    at++;
+                }
+                at = Math.min(at + 2, source.length());
+                kept.append(' ');
+            } else {
+                kept.append(here);
+                at++;
+            }
+        }
+        return kept.toString();
+    }
+
+    /** Copy the literal that starts at {@code at} and ends at the next unescaped {@code quote}. */
+    private static int copyLiteral(String source, int at, char quote, StringBuilder kept) {
+        kept.append(source.charAt(at));
+        int index = at + 1;
+        while (index < source.length()) {
+            char character = source.charAt(index);
+            kept.append(character);
+            if (character == '\\' && index + 1 < source.length()) {
+                kept.append(source.charAt(index + 1));
+                index += 2;
+                continue;
+            }
+            index++;
+            if (character == quote) {
+                break;
+            }
+        }
+        return index;
     }
 
     /**
