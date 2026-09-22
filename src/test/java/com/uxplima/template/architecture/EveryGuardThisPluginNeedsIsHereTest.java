@@ -111,7 +111,7 @@ final class EveryGuardThisPluginNeedsIsHereTest {
 
     private static boolean sourceHolds(String token) throws IOException {
         for (Path file : java()) {
-            if (Files.readString(file, StandardCharsets.UTF_8).contains(token)) {
+            if (withoutSpaces(Files.readString(file, StandardCharsets.UTF_8)).contains(token)) {
                 return true;
             }
         }
@@ -125,6 +125,18 @@ final class EveryGuardThisPluginNeedsIsHereTest {
             }
         }
         return false;
+    }
+
+    /**
+     * The source with every space taken out, which is what a token search reads.
+     *
+     * <p>A guard that looks for a text fragment can be defeated by the formatter: {@code spotlessApply}
+     * wraps a long chain at the dot, so {@code ActionContext.builder(} becomes two lines and the text
+     * this scan wants is never in the file. The break that triggers the wrap is the same break that
+     * makes the line longer, so the guard would be blind in a case close to the one it exists for.
+     */
+    private static String withoutSpaces(String body) {
+        return body.replaceAll("\\s+", "");
     }
 
     private static List<Path> java() throws IOException {
