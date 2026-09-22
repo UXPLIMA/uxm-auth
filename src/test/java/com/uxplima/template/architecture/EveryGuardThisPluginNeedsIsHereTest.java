@@ -184,6 +184,42 @@ final class EveryGuardThisPluginNeedsIsHereTest {
         return guards().stream().anyMatch(path -> path.getFileName().toString().equals(name + ".java"));
     }
 
+    @Test
+    @DisplayName("a plugin that builds an action context guards that every seam is wired")
+    void theseamGuardIsHere() throws IOException {
+        if (!sourceHolds("ActionContext.builder(")) {
+            return;
+        }
+        assertThat(guardExists("EverySeamTheEffectEngineOffersIsWiredTest"))
+                .describedAs("an unwired wallet reads every balance as zero and nothing says so. Nineteen"
+                        + " plugins built their contexts without one until 2026-09-22")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("a plugin that reads an operator's line guards that it reads through Operands")
+    void theoperandsGuardIsHere() throws IOException {
+        if (!sourceHolds("ActionContext.builder(") && !sourceHolds("ConditionRequest.builder(")) {
+            return;
+        }
+        assertThat(guardExists("EveryOperatorLineIsReadThroughTheStandardOperandsTest"))
+                .describedAs("a skill level an operator names was true in five plugins and never true in the"
+                        + " other twenty one, because those skipped the one resolver the estate has")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("a plugin that asks the library about content plugins declares them to load first")
+    void thevendorGuardIsHere() throws IOException {
+        if (!sourceHolds("ContentHooks.")) {
+            return;
+        }
+        assertThat(guardExists("EveryVendorLoadsFirstTest"))
+                .describedAs("a content seam is resolved once at enable, and the hand written map of seams"
+                        + " to plugin names in SoftDependenciesTest has never known this one")
+                .isTrue();
+    }
+
     private static boolean sourceHolds(String token) throws IOException {
         for (Path file : java()) {
             if (withoutSpaces(Files.readString(file, StandardCharsets.UTF_8)).contains(token)) {
