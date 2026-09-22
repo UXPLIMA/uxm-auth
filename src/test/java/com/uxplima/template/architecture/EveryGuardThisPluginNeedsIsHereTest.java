@@ -43,6 +43,12 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     private static final Pattern SOUND =
             Pattern.compile("(?m)(\\[sound\\]|[a-z-]*sounds?\\s*[=:]\\s*\"?)[A-Za-z0-9_.:]*[._][A-Za-z0-9_.:]*");
 
+    /**
+     * A line of the engine's grammar in a shipped file, which is what an effect list is made of. The
+     * quotes are part of it: a bracket on its own is a table in a comment as often as it is an action.
+     */
+    private static final Pattern ACTION_LINE = Pattern.compile("\"\\[[a-z-]+\\][^\"]*\"");
+
     /** A material named in a shipped file, which is a screaming-case word under a material-ish key. */
     private static final Pattern MATERIAL =
             Pattern.compile("(?m)(material|icon|item)[a-z-]*\\s*=\\s*\"?[A-Z][A-Z0-9_]{2,}");
@@ -95,6 +101,19 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     }
 
     @Test
+    @DisplayName("a plugin that writes an action line guards that the line is readable")
+    void thereadableLineGuardIsHere() throws IOException {
+        if (!shippedMatches(ACTION_LINE)) {
+            return;
+        }
+        assertThat(guardNamed("Readable"))
+                .describedAs("a line the engine cannot read takes its whole list down and does it quietly:"
+                        + " the runner falls back to the plugin's own wording and nothing looks broken."
+                        + " Three plugins shipped one in a week and none of the three had this guard")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("the scan reads this plugin, so it cannot pass by finding nothing")
     void thescanReadsThePlugin() throws IOException {
         assertThat(java())
@@ -103,6 +122,21 @@ final class EveryGuardThisPluginNeedsIsHereTest {
         assertThat(guards())
                 .describedAs("this plugin has guards, so a scan that finds none is reading the wrong place")
                 .isNotEmpty();
+    }
+
+    /**
+     * Whether a guard whose name holds {@code fragment} is here.
+     *
+     * <p>By fragment rather than by name, because this one guard has five names across the estate:
+     * EveryEffectLineIsReadableTest, EveryShippedActionIsReadableTest, EveryShippedRewardIsReadableTest,
+     * EveryShippedLineIsReadableTest and EveryFeedbackLineIsReadableTest. Each was named after what its
+     * own plugin calls the list, and renaming five files to satisfy a scan would be the scan wagging the
+     * estate.
+     */
+    private static boolean guardNamed(String fragment) throws IOException {
+        return guards().stream()
+                .map(path -> path.getFileName().toString())
+                .anyMatch(name -> name.startsWith("Every") && name.contains(fragment));
     }
 
     private static boolean guardExists(String name) throws IOException {
