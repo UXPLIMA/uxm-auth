@@ -138,6 +138,9 @@ tasks.withType<Test>().configureEach {
         showStandardStreams = false
     }
     systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+    // A test enables the plugin with bStats unshaded, and bStats refuses an unshaded copy so that two
+    // plugins never share one. The jar still relocates it and a real server still runs the check.
+    systemProperty("bstats.relocatecheck", "false")
     // Pinned, because an unset max heap is a quarter of the host RAM. A CI runner then
     // gets far less than a workstation, and the parallel MockBukkit servers run out.
     maxHeapSize = "2g"
