@@ -8,8 +8,11 @@ import org.jspecify.annotations.Nullable;
 /**
  * The plugin shell. It owns the Bukkit lifecycle and nothing else: the graph is built in
  * {@link PluginModule}, so this class stays small enough to read at a glance.
+ *
+ * <p>It is not final, because the mock server loads a plugin by subclassing it, and the test that enables the
+ * whole plugin loads this one. Nothing of the shell is written for a subclass.
  */
-public final class TemplatePlugin extends JavaPlugin {
+public class TemplatePlugin extends JavaPlugin {
 
     /**
      * The bStats id this plugin reports under.
