@@ -2,7 +2,8 @@ name: CI
 
 # Runs the same gate that CLAUDE.md asks for locally, on a machine nobody has
 # configured. The shaded jar is assembled here on purpose: a relocation problem
-# only appears in the assembled artifact, and no unit test can see it.
+# only appears in the assembled artifact, and no unit test can see it. That is what
+# `verifyJar` does, and `./gradlew build` runs it through `check` - see the Build step.
 on:
   push:
     branches: [main]
@@ -34,34 +35,27 @@ jobs:
       - name: Documentation index
         run: scripts/check-docs.py
 
+      # This assembles the shaded jar and verifies it: `assemble` depends on shadowJar, and `check`
+      # depends on verifyJar, the task that opens the jar and fails on a package it must not carry.
+      #
+      # A SHELL COPY OF THAT CHECK WAS REMOVED FROM HERE, and it was not merely redundant: on this
+      # runner it could not fail. It read `ls build/libs/*.jar | head -1`, and build.gradle.kts gives
+      # the plain jar the `thin` classifier while shadowJar takes the empty one, so build/libs holds
+      # both. Which one `head -1` picks is decided by the collation locale, and that was measured on a
+      # real build rather than assumed: under C and C.UTF-8 `-thin.jar` sorts first, under
+      # en_US.UTF-8 it sorts second, and the runner's container sets neither LANG nor LC_ALL
+      # (LC_CTYPE="POSIX"). So the step was opening the thin jar, which bundles nothing at all (58
+      # entries against the shaded jar's 968, measured in uxm-plugin-template), and neither
+      # net/kyori nor an un-relocated com/uxplima/uxmlib could ever appear in it.
+      #
+      # verifyJar has no such hole. It takes shadowJar's own archiveFile rather than a glob, checks
+      # the whole forbidden list instead of two prefixes, also asserts the entries the jar MUST carry
+      # (a jar that bundles nothing fails it, which is the opposite error the shell step is blind to),
+      # and reads the archive with ZipFile, so there is no pipeline and no SIGPIPE race to lose.
+      # Proven, not trusted: the uxmLib relocate() call was removed and verifyJar failed with
+      # `com/uxplima/uxmlib/ (419 entries)`, then restored and the build went green again.
       - name: Build
         run: ./gradlew build
-
-      - name: Assemble the shaded jar
-        run: ./gradlew shadowJar
-
-      # A relocation mistake ships silently otherwise. Adventure must never be
-      # bundled, and no uxmLib class may keep its original package.
-      - name: Verify the relocation
-        run: |
-          jar="$(ls build/libs/*.jar | head -1)"
-          # The listing goes to a file rather than into `unzip -l ... | grep -q`. Actions runs this script
-          # with -o pipefail: grep -q exits at its first match, unzip then takes SIGPIPE, and the pipeline
-          # reports 141. So a MATCH makes `if` false and the violation this guard exists to catch is
-          # skipped in silence. Whether it happens depends on how much output unzip already pushed into
-          # the pipe buffer, so it is a race, and a guard that loses a race is not a guard. The same shape
-          # was measured in uxm-lib, where it failed the other way round and reported a correct jar as
-          # broken. grep over a file cannot lose it.
-          unzip -l "$jar" > "$RUNNER_TEMP/jar-listing.txt"
-          if grep -q 'net/kyori' "$RUNNER_TEMP/jar-listing.txt"; then
-            echo "Adventure is bundled. Paper provides it; remove it from the jar." >&2
-            exit 1
-          fi
-          if grep -qE ' com/uxplima/uxmlib/' "$RUNNER_TEMP/jar-listing.txt"; then
-            echo "uxmLib is present un-relocated. Check the relocate() call." >&2
-            exit 1
-          fi
-          echo "Relocation is correct."
 
       - name: Upload the test reports
         if: failure()
