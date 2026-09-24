@@ -37,8 +37,12 @@ final class EngineWordsReachAPlayerTest {
 
     private static final Locale TR = Locale.forLanguageTag("tr");
 
-    /** Three of the engine's keys, one from each window it draws: a chat line, a button and an arrow. */
-    private static final List<String> ASKED = List.of("gui.input.cancelled", "gui.confirm.yes", "gui.page.next");
+    /**
+     * Four of the engine's keys, one from each window it draws: a chat line, a button, an arrow, and the question a
+     * Bedrock form asks when one tile does more than one thing. uxm-plots found that question reading as its keys.
+     */
+    private static final List<String> ASKED =
+            List.of("gui.input.cancelled", "gui.confirm.yes", "gui.page.next", "gui.gesture.title");
 
     @Test
     @DisplayName("a key of the engine reads as words in every language this plugin ships")
