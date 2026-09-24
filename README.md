@@ -8,7 +8,7 @@ configurable, multi-language, with every command renameable by the operator.
 ## Start a new plugin
 
 ```bash
-git clone https://github.com/INOVIXI/uxm-plugin-template.git uxm-<name>
+git clone https://github.com/UXPLIMA/uxm-plugin-template.git uxm-<name>
 cd uxm-<name>
 scripts/new-plugin.sh <slug> <ClassPrefix> <command-root>
 ```
