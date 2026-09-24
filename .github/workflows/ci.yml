@@ -45,11 +45,19 @@ jobs:
       - name: Verify the relocation
         run: |
           jar="$(ls build/libs/*.jar | head -1)"
-          if unzip -l "$jar" | grep -q 'net/kyori'; then
+          # The listing goes to a file rather than into `unzip -l ... | grep -q`. Actions runs this script
+          # with -o pipefail: grep -q exits at its first match, unzip then takes SIGPIPE, and the pipeline
+          # reports 141. So a MATCH makes `if` false and the violation this guard exists to catch is
+          # skipped in silence. Whether it happens depends on how much output unzip already pushed into
+          # the pipe buffer, so it is a race, and a guard that loses a race is not a guard. The same shape
+          # was measured in uxm-lib, where it failed the other way round and reported a correct jar as
+          # broken. grep over a file cannot lose it.
+          unzip -l "$jar" > "$RUNNER_TEMP/jar-listing.txt"
+          if grep -q 'net/kyori' "$RUNNER_TEMP/jar-listing.txt"; then
             echo "Adventure is bundled. Paper provides it; remove it from the jar." >&2
             exit 1
           fi
-          if unzip -l "$jar" | grep -qE ' com/uxplima/uxmlib/'; then
+          if grep -qE ' com/uxplima/uxmlib/' "$RUNNER_TEMP/jar-listing.txt"; then
             echo "uxmLib is present un-relocated. Check the relocate() call." >&2
             exit 1
           fi
