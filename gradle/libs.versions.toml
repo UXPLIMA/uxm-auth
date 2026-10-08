@@ -7,7 +7,7 @@ java           = "25"
 paper          = "26.2.build.112-stable"   # io.papermc.paper:paper-api (verified 2026-08-28)
 
 # our foundation
-uxmlib = "0.149.0"                  # com.github.UXPLIMA.uxm-lib (workspace .m2, published 2026-10-08)
+uxmlib = "0.149.0"                  # com.uxplima.uxmlib on repo.uxplima.com
 
 # runtime libraries
 configurate    = "4.1.2"
@@ -38,11 +38,11 @@ paper-api         = { module = "io.papermc.paper:paper-api",                    
 # Individual modules, never uxmlib-all. That artifact is the shaded standalone plugin jar:
 # it relocates Configurate into com.uxplima.uxmlib.libs.configurate, and those internal types
 # then appear in the signatures a consumer has to name. The per-module artifacts are clean.
-uxmlib-common     = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-common",       version.ref = "uxmlib" }
-uxmlib-command    = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-command",      version.ref = "uxmlib" }
-uxmlib-item       = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-item",         version.ref = "uxmlib" }
-uxmlib-gui        = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-gui",          version.ref = "uxmlib" }
-uxmlib-integration = { module = "com.github.UXPLIMA.uxm-lib:uxmlib-integration", version.ref = "uxmlib" }
+uxmlib-common     = { module = "com.uxplima.uxmlib:uxmlib-common",               version.ref = "uxmlib" }
+uxmlib-command    = { module = "com.uxplima.uxmlib:uxmlib-command",              version.ref = "uxmlib" }
+uxmlib-item       = { module = "com.uxplima.uxmlib:uxmlib-item",                 version.ref = "uxmlib" }
+uxmlib-gui        = { module = "com.uxplima.uxmlib:uxmlib-gui",                  version.ref = "uxmlib" }
+uxmlib-integration = { module = "com.uxplima.uxmlib:uxmlib-integration",         version.ref = "uxmlib" }
 configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
 jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }
 # bstats is here for the plugin that wants metrics. Nothing in the template builds a

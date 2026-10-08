@@ -17,7 +17,7 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     mavenLocal() // uxmLib, while a release is still on its way to JitPack
-    maven("https://jitpack.io") // uxmLib
+    maven("https://repo.uxplima.com/repository/maven-public/") // uxmLib
     maven("https://repo.extendedclip.com/releases/") // PlaceholderAPI
 }
 
