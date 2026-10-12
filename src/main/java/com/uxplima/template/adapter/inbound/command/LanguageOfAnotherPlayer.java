@@ -10,7 +10,6 @@ import org.bukkit.command.CommandSender;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.JoinConfiguration;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.template.application.message.Keys;
 import com.uxplima.uxmlib.text.Text;
@@ -26,7 +25,8 @@ import com.uxplima.uxmlib.text.message.Messages;
  * player of its own.
  *
  * <p>It is one class rather than two methods on the command, because every plugin of ours has the same two
- * branches under its own command and the same test proves them.
+ * branches under its own command and the same test proves them. Every placeholder is written inside the call
+ * that sends it, so a guard that reads a send for the words it hands over finds them.
  */
 public final class LanguageOfAnotherPlayer {
 
@@ -58,22 +58,26 @@ public final class LanguageOfAnotherPlayer {
             return;
         }
         Locale locale = wanted.get();
-        TagResolver named = Text.placeholder("language", LanguageNames.of(locale));
+        String written = LanguageNames.of(locale);
         switch (choices.named(name)) {
             case LanguageChoices.Named.Unknown unknown -> sayNobody(operator, unknown);
             case LanguageChoices.Named.Online online -> {
                 choices.choose(online.player().getUniqueId(), locale);
-                messages.send(online.player(), Keys.LANGUAGE_CHANGED, named);
+                messages.send(online.player(), Keys.LANGUAGE_CHANGED, Text.placeholder("language", written));
                 messages.send(
                         operator,
                         Keys.LANGUAGE_SET_PLAYER,
-                        playerTag(online.player().getName()),
-                        named);
+                        Text.placeholder("player", online.player().getName()),
+                        Text.placeholder("language", written));
                 sayWhenForced(operator);
             }
             case LanguageChoices.Named.Away away -> {
                 choices.choose(away.id(), locale);
-                messages.send(operator, Keys.LANGUAGE_SET_PLAYER_AWAY, playerTag(away.name()), named);
+                messages.send(
+                        operator,
+                        Keys.LANGUAGE_SET_PLAYER_AWAY,
+                        Text.placeholder("player", away.name()),
+                        Text.placeholder("language", written));
                 sayWhenForced(operator);
             }
         }
@@ -91,11 +95,11 @@ public final class LanguageOfAnotherPlayer {
                 messages.send(
                         operator,
                         Keys.LANGUAGE_RESET_PLAYER,
-                        playerTag(online.player().getName()));
+                        Text.placeholder("player", online.player().getName()));
             }
             case LanguageChoices.Named.Away away -> {
                 choices.reset(away.id());
-                messages.send(operator, Keys.LANGUAGE_RESET_PLAYER_AWAY, playerTag(away.name()));
+                messages.send(operator, Keys.LANGUAGE_RESET_PLAYER_AWAY, Text.placeholder("player", away.name()));
             }
         }
     }
@@ -121,9 +125,5 @@ public final class LanguageOfAnotherPlayer {
                 choices.available().stream()
                         .map(locale -> Component.text(LanguageNames.of(locale)))
                         .toList());
-    }
-
-    private static TagResolver playerTag(String name) {
-        return Text.placeholder("player", name);
     }
 }
