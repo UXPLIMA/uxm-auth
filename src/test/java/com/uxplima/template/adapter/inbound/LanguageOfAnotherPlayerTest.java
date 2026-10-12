@@ -1,29 +1,16 @@
 package com.uxplima.template.adapter.inbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-
-import org.bukkit.command.CommandSender;
-
-import io.papermc.paper.command.brigadier.CommandSourceStack;
 
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
-import com.uxplima.template.adapter.inbound.command.ExampleCommand;
-import com.uxplima.template.adapter.outbound.InMemoryExampleRepository;
-import com.uxplima.template.adapter.outbound.PluginSettings;
-import com.uxplima.template.application.CreateExample;
+import com.uxplima.template.adapter.inbound.command.LanguageOfAnotherPlayer;
 import com.uxplima.template.application.message.Keys;
-import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.language.HeldChoice;
 import com.uxplima.uxmlib.text.language.LanguageChoices;
@@ -37,7 +24,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.command.ConsoleCommandSenderMock;
@@ -60,12 +46,15 @@ final class LanguageOfAnotherPlayerTest {
 
     private Messages messages;
 
-    private ExampleCommand command;
+    private LanguageOfAnotherPlayer another;
+
+    private ConsoleCommandSenderMock console;
 
     @BeforeEach
-    void setUp(@TempDir Path folder) throws IOException {
+    void setUp() {
         server = MockBukkit.mock();
-        command = commandWith(folder, "language { default = \"en\" }\n");
+        console = server.getConsoleSender();
+        another = with(LanguageSettings.following(Locale.ENGLISH));
     }
 
     @AfterEach
@@ -76,14 +65,16 @@ final class LanguageOfAnotherPlayerTest {
     @Test
     @DisplayName("a player online reads the language at once, in this plugin and in every other")
     void online() {
-        PlayerMock steve = server.addPlayer("Steve");
-        steve.setLocale(Locale.ENGLISH);
+        PlayerMock steve = english("Steve");
 
-        command.setLanguageOf(console(), "steve", "tr");
+        another.set(console, "steve", "tr");
 
         assertThat(messages.localeOf(steve)).isEqualTo(TR);
         assertThat(anotherPlugin().localeOf(steve)).isEqualTo(TR);
-        assertThat(steve.nextComponentMessage()).isEqualTo(messages.render(steve, Keys.LANGUAGE_CHANGED, language()));
+        assertThat(steve.nextComponentMessage()).isEqualTo(messages.render(steve, Keys.LANGUAGE_CHANGED, turkish()));
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(messages.render(
+                        console, Keys.LANGUAGE_SET_PLAYER, Text.placeholder("player", "Steve"), turkish()));
     }
 
     @Test
@@ -92,74 +83,88 @@ final class LanguageOfAnotherPlayerTest {
         PlayerMock alex = server.addPlayer("Alex");
         alex.disconnect();
 
-        command.setLanguageOf(console(), "Alex", "tr");
+        another.set(console, "Alex", "tr");
 
         assertThat(store.held(alex.getUniqueId())).contains(new HeldChoice(TR));
     }
 
     @Test
-    @DisplayName("a name nobody played under changes nothing")
+    @DisplayName("a name nobody played under changes nothing and says so")
     void nobody() {
-        command.setLanguageOf(console(), "Nobody", "tr");
+        another.set(console, "Nobody", "tr");
 
-        ConsoleCommandSenderMock said = server.getConsoleSender();
-        assertThat(said.nextComponentMessage())
-                .isEqualTo(messages.render(said, Keys.LANGUAGE_UNKNOWN_PLAYER, Text.placeholder("input", "Nobody")));
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(messages.render(console, Keys.LANGUAGE_UNKNOWN_PLAYER, Text.placeholder("input", "Nobody")));
     }
 
     @Test
-    @DisplayName("a reset clears the language in every plugin, and the player reads the default again")
-    void reset() {
-        PlayerMock steve = server.addPlayer("Steve");
-        steve.setLocale(Locale.ENGLISH);
-        command.setLanguageOf(console(), "Steve", "tr");
+    @DisplayName("a language this plugin does not have changes nothing")
+    void noSuchLanguage() {
+        PlayerMock steve = english("Steve");
 
-        command.resetLanguageOf(console(), "Steve");
+        another.set(console, "Steve", "xx");
+
+        assertThat(messages.localeOf(steve)).isEqualTo(Locale.ENGLISH);
+    }
+
+    @Test
+    @DisplayName("a reset clears the language in every plugin")
+    void reset() {
+        PlayerMock steve = english("Steve");
+        another.set(console, "Steve", "tr");
+
+        another.reset(console, "Steve");
 
         assertThat(anotherPlugin().localeOf(steve)).isEqualTo(Locale.ENGLISH);
     }
 
     @Test
+    @DisplayName("while a language is forced the choice is kept and the operator is told it waits")
+    void forced() {
+        another = with(new LanguageSettings(Locale.ENGLISH, true, Locale.GERMAN));
+        PlayerMock steve = english("Steve");
+
+        another.set(console, "Steve", "tr");
+
+        assertThat(anotherPlugin().localeOf(steve)).isEqualTo(TR);
+        console.nextComponentMessage();
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(messages.render(
+                        console,
+                        Keys.LANGUAGE_FORCED_ANYWAY,
+                        Text.placeholder("language", LanguageNames.of(Locale.GERMAN))));
+    }
+
+    @Test
     @DisplayName("a server that does not follow the client starts every player in its default")
-    void oneAudience(@TempDir Path folder) throws IOException {
-        command = commandWith(folder, "language { default = \"tr\", follow-client = false }\n");
-        PlayerMock steve = server.addPlayer("Steve");
-        steve.setLocale(Locale.ENGLISH);
+    void oneAudience() {
+        another = with(new LanguageSettings(TR, false, null));
+        PlayerMock steve = english("Steve");
 
         assertThat(messages.localeOf(steve)).isEqualTo(TR);
     }
 
-    private ExampleCommand commandWith(Path folder, String config) throws IOException {
-        Path file = folder.resolve("config.conf");
-        Files.writeString(file, config, StandardCharsets.UTF_8);
-        PluginSettings settings = new PluginSettings(file);
+    private LanguageOfAnotherPlayer with(LanguageSettings settings) {
         store = PlayerLanguages.inMemory();
-        LanguageResolver resolver = new LanguageResolver(settings.current().language(), store);
+        LanguageResolver resolver = new LanguageResolver(settings, store);
         messages = new Messages(
                 new MessageCatalog(Map.of(Locale.ENGLISH, MessageCatalog.defaults(Keys.class)), Locale.ENGLISH),
                 resolver);
-        LanguageChoices choices = new LanguageChoices(
-                () -> Set.of(Locale.ENGLISH, TR), resolver, settings.current().language());
-        return new ExampleCommand(
-                new CreateExample(new InMemoryExampleRepository(), 3),
-                new InMemoryExampleRepository(),
-                messages,
-                choices,
-                settings);
+        LanguageChoices choices = new LanguageChoices(() -> Set.of(Locale.ENGLISH, TR), resolver, settings);
+        return new LanguageOfAnotherPlayer(messages, choices, () -> Optional.ofNullable(settings.forced()));
+    }
+
+    private PlayerMock english(String name) {
+        PlayerMock player = server.addPlayer(name);
+        player.setLocale(Locale.ENGLISH);
+        return player;
     }
 
     private static LanguageResolver anotherPlugin() {
         return new LanguageResolver(LanguageSettings.following(Locale.ENGLISH), PlayerLanguages.inMemory());
     }
 
-    private static TagResolver language() {
+    private static TagResolver turkish() {
         return Text.placeholder("language", LanguageNames.of(TR));
-    }
-
-    private Sender console() {
-        CommandSourceStack source = mock(CommandSourceStack.class);
-        CommandSender sender = server.getConsoleSender();
-        when(source.getSender()).thenReturn(sender);
-        return Sender.of(source);
     }
 }
