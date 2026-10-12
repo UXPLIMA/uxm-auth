@@ -42,19 +42,18 @@ final class LanguageOfAnotherPlayerTest {
 
     private ServerMock server;
 
-    private PlayerLanguages store;
-
-    private Messages messages;
-
-    private LanguageOfAnotherPlayer another;
-
     private ConsoleCommandSenderMock console;
+
+    private Wired wired;
+
+    /** One plugin's language parts, built from one set of settings. */
+    private record Wired(PlayerLanguages store, Messages messages, LanguageOfAnotherPlayer another) {}
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         console = server.getConsoleSender();
-        another = with(LanguageSettings.following(Locale.ENGLISH));
+        wired = with(LanguageSettings.following(Locale.ENGLISH));
     }
 
     @AfterEach
@@ -67,14 +66,15 @@ final class LanguageOfAnotherPlayerTest {
     void online() {
         PlayerMock steve = english("Steve");
 
-        another.set(console, "steve", "tr");
+        wired.another().set(console, "steve", "tr");
 
-        assertThat(messages.localeOf(steve)).isEqualTo(TR);
+        assertThat(wired.messages().localeOf(steve)).isEqualTo(TR);
         assertThat(anotherPlugin().localeOf(steve)).isEqualTo(TR);
-        assertThat(steve.nextComponentMessage()).isEqualTo(messages.render(steve, Keys.LANGUAGE_CHANGED, turkish()));
+        assertThat(steve.nextComponentMessage())
+                .isEqualTo(wired.messages().render(steve, Keys.LANGUAGE_CHANGED, turkish()));
         assertThat(console.nextComponentMessage())
-                .isEqualTo(messages.render(
-                        console, Keys.LANGUAGE_SET_PLAYER, Text.placeholder("player", "Steve"), turkish()));
+                .isEqualTo(wired.messages()
+                        .render(console, Keys.LANGUAGE_SET_PLAYER, Text.placeholder("player", "Steve"), turkish()));
     }
 
     @Test
@@ -83,18 +83,19 @@ final class LanguageOfAnotherPlayerTest {
         PlayerMock alex = server.addPlayer("Alex");
         alex.disconnect();
 
-        another.set(console, "Alex", "tr");
+        wired.another().set(console, "Alex", "tr");
 
-        assertThat(store.held(alex.getUniqueId())).contains(new HeldChoice(TR));
+        assertThat(wired.store().held(alex.getUniqueId())).contains(new HeldChoice(TR));
     }
 
     @Test
     @DisplayName("a name nobody played under changes nothing and says so")
     void nobody() {
-        another.set(console, "Nobody", "tr");
+        wired.another().set(console, "Nobody", "tr");
 
         assertThat(console.nextComponentMessage())
-                .isEqualTo(messages.render(console, Keys.LANGUAGE_UNKNOWN_PLAYER, Text.placeholder("input", "Nobody")));
+                .isEqualTo(wired.messages()
+                        .render(console, Keys.LANGUAGE_UNKNOWN_PLAYER, Text.placeholder("input", "Nobody")));
     }
 
     @Test
@@ -102,18 +103,18 @@ final class LanguageOfAnotherPlayerTest {
     void noSuchLanguage() {
         PlayerMock steve = english("Steve");
 
-        another.set(console, "Steve", "xx");
+        wired.another().set(console, "Steve", "xx");
 
-        assertThat(messages.localeOf(steve)).isEqualTo(Locale.ENGLISH);
+        assertThat(wired.messages().localeOf(steve)).isEqualTo(Locale.ENGLISH);
     }
 
     @Test
     @DisplayName("a reset clears the language in every plugin")
     void reset() {
         PlayerMock steve = english("Steve");
-        another.set(console, "Steve", "tr");
+        wired.another().set(console, "Steve", "tr");
 
-        another.reset(console, "Steve");
+        wired.another().reset(console, "Steve");
 
         assertThat(anotherPlugin().localeOf(steve)).isEqualTo(Locale.ENGLISH);
     }
@@ -121,37 +122,41 @@ final class LanguageOfAnotherPlayerTest {
     @Test
     @DisplayName("while a language is forced the choice is kept and the operator is told it waits")
     void forced() {
-        another = with(new LanguageSettings(Locale.ENGLISH, true, Locale.GERMAN));
+        wired = with(new LanguageSettings(Locale.ENGLISH, true, Locale.GERMAN));
         PlayerMock steve = english("Steve");
 
-        another.set(console, "Steve", "tr");
+        wired.another().set(console, "Steve", "tr");
 
         assertThat(anotherPlugin().localeOf(steve)).isEqualTo(TR);
         console.nextComponentMessage();
         assertThat(console.nextComponentMessage())
-                .isEqualTo(messages.render(
-                        console,
-                        Keys.LANGUAGE_FORCED_ANYWAY,
-                        Text.placeholder("language", LanguageNames.of(Locale.GERMAN))));
+                .isEqualTo(wired.messages()
+                        .render(
+                                console,
+                                Keys.LANGUAGE_FORCED_ANYWAY,
+                                Text.placeholder("language", LanguageNames.of(Locale.GERMAN))));
     }
 
     @Test
     @DisplayName("a server that does not follow the client starts every player in its default")
     void oneAudience() {
-        another = with(new LanguageSettings(TR, false, null));
+        wired = with(new LanguageSettings(TR, false, null));
         PlayerMock steve = english("Steve");
 
-        assertThat(messages.localeOf(steve)).isEqualTo(TR);
+        assertThat(wired.messages().localeOf(steve)).isEqualTo(TR);
     }
 
-    private LanguageOfAnotherPlayer with(LanguageSettings settings) {
-        store = PlayerLanguages.inMemory();
+    private static Wired with(LanguageSettings settings) {
+        PlayerLanguages store = PlayerLanguages.inMemory();
         LanguageResolver resolver = new LanguageResolver(settings, store);
-        messages = new Messages(
+        Messages messages = new Messages(
                 new MessageCatalog(Map.of(Locale.ENGLISH, MessageCatalog.defaults(Keys.class)), Locale.ENGLISH),
                 resolver);
         LanguageChoices choices = new LanguageChoices(() -> Set.of(Locale.ENGLISH, TR), resolver, settings);
-        return new LanguageOfAnotherPlayer(messages, choices, () -> Optional.ofNullable(settings.forced()));
+        return new Wired(
+                store,
+                messages,
+                new LanguageOfAnotherPlayer(messages, choices, () -> Optional.ofNullable(settings.forced())));
     }
 
     private PlayerMock english(String name) {
