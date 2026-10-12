@@ -48,3 +48,6 @@ permissions:
   uxmtemplate.admin.reload:
     description: Read the configuration again
     default: op
+  uxmtemplate.admin.language:
+    description: Set or clear the language another player reads
+    default: op

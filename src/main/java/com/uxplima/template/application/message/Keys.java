@@ -28,7 +28,7 @@ public enum Keys implements MessageKey {
     LANGUAGE_CHOICES("language.choices", "<tag:'TEMPLATE'> <body>You may read it in <value><languages><body>."),
     LANGUAGE_CHANGED("language.changed", "<tag:'TEMPLATE'> <body>You now read this in <value><language><body>."),
     LANGUAGE_ALREADY("language.already", "<tag:'TEMPLATE'> <body>You already read this in <value><language><body>."),
-    LANGUAGE_RESET("language.reset", "<tag:'TEMPLATE'> <body>Your language follows your client again."),
+    LANGUAGE_RESET("language.reset", "<tag:'TEMPLATE'> <body>You no longer have a language of your own."),
     LANGUAGE_SEPARATOR("language.separator", "<dim>, "),
     LANGUAGE_UNKNOWN(
             "language.unknown",
@@ -36,6 +36,21 @@ public enum Keys implements MessageKey {
     LANGUAGE_FORCED(
             "language.forced",
             "<etag:'ERROR'> <body>This server reads one language, and it is <value><language><body>."),
+    LANGUAGE_SET_PLAYER(
+            "language.set-player", "<tag:'TEMPLATE'> <value><player><body> now reads <value><language><body>."),
+    LANGUAGE_SET_PLAYER_AWAY(
+            "language.set-player-away",
+            "<tag:'TEMPLATE'> <value><player><body> is away and reads <value><language><body> from their next join."),
+    LANGUAGE_RESET_PLAYER(
+            "language.reset-player", "<tag:'TEMPLATE'> <value><player><body> no longer has a language of their own."),
+    LANGUAGE_RESET_PLAYER_AWAY(
+            "language.reset-player-away",
+            "<tag:'TEMPLATE'> <value><player><body> is away, and their language is cleared at their next join."),
+    LANGUAGE_FORCED_ANYWAY(
+            "language.forced-anyway",
+            "<tag:'TEMPLATE'> <body>It is kept, and everyone reads <value><language><body> while that is forced."),
+    LANGUAGE_UNKNOWN_PLAYER(
+            "language.unknown-player", "<etag:'ERROR'> <body>Nobody called <value><input><body> has played here."),
 
     COMMAND_NO_PERMISSION("command.no-permission", "<etag:'ERROR'> <body>You do not have permission to do that."),
 

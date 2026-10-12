@@ -248,6 +248,21 @@ final class EveryGuardThisPluginNeedsIsHereTest {
                 .isTrue();
     }
 
+    @Test
+    @DisplayName("a plugin that resolves a language guards that nothing reads the client's instead")
+    void theclientLanguageGuardIsHere() throws IOException {
+        if (!sourceHolds("new LanguageResolver(")) {
+            return;
+        }
+        assertThat(guardExists("NoClientLanguageIsReadTest"))
+                .describedAs("a line that reads player.locale() skips the forced language, the player's own"
+                        + " choice and follow-client; uxmCrates did it in four places until 2026-10-12")
+                .isTrue();
+        assertThat(guardExists("LanguageOfAnotherPlayerTest"))
+                .describedAs("an operator sets the language of another player, and a test proves it lands")
+                .isTrue();
+    }
+
     private static boolean sourceHolds(String token) throws IOException {
         for (Path file : java()) {
             if (withoutSpaces(Files.readString(file, StandardCharsets.UTF_8)).contains(token)) {

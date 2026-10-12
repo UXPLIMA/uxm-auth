@@ -6,10 +6,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.JoinConfiguration;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.template.adapter.outbound.PluginSettings;
 import com.uxplima.template.application.CreateExample;
@@ -17,6 +20,7 @@ import com.uxplima.template.application.message.Keys;
 import com.uxplima.template.application.port.ExampleRepository;
 import com.uxplima.template.domain.ExampleName;
 import com.uxplima.uxmlib.command.Sender;
+import com.uxplima.uxmlib.command.annotation.PlayerNames;
 import com.uxplima.uxmlib.command.annotation.SuggestUsing;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
@@ -175,13 +179,102 @@ public final class ExampleCommand {
     }
 
     /**
+     * Set the language another player reads, for an operator. A player who is away reads it when they join.
+     *
+     * <p>The choice is the player's own on every plugin of ours on the server, so this sets it once for all of
+     * them. The console may run it, which is why it takes no player of its own.
+     */
+    @FromConfig(
+            value = "lang-set-player",
+            fallbackName = "lang set-player",
+            description = "Set the language another player reads")
+    @Permission("uxmtemplate.admin.language")
+    public void setLanguageOf(
+            Sender sender,
+            @Arg("player") @SuggestUsing(PlayerNames.KEY) String name,
+            @Arg("language") @SuggestUsing(LanguageSuggestions.KEY) String language) {
+        CommandSender operator = sender.bukkit();
+        Optional<Locale> wanted = choices.parse(language);
+        if (wanted.isEmpty()) {
+            messages.send(
+                    operator,
+                    Keys.LANGUAGE_UNKNOWN,
+                    Text.placeholder("input", language),
+                    Text.component("languages", available(operator)));
+            return;
+        }
+        Locale locale = wanted.get();
+        TagResolver named = Text.placeholder("language", LanguageNames.of(locale));
+        switch (choices.named(name)) {
+            case LanguageChoices.Named.Unknown unknown -> sayNobody(operator, unknown);
+            case LanguageChoices.Named.Online online -> {
+                choices.choose(online.player().getUniqueId(), locale);
+                messages.send(online.player(), Keys.LANGUAGE_CHANGED, named);
+                messages.send(
+                        operator,
+                        Keys.LANGUAGE_SET_PLAYER,
+                        playerTag(online.player().getName()),
+                        named);
+                sayWhenForced(operator);
+            }
+            case LanguageChoices.Named.Away away -> {
+                choices.choose(away.id(), locale);
+                messages.send(operator, Keys.LANGUAGE_SET_PLAYER_AWAY, playerTag(away.name()), named);
+                sayWhenForced(operator);
+            }
+        }
+    }
+
+    /** Clear another player's own language, for an operator. A player who is away has it cleared when they join. */
+    @FromConfig(
+            value = "lang-reset-player",
+            fallbackName = "lang reset-player",
+            description = "Clear the language another player chose")
+    @Permission("uxmtemplate.admin.language")
+    public void resetLanguageOf(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String name) {
+        CommandSender operator = sender.bukkit();
+        switch (choices.named(name)) {
+            case LanguageChoices.Named.Unknown unknown -> sayNobody(operator, unknown);
+            case LanguageChoices.Named.Online online -> {
+                choices.reset(online.player().getUniqueId());
+                messages.send(online.player(), Keys.LANGUAGE_RESET);
+                messages.send(
+                        operator,
+                        Keys.LANGUAGE_RESET_PLAYER,
+                        playerTag(online.player().getName()));
+            }
+            case LanguageChoices.Named.Away away -> {
+                choices.reset(away.id());
+                messages.send(operator, Keys.LANGUAGE_RESET_PLAYER_AWAY, playerTag(away.name()));
+            }
+        }
+    }
+
+    private void sayNobody(CommandSender operator, LanguageChoices.Named.Unknown unknown) {
+        messages.send(operator, Keys.LANGUAGE_UNKNOWN_PLAYER, Text.placeholder("input", unknown.typed()));
+    }
+
+    /** A choice is kept while a language is forced, and the operator is told it waits behind the force. */
+    private void sayWhenForced(CommandSender operator) {
+        settings.current()
+                .language()
+                .forcedLocale()
+                .ifPresent(forced -> messages.send(
+                        operator, Keys.LANGUAGE_FORCED_ANYWAY, Text.placeholder("language", LanguageNames.of(forced))));
+    }
+
+    private static TagResolver playerTag(String name) {
+        return Text.placeholder("player", name);
+    }
+
+    /**
      * Every language this plugin found, in one line.
      *
      * <p>The separator is a message key rather than a comma in the code, because a language that reads right
      * to left, or one that punctuates a list differently, needs its own.
      */
-    private Component available(Player player) {
-        Component separator = messages.render(player, Keys.LANGUAGE_SEPARATOR);
+    private Component available(Audience reader) {
+        Component separator = messages.render(reader, Keys.LANGUAGE_SEPARATOR);
         return Component.join(
                 JoinConfiguration.separator(separator),
                 choices.available().stream()
