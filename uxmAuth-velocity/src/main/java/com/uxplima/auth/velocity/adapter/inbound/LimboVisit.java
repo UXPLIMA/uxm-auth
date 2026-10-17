@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
+import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
 
@@ -34,9 +35,11 @@ public final class LimboVisit {
 
     private final LimboLogin login;
     private final ProxySessions sessions;
+    private final Remember remember;
     private final UUID id;
     private final PlayerName name;
     private final String address;
+    private final String host;
     private final Audience reader;
     private final Exit exit;
     private final AtomicBoolean over = new AtomicBoolean();
@@ -44,16 +47,20 @@ public final class LimboVisit {
     public LimboVisit(
             LimboLogin login,
             ProxySessions sessions,
+            Remember remember,
             UUID id,
             PlayerName name,
             String address,
+            String host,
             Audience reader,
             Exit exit) {
         this.login = Objects.requireNonNull(login, "login");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
+        this.remember = Objects.requireNonNull(remember, "remember");
         this.id = Objects.requireNonNull(id, "id");
         this.name = Objects.requireNonNull(name, "name");
         this.address = Objects.requireNonNull(address, "address");
+        this.host = Objects.requireNonNull(host, "host");
         this.reader = Objects.requireNonNull(reader, "reader");
         this.exit = Objects.requireNonNull(exit, "exit");
     }
@@ -102,6 +109,7 @@ public final class LimboVisit {
             case LimboLogin.Outcome.In in -> {
                 if (over.compareAndSet(false, true)) {
                     sessions.loggedIn(id, in.method());
+                    remember.loggedIn(id, address, host);
                     login.leave(id);
                     exit.release();
                 }

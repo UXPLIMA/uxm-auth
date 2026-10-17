@@ -1,5 +1,6 @@
 package com.uxplima.auth.velocity.bootstrap;
 
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -18,6 +19,7 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
@@ -56,7 +58,12 @@ final class WaitingWorld implements AutoCloseable {
     }
 
     /** Hold every player who waits for the proxy's password in the world, when the settings ask for it. */
-    void open(PluginSettings settings, SqlAccountRepository accounts, Messages words, ProxySessions network) {
+    void open(
+            PluginSettings settings,
+            SqlAccountRepository accounts,
+            Messages words,
+            ProxySessions network,
+            Remember remember) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
         }
@@ -67,7 +74,7 @@ final class WaitingWorld implements AutoCloseable {
             return;
         }
         try {
-            hold(limboApi.get(), settings, accounts, words, network);
+            hold(limboApi.get(), settings, accounts, words, network, remember);
         } catch (RuntimeException | LinkageError foreign) {
             // A LimboAPI of another major version names its types elsewhere; the proxy starts without the world.
             close();
@@ -83,7 +90,8 @@ final class WaitingWorld implements AutoCloseable {
             PluginSettings settings,
             SqlAccountRepository accounts,
             Messages words,
-            ProxySessions network) {
+            ProxySessions network,
+            Remember remember) {
         Path commands = folder.resolve(COMMANDS);
         Set<String> login = CommandFile.labels(commands, "login");
         Set<String> register = CommandFile.labels(commands, "register");
@@ -91,7 +99,7 @@ final class WaitingWorld implements AutoCloseable {
         LimboWait wait = new LimboWait(
                 LimboWorld.open(limboApi, folder, settings.current().network(), metas(login, register), logger),
                 network::waitsAtTheProxy,
-                (player, exit) -> visit(passwords, network, player, exit),
+                (player, exit) -> visit(passwords, network, remember, player, exit),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
@@ -132,13 +140,16 @@ final class WaitingWorld implements AutoCloseable {
                 () -> settings.current().passwords().confirmOnRegister());
     }
 
-    private static LimboVisit visit(LimboLogin passwords, ProxySessions network, Player player, LimboVisit.Exit exit) {
+    private static LimboVisit visit(
+            LimboLogin passwords, ProxySessions network, Remember remember, Player player, LimboVisit.Exit exit) {
         return new LimboVisit(
                 passwords,
                 network,
+                remember,
                 player.getUniqueId(),
                 new PlayerName(player.getUsername()),
                 player.getRemoteAddress().getAddress().getHostAddress(),
+                player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(""),
                 player,
                 exit);
     }

@@ -47,8 +47,19 @@ final class LimboVisitTest {
         }
     };
 
+    private final com.uxplima.auth.adapter.outbound.SqlRememberedSessions remembered;
+    private final com.uxplima.auth.application.protection.Remember remember;
+
     LimboVisitTest(@TempDir Path folder) {
         this.world = new ProxyWorld(folder);
+        this.remembered = new com.uxplima.auth.adapter.outbound.SqlRememberedSessions(world.database, world.clock);
+        this.remember = new com.uxplima.auth.application.protection.Remember(
+                remembered,
+                () -> new com.uxplima.auth.application.protection.Remember.Settings(
+                        com.uxplima.auth.application.protection.Remember.Mode.EVERYONE,
+                        java.time.Duration.ofMinutes(60)),
+                () -> new com.uxplima.auth.domain.premium.HostPatterns(java.util.List.of()),
+                world.clock::instant);
         sessions.waiting(STEVE, new Claim.Waiting(false, false, false));
     }
 
@@ -59,7 +70,15 @@ final class LimboVisitTest {
 
     private LimboVisit visit() {
         return new LimboVisit(
-                world.limboLogin(true), sessions, STEVE, new PlayerName("Steve"), "127.0.0.1", Audience.empty(), exit);
+                world.limboLogin(true),
+                sessions,
+                remember,
+                STEVE,
+                new PlayerName("Steve"),
+                "127.0.0.1",
+                "play.example.org",
+                Audience.empty(),
+                exit);
     }
 
     private static void settle(CompletableFuture<Void> said) throws Exception {
@@ -171,5 +190,16 @@ final class LimboVisitTest {
         visit.remind();
 
         assertThat(told).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a login in the waiting world is remembered from the player's address")
+    void aLoginInTheWorldIsRemembered() throws Exception {
+        LimboVisit visit = visit();
+        visit.arrive();
+
+        settle(visit.said("/register hunter22 hunter22"));
+
+        assertThat(remembered.holds(STEVE, "127.0.0.1", world.clock.instant())).isTrue();
     }
 }

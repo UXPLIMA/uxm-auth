@@ -47,9 +47,18 @@ final class DoorListenerTest {
     private final Logger logger = mock(Logger.class);
     private final ProxySessions sessions = new ProxySessions();
     private Admission admission = Admission.none();
+    private final com.uxplima.auth.adapter.outbound.SqlRememberedSessions remembered;
+    private final com.uxplima.auth.application.protection.Remember remember;
 
     DoorListenerTest(@TempDir Path folder) {
         this.world = new ProxyWorld(folder);
+        this.remembered = new com.uxplima.auth.adapter.outbound.SqlRememberedSessions(world.database, world.clock);
+        this.remember = new com.uxplima.auth.application.protection.Remember(
+                remembered,
+                () -> new com.uxplima.auth.application.protection.Remember.Settings(
+                        com.uxplima.auth.application.protection.Remember.Mode.CHOSEN, java.time.Duration.ofMinutes(60)),
+                () -> new com.uxplima.auth.domain.premium.HostPatterns(List.of()),
+                world.clock::instant);
         when(connection.getRemoteAddress()).thenReturn(FROM);
         when(connection.getVirtualHost())
                 .thenReturn(Optional.of(InetSocketAddress.createUnresolved(ProxyWorld.PLAY, 25565)));
@@ -61,7 +70,7 @@ final class DoorListenerTest {
     }
 
     private DoorListener listener() {
-        return new DoorListener(world.door(), admission, sessions, world.words, logger);
+        return new DoorListener(world.door(), admission, remember, sessions, world.words, logger);
     }
 
     private PreLoginEvent preLoginOf(String name) {
@@ -220,7 +229,7 @@ final class DoorListenerTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.eq(false),
                         org.mockito.ArgumentMatchers.any());
-        DoorListener listener = new DoorListener(door, admission, sessions, world.words, logger);
+        DoorListener listener = new DoorListener(door, admission, remember, sessions, world.words, logger);
         listener.preLogin(preLoginOf("Steve"));
 
         listener.profile(new GameProfileRequestEvent(
@@ -377,5 +386,43 @@ final class DoorListenerTest {
                         net.kyori.adventure.audience.Audience.empty(),
                         com.uxplima.auth.application.message.Keys.KICK_TIMEOUT)));
         assertThat(seen).containsExactly(new Admission.Arrival("127.0.0.1", ProxyWorld.PLAY));
+    }
+
+    @Test
+    @DisplayName(
+            "a registered name back from where its session holds is logged in by the session, and from elsewhere waits")
+    void aRememberedSessionLogsInAtTheProxy() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        AccountRepository.Insert unused = world.accounts.insert(new Account(
+                steve,
+                new PlayerName("Steve"),
+                AccountKind.CRACKED,
+                null,
+                null,
+                world.clock.instant(),
+                "10.0.0.1",
+                null,
+                null));
+        remembered.remember(
+                steve, FROM.getAddress().getHostAddress(), world.clock.instant().plusSeconds(60));
+
+        assertThat(loggedInFrom(FROM, steve)).isTrue();
+        assertThat(loggedInFrom(new InetSocketAddress("198.51.100.2", 40002), steve))
+                .isFalse();
+    }
+
+    private boolean loggedInFrom(InetSocketAddress from, UUID id) {
+        when(connection.getRemoteAddress()).thenReturn(from);
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Steve"));
+        listener.profile(new GameProfileRequestEvent(connection, new GameProfile(id, "Steve", List.of()), false));
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(from);
+        when(player.getUniqueId()).thenReturn(id);
+        when(player.getVirtualHost())
+                .thenReturn(Optional.of(InetSocketAddress.createUnresolved(ProxyWorld.PLAY, 25565)));
+        listener.login(new LoginEvent(player, ""));
+        return sessions.loggedIn(id);
     }
 }

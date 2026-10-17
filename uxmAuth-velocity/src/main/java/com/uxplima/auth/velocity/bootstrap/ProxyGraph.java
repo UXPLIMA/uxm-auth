@@ -18,6 +18,7 @@ import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
+import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.port.LastServers;
@@ -28,6 +29,7 @@ import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.Admission;
+import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
@@ -102,8 +104,13 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
                 clock);
-        ProxySessions sessions = listen(door, settings, words, clock, new SqlLastServers(database, clock));
-        waiting.open(settings, accounts, words, sessions);
+        Remember remember = new Remember(
+                new SqlRememberedSessions(database, clock),
+                () -> settings.current().protection().sessions(),
+                () -> settings.current().protection().sharedHosts(),
+                clock::instant);
+        ProxySessions sessions = listen(door, settings, words, clock, new SqlLastServers(database, clock), remember);
+        waiting.open(settings, accounts, words, sessions, remember);
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
@@ -112,7 +119,12 @@ final class ProxyGraph implements AutoCloseable {
      * reports after.
      */
     private ProxySessions listen(
-            ProxyDoor door, PluginSettings settings, Messages words, Clock clock, LastServers lastServers) {
+            ProxyDoor door,
+            PluginSettings settings,
+            Messages words,
+            Clock clock,
+            LastServers lastServers,
+            Remember remember) {
         ProxySessions sessions = new ProxySessions();
         Supplier<Optional<Claims>> claims = claims(settings);
         RouteListener routes = new RouteListener(
@@ -125,6 +137,7 @@ final class ProxyGraph implements AutoCloseable {
         register(new DoorListener(
                 door,
                 new Admission(() -> settings.current().protection().sharedHosts(), List.of()),
+                remember,
                 sessions,
                 new DoorWords(words),
                 logger));

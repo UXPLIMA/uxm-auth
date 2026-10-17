@@ -6,8 +6,10 @@ import java.util.Optional;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.protection.Admission;
+import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.Refusal;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.Subscribe;
@@ -32,16 +34,27 @@ public final class DoorListener {
     /** Below every plugin that leaves the default, so a decision another plugin made is seen. */
     private static final short LATE = -1000;
 
+    private final Remember remember;
     private final Admission admission;
     private final ProxyDoor door;
     private final ProxySessions sessions;
     private final DoorWords words;
     private final Logger logger;
 
-    /** @param admission the rules a connection meets before its name is read */
-    public DoorListener(ProxyDoor door, Admission admission, ProxySessions sessions, DoorWords words, Logger logger) {
+    /**
+     * @param admission the rules a connection meets before its name is read
+     * @param remember the sessions that let a player back from the same address in without the password
+     */
+    public DoorListener(
+            ProxyDoor door,
+            Admission admission,
+            Remember remember,
+            ProxySessions sessions,
+            DoorWords words,
+            Logger logger) {
         this.door = Objects.requireNonNull(door, "door");
         this.admission = Objects.requireNonNull(admission, "admission");
+        this.remember = Objects.requireNonNull(remember, "remember");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.words = Objects.requireNonNull(words, "words");
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -57,9 +70,10 @@ public final class DoorListener {
         return EventTask.async(() -> profile(event));
     }
 
+    /** Off the event thread: a remembered session is read from the database. */
     @Subscribe
-    public void onLogin(LoginEvent event) {
-        login(event);
+    public EventTask onLogin(LoginEvent event) {
+        return EventTask.async(() -> login(event));
     }
 
     @Subscribe
@@ -142,9 +156,7 @@ public final class DoorListener {
         Optional<Refusal> refusal =
                 switch (door.arrival(player.getRemoteAddress()).orElse(null)) {
                     case ProxyDoor.Arrival.Usual usual -> {
-                        sessions.waiting(
-                                player.getUniqueId(),
-                                new Claim.Waiting(usual.unverified(), usual.explain(), usual.marked()));
+                        waitOrResume(player, usual);
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Premium premium -> {
@@ -161,6 +173,17 @@ public final class DoorListener {
                 };
         refusal.ifPresent(
                 why -> event.setResult(ResultedEvent.ComponentResult.denied(words.refusal(why, Optional.empty()))));
+    }
+
+    /** A player with a password waits for it, unless a session from this address lets them in. */
+    private void waitOrResume(Player player, ProxyDoor.Arrival.Usual usual) {
+        sessions.waiting(player.getUniqueId(), new Claim.Waiting(usual.unverified(), usual.explain(), usual.marked()));
+        String host =
+                player.getVirtualHost().map(InetSocketAddress::getHostString).orElse("");
+        if (remember.resumes(
+                player.getUniqueId(), player.getRemoteAddress().getAddress().getHostAddress(), host)) {
+            sessions.loggedIn(player.getUniqueId(), AuthMethod.SESSION);
+        }
     }
 
     void left(DisconnectEvent event) {
