@@ -160,4 +160,15 @@ final class RouteListenerTest {
         assertThat(listener().waitingRoom("lobby-1")).isFalse();
         assertThat(new ArrayList<>(authServers)).hasSize(2);
     }
+
+    @Test
+    @DisplayName("reaching a server makes the visit the proxy wrote for it the player's")
+    void reachingAServerMakesTheVisitThePlayers() {
+        sessions.loggedIn(STEVE, AuthMethod.PASSWORD);
+        sessions.wrote(STEVE, "n0nce-2");
+
+        listener().connected(new ServerConnectedEvent(steve, servers.get("survival"), null));
+
+        assertThat(sessions.visit(STEVE)).contains("n0nce-2");
+    }
 }

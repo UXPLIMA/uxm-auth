@@ -91,6 +91,7 @@ public final class RouteListener {
     void connected(ServerConnectedEvent event) {
         Player player = event.getPlayer();
         String name = event.getServer().getServerInfo().getName();
+        sessions.arrived(player.getUniqueId());
         if (sessions.loggedIn(player.getUniqueId()) && !waitingRoom(name)) {
             lastServers.remember(player.getUniqueId(), name);
         }

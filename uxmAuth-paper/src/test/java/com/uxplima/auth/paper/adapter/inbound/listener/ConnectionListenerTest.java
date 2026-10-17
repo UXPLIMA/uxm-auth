@@ -82,6 +82,7 @@ final class ConnectionListenerTest {
     private UuidScheme scheme = UuidScheme.KEEP_FIRST;
     private @org.jspecify.annotations.Nullable AtTheDoor door;
     private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
+    private NetworkDoor network = NetworkDoor.none();
 
     @BeforeEach
     void setUp() {
@@ -108,6 +109,37 @@ final class ConnectionListenerTest {
 
         assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
         assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Registered.class);
+    }
+
+    @Test
+    @DisplayName(
+            "a player the proxy sent opens the session as the visit its claim named, and one alone as a visit of its own")
+    void theSessionOpensAsTheProxysVisit() {
+        com.uxplima.auth.domain.network.Claims claims = new com.uxplima.auth.domain.network.Claims(
+                com.uxplima.auth.domain.network.NetworkSecret.parse("q".repeat(43)), Duration.ofSeconds(30));
+        network = new NetworkDoor(
+                () -> Optional.of(claims), world.accounts::findById, world.clock, Logger.getLogger("uxmauth-test"));
+        UUID id = UUID.randomUUID();
+        PlayerProfile profile = server.createProfile(id, "Newbie");
+        profile.setProperty(new com.destroystokyo.paper.profile.ProfileProperty(
+                NetworkDoor.PROPERTY,
+                claims.sign(new com.uxplima.auth.domain.network.Claim(
+                        id,
+                        "Newbie",
+                        new com.uxplima.auth.domain.network.Claim.Waiting(false, false, false),
+                        world.clock.instant(),
+                        "n0nce-1"))));
+
+        listener(world.accounts).onPreLogin(preLogin(profile, loginConnection(MINE, true)));
+        assertThat(world.sessions.held(id).orElseThrow().visit()).isEqualTo("n0nce-1");
+
+        network = NetworkDoor.none();
+        UUID alone = UUID.randomUUID();
+        listener(world.accounts)
+                .onPreLogin(preLogin(server.createProfile(alone, "Loner"), loginConnection(MINE, true)));
+        assertThat(world.sessions.held(alone).orElseThrow().visit())
+                .isNotBlank()
+                .isNotEqualTo("n0nce-1");
     }
 
     @Test
@@ -713,7 +745,7 @@ final class ConnectionListenerTest {
                         server::createProfile,
                         () -> new DomainMark("+", false),
                         scheme,
-                        NetworkDoor.none()),
+                        network),
                 world.notices,
                 world.door,
                 world.keeper,

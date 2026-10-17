@@ -76,7 +76,7 @@ final class ChangePasswordTest {
 
     @Test
     @DisplayName(
-            "a change tells every member of the network that the account's other sessions ended, and a refused one tells nobody")
+            "a change tells every member of the network that every session of the account but this one ended, and a refused one tells nobody")
     void aChangeEndsTheOtherSessions() {
         UUID connection = loggedIn("Steve", "hunter22");
         UUID account = fixture.accounts
@@ -88,7 +88,8 @@ final class ChangePasswordTest {
         assertThat(heard).isEmpty();
 
         change(connection, "hunter22", "fresh777");
-        assertThat(heard).containsExactly(new Bulletin.SessionsEnded(account, true));
+        String visit = fixture.sessions.held(connection).orElseThrow().visit();
+        assertThat(heard).containsExactly(new Bulletin.SessionsEnded(account, java.util.Optional.of(visit)));
     }
 
     @Test

@@ -6,8 +6,8 @@ import java.util.function.Consumer;
 import com.uxplima.auth.domain.network.Bulletin;
 
 /**
- * What the proxy does when an account's sessions end: a player of it logged in here waits again, unless they
- * made the change themselves. The server they stand on hears the same bulletin and shows them the door.
+ * What the proxy does when an account's sessions end: a player of it logged in here waits again, unless theirs
+ * is the session that made the change, on the visit the bulletin keeps. The server they stand on hears the same bulletin and shows them the door.
  */
 public final class EndedSessions implements Consumer<Bulletin> {
 
@@ -21,7 +21,7 @@ public final class EndedSessions implements Consumer<Bulletin> {
     public void accept(Bulletin bulletin) {
         switch (Objects.requireNonNull(bulletin, "bulletin")) {
             case Bulletin.SessionsEnded ended -> {
-                if (!ended.keepOnline()) {
+                if (!ended.keep().equals(sessions.visit(ended.account()))) {
                     sessions.loggedOut(ended.account());
                 }
             }

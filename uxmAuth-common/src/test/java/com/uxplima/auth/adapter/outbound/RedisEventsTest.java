@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 final class RedisEventsTest {
 
     private static final Instant NOW = Instant.parse("2026-10-18T10:00:00Z");
-    private static final Bulletin ENDED = new Bulletin.SessionsEnded(UUID.randomUUID(), false);
+    private static final Bulletin ENDED = new Bulletin.SessionsEnded(UUID.randomUUID(), java.util.Optional.empty());
 
     /** A Redis in memory: a frame published on a channel reaches every subscriber of it, the publisher too. */
     private static final class Wire implements RedisBus {

@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.state.AuthMethod;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Where every player on the proxy stands: logged in, and how, or waiting with what the door decided. The proxy
@@ -27,7 +28,14 @@ public final class ProxySessions {
 
     private static final Claim.Waiting NOTHING = new Claim.Waiting(false, false, false);
 
+    /**
+     * The visit a player stands on a server as: the nonce of the claim that server let them in with. The one
+     * written for a connection still under way waits beside it until the server lets them in.
+     */
+    private record Visit(@Nullable String current, @Nullable String pending) {}
+
     private final Map<UUID, Session> sessions = new ConcurrentHashMap<>();
+    private final Map<UUID, Visit> visits = new ConcurrentHashMap<>();
 
     /** The player waits for a password, with the door's flags. */
     public void waiting(UUID id, Claim.Waiting flags) {
@@ -105,8 +113,29 @@ public final class ProxySessions {
         return session != null && session.standing() instanceof Claim.LoggedIn;
     }
 
+    /** The proxy wrote a claim with this nonce for the connection under way. */
+    public void wrote(UUID id, String nonce) {
+        Objects.requireNonNull(nonce, "nonce");
+        visits.compute(
+                Objects.requireNonNull(id, "id"),
+                (key, visit) -> new Visit(visit == null ? null : visit.current(), nonce));
+    }
+
+    /** A server let the player in: the claim written for it names their visit now. */
+    public void arrived(UUID id) {
+        visits.computeIfPresent(
+                Objects.requireNonNull(id, "id"),
+                (key, visit) -> visit.pending() == null ? visit : new Visit(visit.pending(), null));
+    }
+
+    /** The visit the player stands on their server as, once a server let them in with a claim. */
+    public Optional<String> visit(UUID id) {
+        return Optional.ofNullable(visits.get(Objects.requireNonNull(id, "id"))).map(Visit::current);
+    }
+
     /** The player left the proxy. */
     public void forget(UUID id) {
         sessions.remove(Objects.requireNonNull(id, "id"));
+        visits.remove(id);
     }
 }

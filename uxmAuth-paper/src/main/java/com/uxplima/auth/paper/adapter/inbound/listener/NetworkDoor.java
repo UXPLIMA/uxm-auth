@@ -35,18 +35,20 @@ public final class NetworkDoor {
         /** No network, or no claim: the usual door. */
         record None() implements Reading {}
 
-        /** The proxy vouched for a login to this account, by this method. */
-        record LoggedIn(Account account, AuthMethod method) implements Reading {
+        /** The proxy vouched for a login to this account, by this method, on the visit its claim named. */
+        record LoggedIn(Account account, AuthMethod method, String visit) implements Reading {
             public LoggedIn {
                 Objects.requireNonNull(account, "account");
                 Objects.requireNonNull(method, "method");
+                Objects.requireNonNull(visit, "visit");
             }
         }
 
-        /** The player waits for a password, with the flags the proxy's door decided. */
-        record Waiting(Claim.Waiting flags) implements Reading {
+        /** The player waits for a password, with the flags the proxy's door decided, on the visit its claim named. */
+        record Waiting(Claim.Waiting flags, String visit) implements Reading {
             public Waiting {
                 Objects.requireNonNull(flags, "flags");
+                Objects.requireNonNull(visit, "visit");
             }
         }
 
@@ -102,10 +104,10 @@ public final class NetworkDoor {
 
     private Reading standing(String name, Claim claim) {
         return switch (claim.standing()) {
-            case Claim.Waiting waiting -> new Reading.Waiting(waiting);
+            case Claim.Waiting waiting -> new Reading.Waiting(waiting, claim.nonce());
             case Claim.LoggedIn in ->
                 accounts.apply(claim.id())
-                        .<Reading>map(account -> new Reading.LoggedIn(account, in.method()))
+                        .<Reading>map(account -> new Reading.LoggedIn(account, in.method(), claim.nonce()))
                         .orElseGet(() -> refused(name, "NO_ACCOUNT"));
         };
     }

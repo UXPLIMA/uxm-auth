@@ -108,8 +108,8 @@ public final class ChangePassword {
                 state -> state instanceof AuthState.Authenticated authenticated
                         ? new AuthState.Authenticated(updated, authenticated.method())
                         : state);
-        // The password ends every other session of the account, on every server; this login stays.
-        events.publish(new Bulletin.SessionsEnded(id, true));
+        // The password ends every session of the account on every server, but the one that changed it.
+        events.publish(new Bulletin.SessionsEnded(id, sessions.held(connection).map(Sessions.Held::visit)));
         return new ChangeResult.Changed();
     }
 

@@ -132,6 +132,7 @@ final class NetworkArrivalsTest {
                 .isInstanceOfSatisfying(
                         AuthState.Authenticated.class,
                         in -> assertThat(in.method()).isEqualTo(AuthMethod.NETWORK));
+        assertThat(opened.visit()).contains("n0nce");
         assertThat(event.getPlayerProfile().getProperties())
                 .extracting(ProfileProperty::getName)
                 .containsExactly("textures");
@@ -148,6 +149,7 @@ final class NetworkArrivalsTest {
 
         assertThat(opened.state()).isEqualTo(new AuthState.Unregistered(new PlayerName("Newbie"), true));
         assertThat(opened.id()).isEqualTo(given);
+        assertThat(opened.visit()).contains("n0nce");
     }
 
     @Test
@@ -245,5 +247,6 @@ final class NetworkArrivalsTest {
         Arrivals.Arrival.Opens opened = opens(arrivals().arrive(arriving(given, "Steve", Optional.empty())));
 
         assertThat(opened.state()).isEqualTo(new AuthState.Unregistered(new PlayerName("Steve")));
+        assertThat(opened.visit()).isEmpty();
     }
 }

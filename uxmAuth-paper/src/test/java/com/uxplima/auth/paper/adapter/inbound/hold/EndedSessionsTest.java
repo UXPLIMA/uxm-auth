@@ -3,6 +3,7 @@ package com.uxplima.auth.paper.adapter.inbound.hold;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.bukkit.potion.PotionEffectType;
@@ -39,7 +40,13 @@ final class EndedSessionsTest {
         world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords());
         steve = server.addPlayer("Steve");
         ended = new EndedSessions(
-                server::getPlayer, world.scheduler, world.logOut, world.door, world.moments, world.messages);
+                server::getPlayer,
+                world.sessions,
+                world.scheduler,
+                world.logOut,
+                world.door,
+                world.moments,
+                world.messages);
     }
 
     @AfterEach
@@ -64,7 +71,7 @@ final class EndedSessionsTest {
     void aLoginEnds() {
         loggedIn();
 
-        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), false));
+        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), Optional.empty()));
         world.scheduler.drain();
 
         assertThat(world.isAuthenticated(steve)).isFalse();
@@ -74,18 +81,30 @@ final class EndedSessionsTest {
     }
 
     @Test
-    @DisplayName("the player who made the change, one already waiting, and one not here are left alone")
+    @DisplayName("the session that made the change, one already waiting, and one not here are left alone")
     void othersAreLeftAlone() {
         loggedIn();
+        String visit = world.sessions.held(steve.getUniqueId()).orElseThrow().visit();
 
-        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), true));
-        ended.accept(new Bulletin.SessionsEnded(UUID.randomUUID(), false));
+        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), Optional.of(visit)));
+        ended.accept(new Bulletin.SessionsEnded(UUID.randomUUID(), Optional.empty()));
         world.scheduler.drain();
         assertThat(world.isAuthenticated(steve)).isTrue();
 
         world.logOut.run(steve.getUniqueId());
-        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), false));
+        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), Optional.empty()));
         world.scheduler.drain();
         assertThat(steve.nextComponentMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("a second session of the account here ends when the change was made in another one")
+    void aSecondSessionEnds() {
+        loggedIn();
+
+        ended.accept(new Bulletin.SessionsEnded(steve.getUniqueId(), Optional.of("the-other-visit")));
+        world.scheduler.drain();
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
     }
 }

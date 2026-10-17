@@ -49,7 +49,7 @@ public final class Bulletins {
                                 sent.origin().toString(),
                                 String.valueOf(sent.issued().toEpochMilli()),
                                 ended.account().toString(),
-                                ended.keepOnline() ? "1" : "0");
+                                ended.keep().orElse(""));
                 });
     }
 
@@ -68,12 +68,10 @@ public final class Bulletins {
             return Optional.empty();
         }
         String keep = parts.get(5);
-        if (!keep.equals("1") && !keep.equals("0")) {
-            return Optional.empty();
-        }
         try {
             return Optional.of(new Sent(
-                    new Bulletin.SessionsEnded(UUID.fromString(parts.get(4)), keep.equals("1")),
+                    new Bulletin.SessionsEnded(
+                            UUID.fromString(parts.get(4)), keep.isEmpty() ? Optional.empty() : Optional.of(keep)),
                     UUID.fromString(parts.get(2)),
                     Instant.ofEpochMilli(Long.parseLong(parts.get(3)))));
         } catch (IllegalArgumentException unreadable) {

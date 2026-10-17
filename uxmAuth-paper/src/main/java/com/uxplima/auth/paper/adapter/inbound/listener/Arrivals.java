@@ -44,14 +44,22 @@ public final class Arrivals {
 
         /**
          * In the door, with this state under this id. {@code profile} replaces the one the server made, when the
-         * player plays under another id than Mojang's.
+         * player plays under another id than Mojang's. {@code visit} is the visit the proxy's claim named; a
+         * connection with none is a visit of its own.
          */
-        record Opens(UUID id, AuthState state, @Nullable PlayerProfile profile, List<Notice> notices)
+        record Opens(
+                UUID id, AuthState state, @Nullable PlayerProfile profile, List<Notice> notices, Optional<String> visit)
                 implements Arrival {
             public Opens {
                 Objects.requireNonNull(id, "id");
                 Objects.requireNonNull(state, "state");
                 notices = List.copyOf(Objects.requireNonNull(notices, "notices"));
+                Objects.requireNonNull(visit, "visit");
+            }
+
+            /** A connection the proxy named no visit for. */
+            public Opens(UUID id, AuthState state, @Nullable PlayerProfile profile, List<Notice> notices) {
+                this(id, state, profile, notices, Optional.empty());
             }
         }
 
@@ -118,7 +126,12 @@ public final class Arrivals {
         return switch (vouched) {
             case NetworkDoor.Reading.None none -> alone(event);
             case NetworkDoor.Reading.LoggedIn in ->
-                new Arrival.Opens(id, new AuthState.Authenticated(in.account(), in.method()), null, List.of());
+                new Arrival.Opens(
+                        id,
+                        new AuthState.Authenticated(in.account(), in.method()),
+                        null,
+                        List.of(),
+                        Optional.of(in.visit()));
             case NetworkDoor.Reading.Waiting waiting ->
                 usualArrival(
                         event,
@@ -126,7 +139,7 @@ public final class Arrivals {
                                 waiting.flags().unverified(),
                                 waiting.flags().explain(),
                                 waiting.flags().marked()),
-                        true);
+                        Optional.of(waiting.visit()));
             case NetworkDoor.Reading.Refused refused -> new Arrival.Refused(words.network());
         };
     }
@@ -137,7 +150,7 @@ public final class Arrivals {
             case HelloAtTheDoor.Reading.Refused refused ->
                 new Arrival.Refused(words.refusal(refused.why(), refused.movedTo()));
             case HelloAtTheDoor.Reading.Premium premium -> premiumArrival(event, premium.state());
-            case HelloAtTheDoor.Reading.Usual usual -> usualArrival(event, usual, false);
+            case HelloAtTheDoor.Reading.Usual usual -> usualArrival(event, usual, Optional.empty());
         };
     }
 
@@ -170,11 +183,12 @@ public final class Arrivals {
     }
 
     /**
-     * @param networked whether the proxy sent the player: then the name already carries the mark, and the id the
-     *     proxy gave a new name is the one it plays under
+     * @param visit the visit the proxy's claim named, when the proxy sent the player: then the name already
+     *     carries the mark, and the id the proxy gave a new name is the one it plays under
      */
     private Arrival usualArrival(
-            AsyncPlayerPreLoginEvent event, HelloAtTheDoor.Reading.Usual usual, boolean networked) {
+            AsyncPlayerPreLoginEvent event, HelloAtTheDoor.Reading.Usual usual, Optional<String> visit) {
+        boolean networked = visit.isPresent();
         Optional<String> typed =
                 networked && usual.marked() ? mark.get().unmark(event.getName()) : Optional.of(event.getName());
         if (typed.isEmpty()) {
@@ -205,7 +219,7 @@ public final class Arrivals {
                                     () -> scheduler.async(() -> hellos.toldMove(account))),
                             true)));
         }
-        return played(event, state, notices, networked);
+        return played(event, state, notices, visit);
     }
 
     /**
@@ -213,7 +227,9 @@ public final class Arrivals {
      * An offline server already derives the offline id from the name as typed, so a new name keeps it unless it
      * carries the mark or the scheme hands out its own.
      */
-    private Arrival played(AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices, boolean networked) {
+    private Arrival played(
+            AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices, Optional<String> visit) {
+        boolean networked = visit.isPresent();
         PlayerName name;
         UUID id;
         if (state instanceof AuthState.Registered registered) {
@@ -230,7 +246,7 @@ public final class Arrivals {
             profile = profiles.apply(id, name.value());
             profile.setProperties(event.getPlayerProfile().getProperties());
         }
-        return new Arrival.Opens(id, state, profile, notices);
+        return new Arrival.Opens(id, state, profile, notices, visit);
     }
 
     private static InetSocketAddress clientAddress(AsyncPlayerPreLoginEvent event) {

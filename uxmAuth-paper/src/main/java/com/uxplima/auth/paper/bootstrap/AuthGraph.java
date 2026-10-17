@@ -295,7 +295,8 @@ final class AuthGraph implements AutoCloseable {
         LogOut logOut =
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts());
         this.logout = new LogoutCommand(logOut, door, moments, messages);
-        events.listen(new EndedSessions(plugin.getServer()::getPlayer, scheduler, logOut, door, moments, messages));
+        events.listen(
+                new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         this.screenClicks = new ScreenClickListener(

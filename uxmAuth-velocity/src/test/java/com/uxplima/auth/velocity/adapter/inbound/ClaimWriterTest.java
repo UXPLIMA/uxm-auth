@@ -114,4 +114,17 @@ final class ClaimWriterTest {
 
         assertThat(properties).containsExactly(SKIN);
     }
+
+    @Test
+    @DisplayName("the visit a claim names becomes the player's once the server lets them in, and not before")
+    void theClaimsVisitIsThePlayers() {
+        sessions.loggedIn(STEVE, AuthMethod.PREMIUM);
+
+        writer.claim(player);
+        String nonce = ((Claims.Reading.Valid) written()).claim().nonce();
+        assertThat(sessions.visit(STEVE)).isEmpty();
+
+        sessions.arrived(STEVE);
+        assertThat(sessions.visit(STEVE)).contains(nonce);
+    }
 }

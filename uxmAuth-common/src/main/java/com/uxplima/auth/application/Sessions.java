@@ -23,20 +23,31 @@ import com.uxplima.auth.domain.state.AuthState;
  */
 public final class Sessions {
 
-    /** A connection's state, and which opening of that connection it belongs to. */
-    public record Held(long generation, AuthState state) {
+    /**
+     * A connection's state, which opening of that connection it belongs to, and the visit it came as: the nonce
+     * of the proxy's claim on a network, or a random id a server gave it, so a bulletin can name this session.
+     */
+    public record Held(long generation, AuthState state, String visit) {
         public Held {
             Objects.requireNonNull(state, "state");
+            Objects.requireNonNull(visit, "visit");
         }
     }
 
     private final Map<UUID, Held> states = new ConcurrentHashMap<>();
     private final AtomicLong generations = new AtomicLong();
 
+    /** Opens the connection as a visit of its own. */
     public void open(UUID connection, AuthState state) {
+        open(connection, state, UUID.randomUUID().toString());
+    }
+
+    /** Opens the connection as the visit the proxy named. */
+    public void open(UUID connection, AuthState state, String visit) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(state, "state");
-        states.compute(connection, (key, previous) -> new Held(generations.incrementAndGet(), state));
+        Objects.requireNonNull(visit, "visit");
+        states.compute(connection, (key, previous) -> new Held(generations.incrementAndGet(), state, visit));
     }
 
     public Optional<AuthState> state(UUID connection) {
@@ -74,7 +85,8 @@ public final class Sessions {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(change, "change");
         Held after = states.computeIfPresent(
-                connection, (key, current) -> new Held(current.generation(), change.apply(current.state())));
+                connection,
+                (key, current) -> new Held(current.generation(), change.apply(current.state()), current.visit()));
         return Optional.ofNullable(after).map(Held::state);
     }
 
@@ -91,7 +103,7 @@ public final class Sessions {
                 return current;
             }
             same.set(true);
-            return new Held(generation, change.apply(current.state()));
+            return new Held(generation, change.apply(current.state()), current.visit());
         });
         return same.get() && after != null ? Optional.of(after.state()) : Optional.empty();
     }

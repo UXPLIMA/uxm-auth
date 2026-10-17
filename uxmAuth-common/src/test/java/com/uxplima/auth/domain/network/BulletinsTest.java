@@ -1,9 +1,11 @@
 package com.uxplima.auth.domain.network;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.uxplima.auth.domain.state.AuthMethod;
@@ -20,13 +22,14 @@ final class BulletinsTest {
 
     private final Claims claims = new Claims(NetworkSecret.parse("q".repeat(43)), FRESH);
     private final Bulletins bulletins = new Bulletins(claims);
-    private final Bulletins.Sent ended = new Bulletins.Sent(new Bulletin.SessionsEnded(STEVE, true), ORIGIN, NOW);
+    private final Bulletins.Sent ended =
+            new Bulletins.Sent(new Bulletin.SessionsEnded(STEVE, Optional.of("4f1c-visit")), ORIGIN, NOW);
 
     @Test
     @DisplayName("a bulletin a member sealed opens whole on another")
     void aSealedBulletinOpens() {
         assertThat(bulletins.open(bulletins.seal(ended), NOW.plusSeconds(3))).contains(ended);
-        Bulletins.Sent dropping = new Bulletins.Sent(new Bulletin.SessionsEnded(STEVE, false), ORIGIN, NOW);
+        Bulletins.Sent dropping = new Bulletins.Sent(new Bulletin.SessionsEnded(STEVE, Optional.empty()), ORIGIN, NOW);
         assertThat(bulletins.open(bulletins.seal(dropping), NOW)).contains(dropping);
     }
 
@@ -44,9 +47,10 @@ final class BulletinsTest {
         assertThat(bulletins.open("not a bulletin", NOW)).isEmpty();
         assertThat(bulletins.open(claims.seal("b1|S|nonsense"), NOW)).isEmpty();
         String body = "|S|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + STEVE + "|";
-        assertThat(bulletins.open(claims.seal("b1" + body + "1"), NOW)).isPresent();
-        assertThat(bulletins.open(claims.seal("v1" + body + "1"), NOW)).isEmpty();
-        assertThat(bulletins.open(claims.seal("b1" + body + "2"), NOW)).isEmpty();
+        assertThat(bulletins.open(claims.seal("b1" + body + "v1"), NOW)).isPresent();
+        assertThat(bulletins.open(claims.seal("b1" + body), NOW)).isPresent();
+        assertThat(bulletins.open(claims.seal("v1" + body + "v1"), NOW)).isEmpty();
+        assertThat(bulletins.open(claims.seal("b1" + body + "a visit"), NOW)).isEmpty();
     }
 
     @Test
@@ -65,5 +69,14 @@ final class BulletinsTest {
         assertThat(bulletins.open(claim, NOW)).isEmpty();
         assertThat(claims.read(bulletins.seal(ended), STEVE, "Steve", NOW))
                 .isEqualTo(new Claims.Reading.Refused(ClaimRefusal.MALFORMED));
+    }
+
+    @Test
+    @DisplayName("the session kept is named by a visit token, and nothing else passes for one")
+    void theKeptSessionIsAVisitToken() {
+        assertThatThrownBy(() -> new Bulletin.SessionsEnded(STEVE, Optional.of("a|b")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Bulletin.SessionsEnded(STEVE, Optional.of("")))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

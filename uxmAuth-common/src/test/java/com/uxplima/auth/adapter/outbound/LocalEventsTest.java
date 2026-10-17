@@ -21,7 +21,7 @@ final class LocalEventsTest {
         List<Bulletin> second = new ArrayList<>();
         events.listen(first::add);
         events.listen(second::add);
-        Bulletin ended = new Bulletin.SessionsEnded(UUID.randomUUID(), false);
+        Bulletin ended = new Bulletin.SessionsEnded(UUID.randomUUID(), java.util.Optional.empty());
 
         events.publish(ended);
 

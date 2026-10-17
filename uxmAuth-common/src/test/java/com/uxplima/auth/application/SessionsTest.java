@@ -28,4 +28,21 @@ final class SessionsTest {
 
         assertThat(sessions.isOpen(id)).isFalse();
     }
+
+    @Test
+    @DisplayName("every opening carries a visit of its own, or the one it came with, and keeps it through a change")
+    void everyOpeningCarriesAVisit() {
+        Sessions sessions = new Sessions();
+        UUID id = UUID.randomUUID();
+        sessions.open(id, new AuthState.Unregistered(new PlayerName("Steve")));
+        String first = sessions.held(id).orElseThrow().visit();
+        sessions.open(id, new AuthState.Unregistered(new PlayerName("Steve")));
+        String second = sessions.held(id).orElseThrow().visit();
+
+        assertThat(first).isNotBlank().isNotEqualTo(second);
+
+        sessions.open(id, new AuthState.Unregistered(new PlayerName("Steve")), "from-the-proxy");
+        sessions.update(id, state -> state);
+        assertThat(sessions.held(id).orElseThrow().visit()).isEqualTo("from-the-proxy");
+    }
 }

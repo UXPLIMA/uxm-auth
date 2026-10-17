@@ -63,6 +63,7 @@ public final class ClaimWriter {
                     clock.instant(),
                     UUID.randomUUID().toString());
             properties.add(new GameProfile.Property(PROPERTY, signer.get().sign(claim), ""));
+            sessions.wrote(player.getUniqueId(), claim.nonce());
         }
         player.setGameProfileProperties(properties);
     }
