@@ -157,8 +157,17 @@ final class AuthGraph implements AutoCloseable {
         // A second is enough for a client to report its language; an English one may never report it.
         Greeter greeter = new Greeter(
                 moments, (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task), hold::isHeld);
-        AuthScreens screens =
-                new AuthScreens(screenFile::current, () -> settings.current().passwords(), messages, styler);
+        SqlDisputes disputes = new SqlDisputes(database);
+        AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
+        this.hellos = ServerHellos.startOn(new PremiumHelloDoor(atTheDoor, scheduler), plugin.getLogger());
+        ClaimName claims = new ClaimName(
+                sessions, atTheDoor, () -> settings.current().ownership().rule());
+        AuthScreens screens = new AuthScreens(
+                screenFile::current,
+                () -> settings.current().passwords(),
+                messages,
+                styler,
+                () -> hellos.installed() && claims.takesClaims());
         this.bedrock = BedrockLink.on(plugin.getServer(), plugin.getLogger());
         // A form's answer goes where a dialog's does; the listener that takes them is built further down.
         AtomicReference<FormAnswers> formAnswers = new AtomicReference<>((player, action, answer) -> {});
@@ -183,7 +192,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwords(),
                 messages,
                 shower,
-                id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered);
+                id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered,
+                claims::claim);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
@@ -213,9 +223,6 @@ final class AuthGraph implements AutoCloseable {
                 welcomes,
                 notices);
 
-        SqlDisputes disputes = new SqlDisputes(database);
-        AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
-        this.hellos = ServerHellos.startOn(new PremiumHelloDoor(atTheDoor, scheduler), plugin.getLogger());
         this.connections = new ConnectionListener(
                 scheduler,
                 sessions,
@@ -270,8 +277,6 @@ final class AuthGraph implements AutoCloseable {
                 replies);
         this.logout = new LogoutCommand(
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
-        ClaimName claims = new ClaimName(
-                sessions, atTheDoor, () -> settings.current().ownership().rule());
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         this.screenClicks = new ScreenClickListener(

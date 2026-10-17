@@ -47,8 +47,7 @@ public final class ClaimName {
     public Result claim(UUID connection, String address) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(address, "address");
-        NameRule now = rule.get();
-        if (now == NameRule.STRICT || now == NameRule.DOMAIN) {
+        if (!takesClaims()) {
             return Result.NOT_THIS_RULE;
         }
         AuthState state = sessions.state(connection).orElse(null);
@@ -63,6 +62,12 @@ public final class ClaimName {
                 asked(address, registered.account().name());
             case AuthState.Unregistered unregistered -> asked(address, unregistered.name());
         };
+    }
+
+    /** Whether the operator's rule takes a claim at all, which decides whether a screen offers one. */
+    public boolean takesClaims() {
+        NameRule now = rule.get();
+        return now == NameRule.AUTOMATIC || now == NameRule.OPT_IN;
     }
 
     private Result asked(String address, PlayerName name) {

@@ -105,6 +105,17 @@ final class ClaimNameTest {
     }
 
     @Test
+    @DisplayName("a claim is taken under the automatic and the opt-in rule only")
+    void claimsAreTakenUnderTwoRules() {
+        for (NameRule each : NameRule.values()) {
+            rule = each;
+            assertThat(claim.takesClaims())
+                    .as(each.name())
+                    .isEqualTo(each == NameRule.AUTOMATIC || each == NameRule.OPT_IN);
+        }
+    }
+
+    @Test
     @DisplayName("a connection with no session claims nothing")
     void noSessionClaimsNothing() {
         assertThat(claim.claim(UUID.randomUUID(), HERE)).isEqualTo(ClaimName.Result.GONE);

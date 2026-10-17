@@ -16,6 +16,7 @@ import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.paper.adapter.inbound.command.PasswordWords;
@@ -47,7 +48,14 @@ public final class ScreenAnswers {
     private final Messages messages;
     private final ScreenShower shower;
     private final Predicate<UUID> registering;
+    private final Claims claims;
     private final PinPad pad = new PinPad();
+
+    /** "This name is mine" for the connection with this id, made from this address. */
+    @FunctionalInterface
+    public interface Claims {
+        ClaimName.Result claim(UUID connection, String address);
+    }
 
     /** @param registering whether the session under this id waits for an account rather than a password */
     public ScreenAnswers(
@@ -59,6 +67,29 @@ public final class ScreenAnswers {
             Messages messages,
             ScreenShower shower,
             Predicate<UUID> registering) {
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                (id, address) -> ClaimName.Result.NOT_THIS_RULE);
+    }
+
+    /** @param claims what "this name is mine" does, on a server that can prove names */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -67,6 +98,7 @@ public final class ScreenAnswers {
         this.messages = Objects.requireNonNull(messages, "messages");
         this.shower = Objects.requireNonNull(shower, "shower");
         this.registering = Objects.requireNonNull(registering, "registering");
+        this.claims = Objects.requireNonNull(claims, "claims");
     }
 
     /** The pad's digits, for whoever ends a connection to drop them. */
@@ -94,6 +126,7 @@ public final class ScreenAnswers {
             case AuthScreens.REGISTER ->
                 guest.may(REGISTER_PERMISSION) ? register(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.CANCEL -> cancel(guest);
+            case AuthScreens.CLAIM -> claim(guest);
             default -> CompletableFuture.completedFuture(null);
         };
     }
@@ -209,6 +242,25 @@ public final class ScreenAnswers {
         } else {
             shower.close(guest.audience());
             guest.release();
+        }
+        return CompletableFuture.completedFuture(null);
+    }
+
+    /** The next connection from here is asked, so the player is sent away to make it; anything else is a reason. */
+    private CompletableFuture<Void> claim(Guest guest) {
+        Audience reader = guest.audience();
+        switch (claims.claim(guest.id(), guest.address())) {
+            case ASKED -> {
+                pad.forget(guest.id());
+                guest.kick(messages.render(reader, Keys.KICK_CLAIMED));
+            }
+            case ALREADY_PREMIUM ->
+                shower.show(reader, screens.login(reader, messages.render(reader, Keys.CLAIM_ALREADY_PREMIUM)));
+            case NOT_THIS_RULE ->
+                shower.show(reader, screens.login(reader, messages.render(reader, Keys.CLAIM_NOT_THIS_RULE)));
+            case GONE -> {
+                // The connection is leaving; there is nobody to answer.
+            }
         }
         return CompletableFuture.completedFuture(null);
     }

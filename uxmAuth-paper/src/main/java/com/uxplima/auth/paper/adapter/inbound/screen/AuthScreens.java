@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import net.kyori.adventure.audience.Audience;
@@ -33,6 +34,9 @@ public final class AuthScreens {
     public static final String LOGIN = "login";
     public static final String CANCEL = "cancel";
 
+    /** The action of "this name is mine" on the login screen. */
+    public static final String CLAIM = "claim";
+
     /** The keys the answers come back under. */
     public static final String PASSWORD = "password";
 
@@ -48,16 +52,28 @@ public final class AuthScreens {
     private final Supplier<AuthSettings.Passwords> passwords;
     private final Messages messages;
     private final Styler styler;
+    private final BooleanSupplier claimable;
 
     public AuthScreens(
             Supplier<ScreenSettings> screens,
             Supplier<AuthSettings.Passwords> passwords,
             Messages messages,
             Styler styler) {
+        this(screens, passwords, messages, styler, () -> false);
+    }
+
+    /** @param claimable whether a name can be claimed here now, which puts "this name is mine" on the login screen */
+    public AuthScreens(
+            Supplier<ScreenSettings> screens,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            Styler styler,
+            BooleanSupplier claimable) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.styler = Objects.requireNonNull(styler, "styler");
+        this.claimable = Objects.requireNonNull(claimable, "claimable");
     }
 
     /** The register screen, with the reason the last answer was refused as its first line. */
@@ -99,7 +115,7 @@ public final class AuthScreens {
                 text(reader, screen.title()),
                 body,
                 List.of(password(reader, screen, PASSWORD)),
-                buttons(reader, screen, LOGIN),
+                loginButtons(reader, screen),
                 settings.canClose());
     }
 
@@ -170,6 +186,18 @@ public final class AuthScreens {
     private DialogSpec.TextInput password(Audience reader, ScreenSettings.Screen screen, String key) {
         return new DialogSpec.TextInput(
                 key, text(reader, screen.label(key)), passwords.get().maxLength());
+    }
+
+    /** Log in, "this name is mine" while a name can be claimed and the operator labels it, and leave. */
+    private List<DialogSpec.Button> loginButtons(Audience reader, ScreenSettings.Screen screen) {
+        String claim = screen.label(CLAIM);
+        if (claim.isEmpty() || !claimable.getAsBoolean()) {
+            return buttons(reader, screen, LOGIN);
+        }
+        return List.of(
+                new DialogSpec.Button(text(reader, screen.label("submit")), LOGIN),
+                new DialogSpec.Button(text(reader, claim), CLAIM),
+                new DialogSpec.Button(text(reader, screen.label(CANCEL)), CANCEL));
     }
 
     private List<DialogSpec.Button> buttons(Audience reader, ScreenSettings.Screen screen, String submit) {

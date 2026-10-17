@@ -16,6 +16,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.text.style.Styler;
@@ -135,6 +136,32 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("\"this name is mine\" on the login screen sends the player away and asks their next connection")
+    void theClaimButtonSendsThePlayerAway() {
+        world.registered(steve, "hunter22");
+        String here = java.util.Objects.requireNonNull(steve.getAddress())
+                .getAddress()
+                .getHostAddress();
+
+        world.scheduler.settle(answers().answer(guest(), "claim", answer(Map.of())));
+
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(claimed).containsExactly(steve.getUniqueId() + "@" + here);
+    }
+
+    @Test
+    @DisplayName("a claim the rule does not take shows the login screen again with the reason on top")
+    void aClaimTheRuleRefusesShowsTheReason() {
+        world.registered(steve, "hunter22");
+        claimResult = ClaimName.Result.NOT_THIS_RULE;
+
+        world.scheduler.settle(answers().answer(guest(), "claim", answer(Map.of())));
+
+        assertThat(steve.isOnline()).isTrue();
+        assertThat(plain(shown.getLast().body().getFirst())).contains("nothing to claim");
+    }
+
+    @Test
     @DisplayName("a player denied the login command cannot log in through the screen either")
     void theLoginScreenAsksTheCommandsPermission() {
         world.registered(steve, "hunter22");
@@ -169,6 +196,9 @@ final class ScreenAnswersTest {
                 settings.pin());
     }
 
+    private final List<String> claimed = new java.util.ArrayList<>();
+    private ClaimName.Result claimResult = ClaimName.Result.ASKED;
+
     private ScreenAnswers answers() {
         AuthScreens screens =
                 new AuthScreens(() -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
@@ -191,7 +221,11 @@ final class ScreenAnswersTest {
                 () -> world.passwords,
                 world.messages,
                 shower,
-                id -> world.sessions.state(id).orElse(null) instanceof AuthState.Unregistered);
+                id -> world.sessions.state(id).orElse(null) instanceof AuthState.Unregistered,
+                (id, address) -> {
+                    claimed.add(id + "@" + address);
+                    return claimResult;
+                });
     }
 
     private Guest guest() {

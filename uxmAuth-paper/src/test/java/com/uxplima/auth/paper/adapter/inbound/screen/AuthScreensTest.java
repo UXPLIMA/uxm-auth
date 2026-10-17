@@ -121,6 +121,50 @@ final class AuthScreensTest {
     }
 
     @Test
+    @DisplayName("while a name can be claimed, the login screen says \"this name is mine\" between log in and leave")
+    void theLoginScreenOffersTheClaim() {
+        DialogSpec spec = new AuthScreens(
+                        () -> withClaim(shipped(false)),
+                        () -> passwords(true),
+                        messages,
+                        new Styler(Theme.defaults()),
+                        () -> true)
+                .login(steve, null);
+
+        assertThat(spec.buttons()).extracting(DialogSpec.Button::action).containsExactly("login", "claim", "cancel");
+    }
+
+    @Test
+    @DisplayName("where no name can be claimed, or the operator left the label empty, there is no claim button")
+    void noClaimButtonWhereNothingCanBeClaimed() {
+        DialogSpec cannot = new AuthScreens(
+                        () -> withClaim(shipped(false)),
+                        () -> passwords(true),
+                        messages,
+                        new Styler(Theme.defaults()),
+                        () -> false)
+                .login(steve, null);
+        DialogSpec unlabelled = new AuthScreens(
+                        () -> shipped(false), () -> passwords(true), messages, new Styler(Theme.defaults()), () -> true)
+                .login(steve, null);
+
+        assertThat(cannot.buttons()).extracting(DialogSpec.Button::action).containsExactly("login", "cancel");
+        assertThat(unlabelled.buttons()).extracting(DialogSpec.Button::action).containsExactly("login", "cancel");
+    }
+
+    private static ScreenSettings withClaim(ScreenSettings settings) {
+        return new ScreenSettings(
+                settings.waitingRoom(),
+                settings.cancel(),
+                settings.canClose(),
+                settings.pinPad(),
+                settings.rules(),
+                settings.register(),
+                screen("login", "password", "submit", "claim", "cancel"),
+                settings.pin());
+    }
+
+    @Test
     @DisplayName("the password field is as long as a password may be")
     void theFieldFitsTheLongestPassword() {
         DialogSpec spec = screens(shipped(false), passwords(true)).login(steve, null);

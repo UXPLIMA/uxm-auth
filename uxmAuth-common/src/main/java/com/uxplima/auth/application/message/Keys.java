@@ -209,6 +209,7 @@ public enum Keys implements MessageKey {
     SCREEN_LOGIN_BODY("screen.login.body", "<body>Type your password to come in."),
     SCREEN_LOGIN_PASSWORD("screen.login.password", "Password"),
     SCREEN_LOGIN_SUBMIT("screen.login.submit", "Log in"),
+    SCREEN_LOGIN_CLAIM("screen.login.claim", "This name is mine"),
     SCREEN_LOGIN_CANCEL("screen.login.cancel", "Leave"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
