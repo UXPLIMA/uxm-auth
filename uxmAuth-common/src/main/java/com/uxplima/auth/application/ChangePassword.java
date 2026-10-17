@@ -15,6 +15,7 @@ import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.state.AuthState;
+import org.jspecify.annotations.Nullable;
 
 /** Replaces the password of a logged-in player who can still type the old one. */
 public final class ChangePassword {
@@ -46,7 +47,17 @@ public final class ChangePassword {
         return Wiping.after(() -> attempt(connection, old, fresh), old, fresh);
     }
 
-    private CompletableFuture<ChangeResult> attempt(UUID connection, Password old, Password fresh) {
+    /**
+     * Replaces the password of a logged-in player on the policy alone, for a server that turned off asking
+     * for the old one. The new password is wiped once the answer is known.
+     */
+    public CompletableFuture<ChangeResult> replace(UUID connection, Password fresh) {
+        Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(fresh, "fresh");
+        return Wiping.after(() -> attempt(connection, null, fresh), fresh);
+    }
+
+    private CompletableFuture<ChangeResult> attempt(UUID connection, @Nullable Password old, Password fresh) {
         Sessions.Held held = sessions.held(connection).orElse(null);
         if (held == null) {
             return CompletableFuture.completedFuture(new ChangeResult.Gone());
@@ -68,13 +79,13 @@ public final class ChangePassword {
      * value. A change made on another server in between wins, and this one answers that the old password
      * was wrong, which by then it is.
      */
-    private ChangeResult change(UUID connection, long generation, UUID id, Password old, Password fresh) {
+    private ChangeResult change(UUID connection, long generation, UUID id, @Nullable Password old, Password fresh) {
         if (!sessions.isOpen(connection, generation)) {
             return new ChangeResult.Gone();
         }
         Account current = accounts.findById(id).orElse(null);
         PasswordHash stored = current == null ? null : current.password();
-        if (current == null || stored == null || hashing.verify(old, stored) instanceof Verification.Wrong) {
+        if (current == null || (old != null && (stored == null || wrong(old, stored)))) {
             return new ChangeResult.WrongOld();
         }
         PasswordHash hash = hashing.hash(fresh);
@@ -82,6 +93,7 @@ public final class ChangePassword {
             return new ChangeResult.Gone();
         }
         if (!accounts.replacePassword(id, stored, hash)) {
+            // Changed on another server between the read and this write. That change stands.
             return new ChangeResult.WrongOld();
         }
         Account updated = current.withPassword(hash);
@@ -92,5 +104,9 @@ public final class ChangePassword {
                         ? new AuthState.Authenticated(updated, authenticated.method())
                         : state);
         return new ChangeResult.Changed();
+    }
+
+    private boolean wrong(Password old, PasswordHash stored) {
+        return hashing.verify(old, stored) instanceof Verification.Wrong;
     }
 }

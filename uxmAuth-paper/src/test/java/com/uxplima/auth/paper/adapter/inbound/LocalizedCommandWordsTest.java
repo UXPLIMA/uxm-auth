@@ -10,12 +10,18 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.annotations.Command;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Proves that a command can carry words for the readers of one language, and that an operator is told how.
@@ -57,5 +63,26 @@ final class LocalizedCommandWordsTest {
 
         assertThat(command.aliases()).contains("yonet");
         assertThat(command.localizedAliases()).containsExactly("tr=yonet");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            classes = {LoginCommand.class, RegisterCommand.class, ChangePasswordCommand.class, LogoutCommand.class})
+    @DisplayName("a word for one language reaches every player command too")
+    void everyPlayerCommandTakesAWordForOneLanguage(Class<?> handler, @TempDir Path folder) throws IOException {
+        FromConfig declared = Objects.requireNonNull(handler.getAnnotation(FromConfig.class));
+        Path file = folder.resolve("commands.conf");
+        Files.writeString(
+                file,
+                "commands { " + declared.value() + " { localized-aliases { tr = [\"kelime\"] } } }\n",
+                StandardCharsets.UTF_8);
+
+        Command command = (Command) ConfiguredCommands.load(file)
+                .replacer()
+                .replace(declared, handler)
+                .get(0);
+
+        assertThat(command.aliases()).contains("kelime");
+        assertThat(command.localizedAliases()).containsExactly("tr=kelime");
     }
 }

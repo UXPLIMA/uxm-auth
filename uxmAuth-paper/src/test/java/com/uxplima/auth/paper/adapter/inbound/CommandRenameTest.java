@@ -13,7 +13,12 @@ import java.util.Set;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LanguageSuggestions;
+import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
+import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.auth.paper.testing.DirectScheduler;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
@@ -29,6 +34,7 @@ import com.uxplima.uxmlib.text.message.Messages;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockbukkit.mockbukkit.MockBukkit;
 
 /**
  * Proves the rename all the way to the command tree.
@@ -77,5 +83,46 @@ final class CommandRenameTest {
     private static Messages messages() {
         return new Messages(
                 MessageCatalogLoader.fromNodes(Map.of(), Locale.ENGLISH), LocaleSource.ofDefault(Locale.ENGLISH));
+    }
+
+    @Test
+    @DisplayName("every player command takes its label from commands.conf as well")
+    void everyPlayerCommandIsRenameable(@TempDir Path folder) throws IOException {
+        Path file = folder.resolve("commands.conf");
+        Files.writeString(file, """
+                commands {
+                  login          { name = "enter" }
+                  register       { name = "signup" }
+                  changepassword { name = "newpass" }
+                  logout         { name = "leave" }
+                }
+                """, StandardCharsets.UTF_8);
+        ParamResolvers resolvers = ParamResolvers.withDefaults()
+                .replacer(FromConfig.class, ConfiguredCommands.load(file).replacer());
+        MockBukkit.mock();
+        try (AuthWorld world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords())) {
+            assertThat(label(
+                            new LoginCommand(world.logIn, world.door, world.moments, world.messages, world.replies),
+                            resolvers))
+                    .isEqualTo("enter");
+            assertThat(label(
+                            new RegisterCommand(
+                                    world.register, world.door, () -> world.passwords, world.messages, world.replies),
+                            resolvers))
+                    .isEqualTo("signup");
+            assertThat(label(
+                            new ChangePasswordCommand(
+                                    world.change, world.moments, () -> world.passwords, world.messages, world.replies),
+                            resolvers))
+                    .isEqualTo("newpass");
+            assertThat(label(new LogoutCommand(world.logOut, world.door, world.moments, world.messages), resolvers))
+                    .isEqualTo("leave");
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    private static String label(Object handler, ParamResolvers resolvers) {
+        return AnnotatedCommands.buildNode(handler, resolvers).getLiteral();
     }
 }

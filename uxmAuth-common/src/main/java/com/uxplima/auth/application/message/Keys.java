@@ -89,7 +89,48 @@ public enum Keys implements MessageKey {
     WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
-    KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more.");
+    KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more."),
+    KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),
+
+    LOGIN_WRONG("login.wrong", "<etag:'ERROR'> <body>That password is wrong. <value><left><body> tries left."),
+    LOGIN_NOT_REGISTERED(
+            "login.not-registered",
+            "<etag:'ERROR'> <body>You have no password here yet. Register with <value>/register<body>."),
+    LOGIN_ALREADY("login.already", "<tag:'AUTH'> <body>You are already logged in."),
+
+    REGISTER_MISMATCH("register.mismatch", "<etag:'ERROR'> <body>The two passwords are not the same."),
+    REGISTER_CONFIRM_NEEDED(
+            "register.confirm-needed",
+            "<etag:'ERROR'> <body>Write the password twice: <value>/register <password> <password>"),
+    REGISTER_NAME_TAKEN(
+            "register.name-taken", "<etag:'ERROR'> <body>The name <value><name><body> already has an account."),
+    REGISTER_ALREADY(
+            "register.already", "<etag:'ERROR'> <body>You already have an account. Log in with <value>/login<body>."),
+
+    CHANGE_WRONG_OLD("change.wrong-old", "<etag:'ERROR'> <body>The old password is wrong."),
+    CHANGE_NOT_LOGGED_IN("change.not-logged-in", "<etag:'ERROR'> <body>Log in first."),
+    CHANGE_NEEDS_BOTH("change.needs-both", "<etag:'ERROR'> <body>Write the old password, then the new one."),
+
+    LOGOUT_NOT_LOGGED_IN("logout.not-logged-in", "<etag:'ERROR'> <body>You are not logged in."),
+
+    PASSWORD_TOO_SHORT(
+            "password.too-short", "<etag:'ERROR'> <body>A password needs at least <value><min><body> characters."),
+    PASSWORD_TOO_LONG(
+            "password.too-long", "<etag:'ERROR'> <body>A password may have at most <value><max><body> characters."),
+    PASSWORD_TOO_LONG_FOR_THE_HASH(
+            "password.too-long-for-the-hash",
+            "<etag:'ERROR'> <body>That password is too long to keep whole. Use fewer letters outside the English alphabet."),
+    PASSWORD_BAD_CHARACTERS(
+            "password.bad-characters",
+            "<etag:'ERROR'> <body>That password holds a character this server does not allow."),
+    PASSWORD_MISSING("password.missing", "<etag:'ERROR'> <body>A password here needs <value><classes><body>."),
+    PASSWORD_CLASS_LOWER("password.class-lower", "a lower-case letter"),
+    PASSWORD_CLASS_UPPER("password.class-upper", "a capital letter"),
+    PASSWORD_CLASS_DIGIT("password.class-digit", "a digit"),
+    PASSWORD_CLASS_SYMBOL("password.class-symbol", "a symbol"),
+    PASSWORD_CLASS_SEPARATOR("password.class-separator", ", "),
+
+    BUSY("busy", "<etag:'ERROR'> <body>The server is busy. Try again in a moment.");
     private final String path;
     private final String defaultTemplate;
 

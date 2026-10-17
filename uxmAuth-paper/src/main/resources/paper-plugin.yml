@@ -28,6 +28,18 @@ permissions:
   uxmauth.language:
     description: Choose the language you read this plugin in
     default: true
+  uxmauth.login:
+    description: Log in with a password
+    default: true
+  uxmauth.register:
+    description: Make an account with a password
+    default: true
+  uxmauth.logout:
+    description: Log out and wait at the door again
+    default: true
+  uxmauth.changepassword:
+    description: Change your own password
+    default: true
 
   # What an operator does. Off unless the server grants it, and admin.* grants the family
   # in one line.

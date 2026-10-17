@@ -80,6 +80,31 @@ final class ChangePasswordTest {
         assertThat(change(connection, "changed99", "fresh777")).isEqualTo(new ChangeResult.Changed());
     }
 
+    @Test
+    @DisplayName("a server that does not ask for the old password replaces it on the policy alone")
+    void aReplaceSkipsTheOldPassword() {
+        UUID connection = loggedIn("Steve", "hunter22");
+        ChangePassword useCase = new ChangePassword(
+                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy);
+
+        assertThat(useCase.replace(connection, Password.of("abc")).join())
+                .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.TooShort(6)));
+        assertThat(useCase.replace(connection, Password.of("fresh777")).join()).isEqualTo(new ChangeResult.Changed());
+        assertThat(login(connection, "fresh777")).isTrue();
+    }
+
+    @Test
+    @DisplayName("a replace still needs a login")
+    void aReplaceNeedsALogin() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+
+        assertThat(new ChangePassword(
+                                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy)
+                        .replace(connection, Password.of("fresh777"))
+                        .join())
+                .isEqualTo(new ChangeResult.NotLoggedIn());
+    }
+
     private UUID loggedIn(String name, String password) {
         UUID connection = fixture.registered(name, password);
         assertThat(login(connection, password)).isTrue();
