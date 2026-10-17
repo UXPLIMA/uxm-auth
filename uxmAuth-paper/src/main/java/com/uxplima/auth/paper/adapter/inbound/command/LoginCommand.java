@@ -1,7 +1,9 @@
 package com.uxplima.auth.paper.adapter.inbound.command;
 
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 import org.bukkit.entity.Player;
 
@@ -30,13 +32,22 @@ public final class LoginCommand {
 
     private final LogIn logIn;
     private final Door door;
+    private final Function<Player, OptionalLong> openings;
     private final MomentRunner moments;
     private final Messages messages;
     private final Replies replies;
 
-    public LoginCommand(LogIn logIn, Door door, MomentRunner moments, Messages messages, Replies replies) {
+    /** @param openings the opening of the session each player stands in the world under */
+    public LoginCommand(
+            LogIn logIn,
+            Door door,
+            Function<Player, OptionalLong> openings,
+            MomentRunner moments,
+            Messages messages,
+            Replies replies) {
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.door = Objects.requireNonNull(door, "door");
+        this.openings = Objects.requireNonNull(openings, "openings");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.replies = Objects.requireNonNull(replies, "replies");
@@ -51,10 +62,12 @@ public final class LoginCommand {
 
     /** The whole command, answering when the player has been told. */
     CompletableFuture<Void> attempt(Player player, String password) {
-        return replies.on(
-                player,
-                logIn.run(player.getUniqueId(), Password.of(password), Addresses.of(player)),
-                result -> answer(player, result));
+        OptionalLong opening = openings.apply(player);
+        Password typed = Password.of(password);
+        CompletableFuture<LoginResult> work = opening.isPresent()
+                ? logIn.run(player.getUniqueId(), opening.getAsLong(), typed, Addresses.of(player))
+                : logIn.run(player.getUniqueId(), typed, Addresses.of(player));
+        return replies.on(player, work, result -> answer(player, result));
     }
 
     private void answer(Player player, LoginResult result) {

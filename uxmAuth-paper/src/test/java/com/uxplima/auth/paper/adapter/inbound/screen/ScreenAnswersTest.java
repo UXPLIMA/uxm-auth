@@ -187,7 +187,7 @@ final class ScreenAnswersTest {
     }
 
     private Guest guest() {
-        return new PlayerGuest(steve, world.door, world.moments, world.replies);
+        return new PlayerGuest(steve, world.openingOf(steve), world.door, world.moments, world.replies);
     }
 
     private static ScreenAnswers.Answer answer(Map<String, String> texts) {

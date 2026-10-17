@@ -158,6 +158,32 @@ final class PlayerCommandsTest {
         assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.LOGOUT_NOT_LOGGED_IN));
     }
 
+    @Test
+    @DisplayName("a right password typed after another connection opened the session again opens nothing")
+    void aLoginForAReplacedOpeningOpensNothing() {
+        world.registered(steve, "hunter22");
+        world.bindOpening(steve);
+        world.sessions.open(
+                steve.getUniqueId(), world.sessions.state(steve.getUniqueId()).orElseThrow());
+
+        world.scheduler.settle(login().attempt(steve, "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a registration typed after another connection opened the session again makes nothing")
+    void aRegistrationForAReplacedOpeningMakesNothing() {
+        world.unregistered(steve);
+        world.bindOpening(steve);
+        world.sessions.open(
+                steve.getUniqueId(), world.sessions.state(steve.getUniqueId()).orElseThrow());
+
+        world.scheduler.settle(register(AuthWorld.shippedPasswords()).attempt(steve, "hunter22", "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+    }
+
     private void loggedIn(String password) {
         world.registered(steve, password);
         world.scheduler.settle(login().attempt(steve, password));
@@ -172,11 +198,13 @@ final class PlayerCommandsTest {
     }
 
     private LoginCommand login() {
-        return new LoginCommand(world.logIn, world.door, world.moments, world.messages, world.replies);
+        return new LoginCommand(
+                world.logIn, world.door, world::openingOf, world.moments, world.messages, world.replies);
     }
 
     private RegisterCommand register(AuthSettings.Passwords passwords) {
-        return new RegisterCommand(world.register, world.door, () -> passwords, world.messages, world.replies);
+        return new RegisterCommand(
+                world.register, world.door, world::openingOf, () -> passwords, world.messages, world.replies);
     }
 
     private ChangePasswordCommand changePassword(AuthSettings.Passwords passwords) {

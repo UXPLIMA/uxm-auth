@@ -21,12 +21,15 @@ import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 public final class PlayerGuest implements Guest {
 
     private final Player player;
+    private final OptionalLong opening;
     private final Door door;
     private final MomentRunner moments;
     private final Replies replies;
 
-    public PlayerGuest(Player player, Door door, MomentRunner moments, Replies replies) {
+    /** @param opening the opening of the session the player stands in the world under, empty if unknown */
+    public PlayerGuest(Player player, OptionalLong opening, Door door, MomentRunner moments, Replies replies) {
         this.player = Objects.requireNonNull(player, "player");
+        this.opening = Objects.requireNonNull(opening, "opening");
         this.door = Objects.requireNonNull(door, "door");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.replies = Objects.requireNonNull(replies, "replies");
@@ -39,8 +42,7 @@ public final class PlayerGuest implements Guest {
 
     @Override
     public OptionalLong opening() {
-        // One player per id stands in the world; whatever opening holds it now is theirs.
-        return OptionalLong.empty();
+        return opening;
     }
 
     @Override

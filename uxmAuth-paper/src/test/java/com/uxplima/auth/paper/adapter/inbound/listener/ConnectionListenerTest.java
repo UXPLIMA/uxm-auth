@@ -1,8 +1,11 @@
 package com.uxplima.auth.paper.adapter.inbound.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,8 +19,11 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.potion.PotionEffectType;
 
+import io.papermc.paper.connection.PlayerLoginConnection;
+
 import net.kyori.adventure.text.Component;
 
+import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
@@ -42,6 +48,7 @@ final class ConnectionListenerTest {
     Path folder;
 
     private static final InetAddress ELSEWHERE = address(10, 0, 0, 9);
+    private static final InetSocketAddress MINE = new InetSocketAddress(InetAddress.getLoopbackAddress(), 50001);
 
     private ServerMock server;
     private AuthWorld world;
@@ -118,6 +125,71 @@ final class ConnectionListenerTest {
 
         assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
         assertThat(world.sessions.state(id)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a name is held from the door until its connection closes, joined or not")
+    void aNameIsHeldUntilItsConnectionCloses() throws Exception {
+        UUID id = UUID.randomUUID();
+        PlayerLoginConnection first = loginConnection(new InetSocketAddress(ELSEWHERE, 40001), true);
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Newcomer", id, first));
+
+        AsyncPlayerPreLoginEvent second = preLogin(
+                "Newcomer", id, loginConnection(new InetSocketAddress(InetAddress.getLoopbackAddress(), 40002), true));
+        listener.onPreLogin(second);
+        assertThat(second.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+
+        when(first.isConnected()).thenReturn(false);
+        AsyncPlayerPreLoginEvent third = preLogin(
+                "Newcomer", id, loginConnection(new InetSocketAddress(InetAddress.getLoopbackAddress(), 40003), true));
+        listener.onPreLogin(third);
+        assertThat(third.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
+    }
+
+    @Test
+    @DisplayName("a player whose opening a later connection replaced is sent away at join, never held as the newcomer")
+    void aReplacedOpeningIsSentAwayAtJoin() throws Exception {
+        sameAddress = true;
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+        InetSocketAddress mine = MINE;
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Steve", steve.getUniqueId(), loginConnection(mine, true)));
+        listener.onPreLogin(preLogin(
+                "Steve",
+                steve.getUniqueId(),
+                loginConnection(new InetSocketAddress(mine.getAddress(), mine.getPort() + 1), true)));
+        long newcomer = world.sessions.held(steve.getUniqueId()).orElseThrow().generation();
+        server.addPlayer(steve);
+        steve.setAddress(MINE);
+
+        listener.onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(listener.openingOf(steve)).isEmpty();
+        assertThat(world.sessions.held(steve.getUniqueId()).orElseThrow().generation())
+                .isEqualTo(newcomer);
+    }
+
+    @Test
+    @DisplayName("a player is bound to the opening their own connection made at the door")
+    void aJoinBindsThePlayerToTheirOpening() throws Exception {
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Steve", steve.getUniqueId(), loginConnection(MINE, true)));
+        long opening = world.sessions.held(steve.getUniqueId()).orElseThrow().generation();
+        server.addPlayer(steve);
+        steve.setAddress(MINE);
+
+        listener.onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(listener.openingOf(steve)).hasValue(opening);
     }
 
     @Test
@@ -281,6 +353,22 @@ final class ConnectionListenerTest {
     @SuppressWarnings("removal")
     private static AsyncPlayerPreLoginEvent preLogin(String name, UUID id) throws Exception {
         return preLogin(name, id, InetAddress.getLoopbackAddress());
+    }
+
+    private static AsyncPlayerPreLoginEvent preLogin(String name, UUID id, PlayerLoginConnection connection) {
+        InetSocketAddress from = Objects.requireNonNull(connection.getClientAddress());
+        PlayerProfile profile = mock(PlayerProfile.class);
+        when(profile.getId()).thenReturn(id);
+        when(profile.getName()).thenReturn(name);
+        return new AsyncPlayerPreLoginEvent(
+                name, from.getAddress(), from.getAddress(), id, false, profile, "localhost", connection);
+    }
+
+    private static PlayerLoginConnection loginConnection(InetSocketAddress from, boolean connected) {
+        PlayerLoginConnection connection = mock(PlayerLoginConnection.class);
+        when(connection.getClientAddress()).thenReturn(from);
+        when(connection.isConnected()).thenReturn(connected);
+        return connection;
     }
 
     @SuppressWarnings("removal")

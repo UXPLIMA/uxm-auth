@@ -165,9 +165,10 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().names().reconnectFromSameAddress(),
                 messages,
                 plugin.getLogger());
-        this.login = new LoginCommand(logIn, door, moments, messages, replies);
-        this.register =
-                new RegisterCommand(registering, door, () -> settings.current().passwords(), messages, replies);
+        ConnectionListener joins = connections;
+        this.login = new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies);
+        this.register = new RegisterCommand(
+                registering, door, joins::openingOf, () -> settings.current().passwords(), messages, replies);
         this.changePassword = new ChangePasswordCommand(
                 new ChangePassword(
                         accounts,
@@ -181,8 +182,8 @@ final class AuthGraph implements AutoCloseable {
                 replies);
         this.logout = new LogoutCommand(
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
-        this.screenClicks =
-                new ScreenClickListener(answers, player -> new PlayerGuest(player, door, moments, replies), scheduler);
+        this.screenClicks = new ScreenClickListener(
+                answers, player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies), scheduler);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }
 

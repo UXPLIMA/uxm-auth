@@ -102,12 +102,23 @@ final class CommandRenameTest {
         MockBukkit.mock();
         try (AuthWorld world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords())) {
             assertThat(label(
-                            new LoginCommand(world.logIn, world.door, world.moments, world.messages, world.replies),
+                            new LoginCommand(
+                                    world.logIn,
+                                    world.door,
+                                    world::openingOf,
+                                    world.moments,
+                                    world.messages,
+                                    world.replies),
                             resolvers))
                     .isEqualTo("enter");
             assertThat(label(
                             new RegisterCommand(
-                                    world.register, world.door, () -> world.passwords, world.messages, world.replies),
+                                    world.register,
+                                    world.door,
+                                    world::openingOf,
+                                    () -> world.passwords,
+                                    world.messages,
+                                    world.replies),
                             resolvers))
                     .isEqualTo("signup");
             assertThat(label(

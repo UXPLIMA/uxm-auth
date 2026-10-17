@@ -99,6 +99,22 @@ final class ConfigurationGateTest {
     }
 
     @Test
+    @DisplayName("the close of another connection under the same id, refused at the door, leaves the wait alone")
+    void anotherConnectionsCloseLeavesTheWait() {
+        world.registered(steve, "hunter22");
+        PlayerConfigurationConnection connection = connection(steve.getUniqueId());
+        when(connection.isConnected()).thenReturn(true);
+        ConfigurationGate gate = gate();
+        CompletableFuture<ConfigurationGate.Outcome> wait =
+                gate.open(connection).orElseThrow();
+
+        gate.onClose(
+                new PlayerConnectionCloseEvent(steve.getUniqueId(), "Steve", InetAddress.getLoopbackAddress(), false));
+
+        assertThat(wait).isNotDone();
+    }
+
+    @Test
     @Timeout(value = 3, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     @DisplayName("a client that does not answer in time is sent away with the timeout reason")
     void aTimeoutKicks() {

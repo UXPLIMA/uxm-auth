@@ -1,7 +1,9 @@
 package com.uxplima.auth.paper.adapter.inbound.command;
 
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.bukkit.entity.Player;
@@ -34,6 +36,7 @@ public final class RegisterCommand {
 
     private final RegisterAccount register;
     private final Door door;
+    private final Function<Player, OptionalLong> openings;
     private final Supplier<AuthSettings.Passwords> passwords;
     private final Messages messages;
     private final Replies replies;
@@ -41,11 +44,13 @@ public final class RegisterCommand {
     public RegisterCommand(
             RegisterAccount register,
             Door door,
+            Function<Player, OptionalLong> openings,
             Supplier<AuthSettings.Passwords> passwords,
             Messages messages,
             Replies replies) {
         this.register = Objects.requireNonNull(register, "register");
         this.door = Objects.requireNonNull(door, "door");
+        this.openings = Objects.requireNonNull(openings, "openings");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.replies = Objects.requireNonNull(replies, "replies");
@@ -69,13 +74,16 @@ public final class RegisterCommand {
         String second = asksTwice ? confirm : password;
         return replies.on(
                 player,
-                register.run(
-                        player.getUniqueId(),
-                        new PlayerName(player.getName()),
-                        Password.of(password),
-                        Password.of(second),
-                        Addresses.of(player)),
+                registration(player, Password.of(password), Password.of(second)),
                 result -> answer(player, result));
+    }
+
+    private CompletableFuture<RegisterResult> registration(Player player, Password typed, Password repeated) {
+        OptionalLong opening = openings.apply(player);
+        PlayerName name = new PlayerName(player.getName());
+        return opening.isPresent()
+                ? register.run(player.getUniqueId(), opening.getAsLong(), name, typed, repeated, Addresses.of(player))
+                : register.run(player.getUniqueId(), name, typed, repeated, Addresses.of(player));
     }
 
     private void answer(Player player, RegisterResult result) {

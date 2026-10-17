@@ -126,10 +126,15 @@ public final class ConfigurationGate implements Listener {
     @EventHandler
     public void onClose(PlayerConnectionCloseEvent event) {
         UUID id = event.getPlayerUniqueId();
+        Waiting entry = waiting.get(id);
+        // The event names an id, not a connection. A second connection refused at the door closes under the
+        // same id while the first still waits, so only a wait whose own connection is gone ends here.
+        if (entry != null && entry.connection().isConnected()) {
+            return;
+        }
         toTheWorld.remove(id);
-        Waiting gone = waiting.remove(id);
-        if (gone != null) {
-            gone.done().complete(Outcome.CLOSED);
+        if (entry != null && waiting.remove(id, entry)) {
+            entry.done().complete(Outcome.CLOSED);
             welcomes.forget(id);
         }
     }

@@ -76,6 +76,7 @@ public final class AuthWorld implements AutoCloseable {
     public final List<AuthState> offered = new ArrayList<>();
 
     public final Welcomes welcomes = new Welcomes();
+    private final Map<UUID, Long> openings = new java.util.concurrent.ConcurrentHashMap<>();
 
     public final MomentRunner moments = (Player player, AuthSettings.Moment moment) -> fired.add(moment);
     public final AuthSettings.Passwords passwords;
@@ -152,6 +153,19 @@ public final class AuthWorld implements AutoCloseable {
     /** A player with no account yet. */
     public void unregistered(Player player) {
         sessions.open(player.getUniqueId(), new AuthState.Unregistered(new PlayerName(player.getName())));
+    }
+
+    /** Binds the player to the opening that holds their session now, as a join does. */
+    public void bindOpening(Player player) {
+        openings.put(
+                player.getUniqueId(),
+                sessions.held(player.getUniqueId()).orElseThrow().generation());
+    }
+
+    /** The opening a player is bound to, empty until {@link #bindOpening} ran for them. */
+    public java.util.OptionalLong openingOf(Player player) {
+        Long opening = openings.get(player.getUniqueId());
+        return opening == null ? java.util.OptionalLong.empty() : java.util.OptionalLong.of(opening);
     }
 
     public boolean isAuthenticated(Player player) {

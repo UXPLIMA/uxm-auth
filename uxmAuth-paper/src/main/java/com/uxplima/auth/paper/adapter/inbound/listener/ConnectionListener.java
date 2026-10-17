@@ -1,9 +1,11 @@
 package com.uxplima.auth.paper.adapter.inbound.listener;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
@@ -21,6 +23,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLocaleChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import io.papermc.paper.connection.PlayerConnection;
+
 import net.kyori.adventure.audience.Audience;
 
 import com.uxplima.auth.application.Sessions;
@@ -34,6 +38,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.text.message.Messages;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Ties a connection to a session: the account is read before the player is let in, the player is held at the
@@ -61,6 +66,15 @@ public final class ConnectionListener implements Listener {
 
     /** A player object and the session generation it joined with. */
     private record Joined(Player player, long generation) {}
+
+    /**
+     * The connection that opened a session at the door, and which opening it made. It holds the name from the
+     * door until it closes, whether or not it has a player yet, and a player is bound to it by address.
+     */
+    private record Opening(
+            PlayerConnection connection, @Nullable InetSocketAddress address, long generation) {}
+
+    private final Map<UUID, Opening> openings = new ConcurrentHashMap<>();
 
     public ConnectionListener(
             Scheduler scheduler,
@@ -103,6 +117,7 @@ public final class ConnectionListener implements Listener {
         }
         try {
             sessions.open(event.getUniqueId(), waiting(new PlayerName(event.getName())));
+            remember(event);
         } catch (RuntimeException unreachable) {
             logger.log(
                     Level.WARNING,
@@ -119,9 +134,39 @@ public final class ConnectionListener implements Listener {
      * player whose first connection hung.
      */
     private boolean isHeldElsewhere(UUID id, InetAddress from) {
-        Optional<InetAddress> holder = holders.apply(id);
+        Optional<InetAddress> holder = openedFrom(id).or(() -> holders.apply(id));
         return holder.isPresent()
                 && !(sameAddress.getAsBoolean() && holder.get().equals(from));
+    }
+
+    private void remember(AsyncPlayerPreLoginEvent event) {
+        PlayerConnection connection = event.getConnection();
+        UUID id = event.getUniqueId();
+        sessions.held(id).ifPresent(held -> {
+            if (connection != null) {
+                openings.put(id, new Opening(connection, connection.getClientAddress(), held.generation()));
+            }
+        });
+    }
+
+    /** The address of a live connection that opened this id at the door; a closed one is forgotten here. */
+    private Optional<InetAddress> openedFrom(UUID id) {
+        Opening opening = openings.get(id);
+        if (opening == null) {
+            return Optional.empty();
+        }
+        if (!opening.connection().isConnected()) {
+            openings.remove(id, opening);
+            return Optional.empty();
+        }
+        InetSocketAddress address = opening.address();
+        return Optional.of(address == null ? InetAddress.getLoopbackAddress() : address.getAddress());
+    }
+
+    /** The opening this player stands in the world under, empty until they joined with one. */
+    public OptionalLong openingOf(Player player) {
+        Joined mine = joined.get(Objects.requireNonNull(player, "player").getUniqueId());
+        return mine == null || mine.player() != player ? OptionalLong.empty() : OptionalLong.of(mine.generation());
     }
 
     /**
@@ -164,8 +209,21 @@ public final class ConnectionListener implements Listener {
             admitOnline(player);
             return;
         }
+        if (isReplaced(player, held)) {
+            // A later connection under this name opened the session; this one must not stand in for it.
+            scheduler.entity(player, () -> player.kick(messages.render(player, Keys.KICK_ALREADY_ONLINE)));
+            return;
+        }
         joined.put(player.getUniqueId(), new Joined(player, held.generation()));
         door.hold(player);
+    }
+
+    private boolean isReplaced(Player player, Sessions.Held held) {
+        Opening opening = openings.get(player.getUniqueId());
+        if (opening == null) {
+            return false;
+        }
+        return !Objects.equals(opening.address(), player.getAddress()) || opening.generation() != held.generation();
     }
 
     /**
