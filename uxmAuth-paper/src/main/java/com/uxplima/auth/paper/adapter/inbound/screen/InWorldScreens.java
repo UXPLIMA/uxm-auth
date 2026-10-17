@@ -38,6 +38,10 @@ public final class InWorldScreens implements ScreenOffer {
 
     @Override
     public void offer(Player player, AuthState state) {
+        // A client that cannot show the register screen still reads the rules it accepts by registering.
+        if (state instanceof AuthState.Unregistered) {
+            screens.rulesInChat(player).forEach(player::sendMessage);
+        }
         if (settings.get().waitingRoom() == ScreenSettings.WaitingRoom.DIALOG
                 && sentToTheWorld.test(player.getUniqueId())) {
             return;

@@ -10,6 +10,7 @@ import net.kyori.adventure.audience.Audience;
 
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.testing.AuthWorld;
@@ -34,6 +35,7 @@ final class InWorldScreensTest {
     private AuthWorld world;
     private final List<DialogSpec> shown = new ArrayList<>();
     private final java.util.Set<java.util.UUID> sentToTheWorld = new java.util.HashSet<>();
+    private boolean rules;
 
     @BeforeEach
     void setUp() {
@@ -90,6 +92,34 @@ final class InWorldScreensTest {
                         .contains(AuthScreens.LOGIN));
     }
 
+    @Test
+    @DisplayName("with the rules on, a player who must register reads them in chat, and how /register accepts them")
+    void theRulesAreReadInChatBeforeRegistering() {
+        rules = true;
+        PlayerMock steve = server.addPlayer("Steve");
+
+        offer(ScreenSettings.WaitingRoom.FROZEN).offer(steve, new AuthState.Unregistered(new PlayerName("Steve")));
+
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RULES_LINE_1));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RULES_LINE_2));
+        assertThat(steve.nextComponentMessage())
+                .isEqualTo(world.messages.render(steve, Keys.RULES_ACCEPTED_BY_REGISTERING));
+    }
+
+    @Test
+    @DisplayName("a player with an account, or a server with the rules off, reads no rules")
+    void noRulesForAnAccountOrWithTheRulesOff() {
+        PlayerMock steve = server.addPlayer("Steve");
+        offer(ScreenSettings.WaitingRoom.FROZEN).offer(steve, new AuthState.Unregistered(new PlayerName("Steve")));
+        assertThat(steve.nextComponentMessage()).isNull();
+
+        rules = true;
+        world.registered(steve, "hunter22");
+        offer(ScreenSettings.WaitingRoom.FROZEN)
+                .offer(steve, world.sessions.state(steve.getUniqueId()).orElseThrow());
+        assertThat(steve.nextComponentMessage()).isNull();
+    }
+
     private InWorldScreens offer(ScreenSettings.WaitingRoom room) {
         ScreenSettings shipped = new ScreenFile(folder.resolve("screens.conf")).current();
         ScreenSettings settings = new ScreenSettings(
@@ -97,7 +127,7 @@ final class InWorldScreensTest {
                 shipped.cancel(),
                 shipped.canClose(),
                 shipped.pinPad(),
-                shipped.rules(),
+                rules ? new ScreenSettings.Rules(true, shipped.rules().lines()) : shipped.rules(),
                 shipped.register(),
                 shipped.login(),
                 shipped.pin());

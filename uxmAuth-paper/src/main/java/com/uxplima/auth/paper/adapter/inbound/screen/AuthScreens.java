@@ -15,6 +15,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.uxmlib.text.message.MessageKey;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.uxplima.uxmlib.text.style.Styler;
@@ -140,6 +141,22 @@ public final class AuthScreens {
         buttons.add(new DialogSpec.Button(text(reader, pin.label("enter")), PinPad.ENTER));
         buttons.add(new DialogSpec.Button(text(reader, pin.label(CANCEL)), CANCEL));
         return buttons;
+    }
+
+    /**
+     * The rules as lines of chat, for a client that cannot show the register screen, and the line that says
+     * registering with the command accepts them. Empty while the rules are off.
+     */
+    public List<Component> rulesInChat(Audience reader) {
+        Objects.requireNonNull(reader, "reader");
+        ScreenSettings.Rules rules = screens.get().rules();
+        if (!rules.enabled()) {
+            return List.of();
+        }
+        List<Component> lines = new ArrayList<>();
+        rules.lines().forEach(line -> lines.add(text(reader, line)));
+        lines.add(messages.render(reader, Keys.RULES_ACCEPTED_BY_REGISTERING));
+        return lines;
     }
 
     private static List<Component> start(@Nullable Component reason) {
