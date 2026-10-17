@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import com.uxplima.auth.testing.Modules;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -36,8 +37,6 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     private static final Path SOURCE = Path.of("src", "main", "java");
 
     private static final Path RESOURCES = Path.of("src", "main", "resources");
-
-    private static final Path GUARDS = Path.of("src", "test", "java");
 
     /** A sound named in a shipped file, in either of the two spellings this estate writes. */
     private static final Pattern SOUND =
@@ -298,10 +297,13 @@ final class EveryGuardThisPluginNeedsIsHereTest {
     }
 
     private static List<Path> guards() throws IOException {
+        // A guard that needs the server's classes lives in the platform module, so every module is read.
         List<Path> found = new ArrayList<>();
-        for (Path file : under(GUARDS, ".java")) {
-            if (file.toString().replace('\\', '/').contains("/architecture/")) {
-                found.add(file);
+        for (Path tests : Modules.testSources()) {
+            for (Path file : under(tests, ".java")) {
+                if (file.toString().replace('\\', '/').contains("/architecture/")) {
+                    found.add(file);
+                }
             }
         }
         return found;

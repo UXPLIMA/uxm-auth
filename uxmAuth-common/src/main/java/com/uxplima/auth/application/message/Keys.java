@@ -78,7 +78,16 @@ public enum Keys implements MessageKey {
     DOCTOR_WELL("admin.doctor.well", "<tag:'AUTH'> <body>Everything answered."),
     DOCTOR_UNWELL(
             "admin.doctor.unwell",
-            "<etag:'ERROR'> <body>Something is wrong above. The console carries the whole of it.");
+            "<etag:'ERROR'> <body>Something is wrong above. The console carries the whole of it."),
+
+    JOIN_REGISTER_TITLE("join.register-title", "<value>Welcome"),
+    JOIN_REGISTER_SUBTITLE("join.register-subtitle", "<body>Choose a password with <value>/register"),
+    JOIN_LOGIN_TITLE("join.login-title", "<value>Welcome back"),
+    JOIN_LOGIN_SUBTITLE("join.login-subtitle", "<body>Log in with <value>/login"),
+    REMINDER_REGISTER("reminder.register", "<body>Register with <value>/register <password> <password>"),
+    REMINDER_LOGIN("reminder.login", "<body>Log in with <value>/login <password>"),
+    WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
+    WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in");
     private final String path;
     private final String defaultTemplate;
 

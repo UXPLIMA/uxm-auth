@@ -49,6 +49,8 @@ dependencies {
     // template takes uxmlib-integration as soon as it reads an operator's line, and these guards travel
     // with the template so it never starts without them. Test only: nothing of it reaches the jar.
     testImplementation(libs.uxmlib.integration)
+    // The guard that every shipped effect line parses asks the action engine itself.
+    testImplementation(libs.uxmlib.condition)
 }
 
 tasks.processResources {

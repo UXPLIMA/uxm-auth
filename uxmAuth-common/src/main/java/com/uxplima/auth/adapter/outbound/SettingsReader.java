@@ -1,0 +1,157 @@
+package com.uxplima.auth.adapter.outbound;
+
+import java.time.Duration;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
+import com.uxplima.auth.domain.hash.HashAlgorithm;
+import com.uxplima.auth.domain.password.CharClass;
+import com.uxplima.uxmlib.config.HoconConfig;
+
+/**
+ * Reads each block of {@code config.conf} into its record, with the default the shipped file also says.
+ *
+ * <p>A value that cannot work is refused with its path, so the operator reads which line to fix rather than
+ * a stack trace about something three calls away.
+ */
+final class SettingsReader {
+
+    private SettingsReader() {}
+
+    static AuthSettings.Names names(HoconConfig config) {
+        return new AuthSettings.Names(
+                pattern(config, "names.pattern", "[A-Za-z0-9_]+"),
+                config.getInt("names.min-length", 3),
+                config.getInt("names.max-length", 16),
+                list(config, "names", "blocked", List.of()));
+    }
+
+    static AuthSettings.Passwords passwords(HoconConfig config) {
+        return new AuthSettings.Passwords(
+                config.getInt("passwords.min-length", 6),
+                config.getInt("passwords.max-length", 64),
+                pattern(config, "passwords.allowed", "\\S+"),
+                required(config),
+                config.getBoolean("passwords.confirm-on-register", true),
+                config.getBoolean("passwords.old-on-change", true),
+                config.getInt("passwords.max-attempts", 3));
+    }
+
+    static AuthSettings.HashSettings hashing(HoconConfig config) {
+        return new AuthSettings.HashSettings(
+                algorithm(config.getString("hashing.algorithm", "argon2id")),
+                config.getInt("hashing.argon2id.memory-kib", 65536),
+                config.getInt("hashing.argon2id.iterations", 3),
+                config.getInt("hashing.argon2id.parallelism", 1),
+                config.getInt("hashing.bcrypt.cost", 12),
+                config.getInt("hashing.pbkdf2.iterations", 600_000));
+    }
+
+    static AuthSettings.Lane lane(HoconConfig config) {
+        return new AuthSettings.Lane(
+                config.getInt("lane.threads", 2),
+                config.getInt("lane.max-threads", 4),
+                config.getInt("lane.queue", 256));
+    }
+
+    static AuthSettings.Hold hold(HoconConfig config) {
+        return new AuthSettings.Hold(
+                held(config, "movement"),
+                held(config, "chat"),
+                held(config, "commands"),
+                list(config, "hold", "allowed-commands", List.of()),
+                held(config, "blocks"),
+                held(config, "interact"),
+                held(config, "inventory"),
+                held(config, "damage"),
+                held(config, "vehicles"),
+                held(config, "portals"),
+                held(config, "teleports"),
+                held(config, "hide-players"),
+                held(config, "blindness"),
+                held(config, "hide-inventory"),
+                held(config, "hide-stats"));
+    }
+
+    static AuthSettings.Timeouts timeouts(HoconConfig config) {
+        return new AuthSettings.Timeouts(
+                seconds(config, "timeouts.register-seconds", 90),
+                seconds(config, "timeouts.login-seconds", 60),
+                seconds(config, "timeouts.reminder-seconds", 5));
+    }
+
+    static AuthSettings.Effects effects(HoconConfig config) {
+        Map<AuthSettings.Moment, List<String>> lists = new EnumMap<>(AuthSettings.Moment.class);
+        for (AuthSettings.Moment moment : AuthSettings.Moment.values()) {
+            lists.put(moment, list(config, "effects", moment.key(), ShippedEffects.of(moment)));
+        }
+        return new AuthSettings.Effects(lists);
+    }
+
+    private static boolean held(HoconConfig config, String name) {
+        return config.getBoolean("hold." + name, true);
+    }
+
+    /**
+     * A list as the operator wrote it, or the shipped one when the file says nothing.
+     *
+     * <p>A list written as {@code []} is an operator's choice of nothing, and a list nobody wrote is the
+     * default, so the node is asked whether it exists before it is read.
+     */
+    private static List<String> list(HoconConfig config, String block, String name, List<String> shipped) {
+        if (config.nodeAt(block, name).virtual()) {
+            return shipped;
+        }
+        return List.copyOf(config.getList(block + "." + name, String.class));
+    }
+
+    private static String pattern(HoconConfig config, String path, String fallback) {
+        String written = config.getString(path, fallback);
+        try {
+            Pattern.compile(written);
+        } catch (PatternSyntaxException broken) {
+            throw new IllegalArgumentException(
+                    path + " is not a pattern Java can read: " + broken.getDescription(), broken);
+        }
+        return written;
+    }
+
+    private static Set<CharClass> required(HoconConfig config) {
+        Set<CharClass> required = EnumSet.noneOf(CharClass.class);
+        for (String name : list(config, "passwords", "required", List.of())) {
+            try {
+                required.add(CharClass.valueOf(name.trim().toUpperCase(Locale.ROOT)));
+            } catch (IllegalArgumentException unknown) {
+                throw new IllegalArgumentException(
+                        "passwords.required holds " + name + ", which is not lower, upper, digit or symbol", unknown);
+            }
+        }
+        return required;
+    }
+
+    private static HashAlgorithm algorithm(String written) {
+        String name = written.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        try {
+            return HashAlgorithm.valueOf(name);
+        } catch (IllegalArgumentException unknown) {
+            throw new IllegalArgumentException(
+                    "hashing.algorithm is " + written
+                            + ", and this plugin has argon2id, bcrypt, pbkdf2 and authme-sha256",
+                    unknown);
+        }
+    }
+
+    private static Duration seconds(HoconConfig config, String path, int fallback) {
+        int value = config.getInt(path, fallback);
+        if (value < 1) {
+            throw new IllegalArgumentException(path + " must be at least 1, got: " + value);
+        }
+        return Duration.ofSeconds(value);
+    }
+}

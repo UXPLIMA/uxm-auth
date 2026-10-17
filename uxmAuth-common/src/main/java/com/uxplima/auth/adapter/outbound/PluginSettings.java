@@ -6,7 +6,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
+import com.uxplima.auth.domain.hash.Argon2idHasher;
+import com.uxplima.auth.domain.hash.AuthMeSha256Hasher;
+import com.uxplima.auth.domain.hash.BcryptHasher;
+import com.uxplima.auth.domain.hash.HashAlgorithm;
+import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.hash.PasswordHasher;
+import com.uxplima.auth.domain.hash.Pbkdf2Hasher;
+import com.uxplima.auth.domain.name.NamePolicy;
+import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.uxmlib.config.HoconConfig;
 import com.uxplima.uxmlib.text.language.LanguageSettings;
 import org.jspecify.annotations.Nullable;
@@ -39,16 +49,85 @@ public final class PluginSettings {
     }
 
     /** One immutable snapshot of the file. */
-    public record Snapshot(LanguageSettings language, Storage storage) {
+    public record Snapshot(
+            LanguageSettings language,
+            Storage storage,
+            AuthSettings.Names names,
+            AuthSettings.Passwords passwords,
+            AuthSettings.HashSettings hashing,
+            AuthSettings.Lane lane,
+            AuthSettings.Hold hold,
+            AuthSettings.Timeouts timeouts,
+            AuthSettings.Effects effects) {
 
         public Snapshot {
             Objects.requireNonNull(language, "language");
             Objects.requireNonNull(storage, "storage");
+            Objects.requireNonNull(names, "names");
+            Objects.requireNonNull(passwords, "passwords");
+            Objects.requireNonNull(hashing, "hashing");
+            Objects.requireNonNull(lane, "lane");
+            Objects.requireNonNull(hold, "hold");
+            Objects.requireNonNull(timeouts, "timeouts");
+            Objects.requireNonNull(effects, "effects");
+            if (hashing.algorithm() == HashAlgorithm.BCRYPT && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
+                throw new IllegalArgumentException("passwords.max-length is " + passwords.maxLength()
+                        + ", and bcrypt reads only the first " + AuthSettings.BCRYPT_BYTES
+                        + " bytes: lower it, or choose another hashing.algorithm");
+            }
+            // Built once here, so a value the domain refuses is refused when the file is read.
+            namePolicyOf(names);
+            passwordPolicyOf(passwords, hashing);
+            hashersOf(hashing);
         }
 
         /** The language every message falls back to. */
         public Locale defaultLocale() {
             return language.defaultLocale();
+        }
+
+        public NamePolicy namePolicy() {
+            return namePolicyOf(names);
+        }
+
+        /** The password rules. Under bcrypt they also refuse a password past its 72 bytes. */
+        public PasswordPolicy passwordPolicy() {
+            return passwordPolicyOf(passwords, hashing);
+        }
+
+        /** The current algorithm for new hashes, and all four for reading old ones. */
+        public Hashing hashers() {
+            return hashersOf(hashing);
+        }
+
+        private static NamePolicy namePolicyOf(AuthSettings.Names names) {
+            return new NamePolicy(
+                    Pattern.compile(names.pattern()), names.minLength(), names.maxLength(), names.blocked());
+        }
+
+        private static PasswordPolicy passwordPolicyOf(
+                AuthSettings.Passwords passwords, AuthSettings.HashSettings hashing) {
+            int maxBytes = hashing.algorithm() == HashAlgorithm.BCRYPT ? AuthSettings.BCRYPT_BYTES : 0;
+            return new PasswordPolicy(
+                    passwords.minLength(),
+                    passwords.maxLength(),
+                    Pattern.compile(passwords.allowed()),
+                    passwords.required(),
+                    maxBytes);
+        }
+
+        private static Hashing hashersOf(AuthSettings.HashSettings hashing) {
+            List<PasswordHasher> all = List.of(
+                    new Argon2idHasher(
+                            hashing.argon2MemoryKib(), hashing.argon2Iterations(), hashing.argon2Parallelism()),
+                    new BcryptHasher(hashing.bcryptCost()),
+                    new Pbkdf2Hasher(hashing.pbkdf2Iterations()),
+                    new AuthMeSha256Hasher());
+            PasswordHasher current = all.stream()
+                    .filter(hasher -> hasher.algorithm() == hashing.algorithm())
+                    .findFirst()
+                    .orElseThrow();
+            return new Hashing(current, all);
         }
     }
 
@@ -118,7 +197,16 @@ public final class PluginSettings {
 
     private Snapshot read() {
         HoconConfig config = HoconConfig.load(file);
-        return new Snapshot(language(config), storage(config));
+        return new Snapshot(
+                language(config),
+                storage(config),
+                SettingsReader.names(config),
+                SettingsReader.passwords(config),
+                SettingsReader.hashing(config),
+                SettingsReader.lane(config),
+                SettingsReader.hold(config),
+                SettingsReader.timeouts(config),
+                SettingsReader.effects(config));
     }
 
     /**

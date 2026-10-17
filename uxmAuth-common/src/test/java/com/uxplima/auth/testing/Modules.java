@@ -32,4 +32,13 @@ public final class Modules {
                 .filter(Files::isDirectory)
                 .toList();
     }
+
+    /** The test source root of every module that has one. */
+    public static List<Path> testSources() {
+        Path root = repositoryRoot();
+        return NAMES.stream()
+                .map(name -> root.resolve(name).resolve("src").resolve("test").resolve("java"))
+                .filter(Files::isDirectory)
+                .toList();
+    }
 }
