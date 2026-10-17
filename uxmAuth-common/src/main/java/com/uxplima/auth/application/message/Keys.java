@@ -131,7 +131,28 @@ public enum Keys implements MessageKey {
     PASSWORD_CLASS_SYMBOL("password.class-symbol", "a symbol"),
     PASSWORD_CLASS_SEPARATOR("password.class-separator", ", "),
 
-    BUSY("busy", "<etag:'ERROR'> <body>The server is busy. Try again in a moment.");
+    BUSY("busy", "<etag:'ERROR'> <body>The server is busy. Try again in a moment."),
+
+    SCREEN_REGISTER_TITLE("screen.register.title", "<value>Welcome"),
+    SCREEN_REGISTER_BODY(
+            "screen.register.body", "<body>Choose a password for this name. You will type it each time you join."),
+    SCREEN_REGISTER_PASSWORD("screen.register.password", "Password"),
+    SCREEN_REGISTER_CONFIRM("screen.register.confirm", "The same password again"),
+    SCREEN_REGISTER_ACCEPT("screen.register.accept", "I have read the rules and accept them"),
+    SCREEN_REGISTER_SUBMIT("screen.register.submit", "Register"),
+    SCREEN_REGISTER_CANCEL("screen.register.cancel", "Leave"),
+    SCREEN_LOGIN_TITLE("screen.login.title", "<value>Welcome back"),
+    SCREEN_LOGIN_BODY("screen.login.body", "<body>Type your password to come in."),
+    SCREEN_LOGIN_PASSWORD("screen.login.password", "Password"),
+    SCREEN_LOGIN_SUBMIT("screen.login.submit", "Log in"),
+    SCREEN_LOGIN_CANCEL("screen.login.cancel", "Leave"),
+    SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
+    SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
+    SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),
+    SCREEN_PIN_ENTER("screen.pin.enter", "Enter"),
+    SCREEN_PIN_CANCEL("screen.pin.cancel", "Leave"),
+    RULES_LINE_1("rules.line-1", "<body>Be kind to other players."),
+    RULES_LINE_2("rules.line-2", "<body>No cheating and no griefing.");
     private final String path;
     private final String defaultTemplate;
 

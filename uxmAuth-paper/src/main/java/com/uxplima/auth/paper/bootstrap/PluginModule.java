@@ -16,6 +16,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
@@ -70,6 +71,7 @@ final class PluginModule {
 
     private final JavaPlugin plugin;
     private final PluginSettings settings;
+    private final ScreenFile screens;
 
     private @Nullable Styler styler;
 
@@ -92,6 +94,7 @@ final class PluginModule {
         Path dataFolder = plugin.getDataFolder().toPath();
         extractDefaults(dataFolder);
         this.settings = new PluginSettings(dataFolder.resolve("config.conf"));
+        this.screens = new ScreenFile(dataFolder.resolve("screens.conf"));
         this.languages = readLanguages();
     }
 
@@ -338,6 +341,7 @@ final class PluginModule {
         }
         this.languages = readLanguages();
         reportLanguageProblems();
+        screens.reload();
         styler().reload(loadTheme());
         messages.reload(styledCatalog());
     }
@@ -368,10 +372,26 @@ final class PluginModule {
         }
     }
 
+    /** The same promise as the configuration's: a release's new screen keys reach a server installed before it. */
+    private void mergeShippedScreens(Path dataFolder) {
+        Path file = dataFolder.resolve("screens.conf");
+        try {
+            if (ScreenFile.bringUpToDate(file, getClass().getClassLoader())) {
+                plugin.getSLF4JLogger()
+                        .info("screens.conf has the keys this release adds. Nothing you wrote changed, and the"
+                                + " file as it was is beside it as screens.conf.bak.");
+            }
+        } catch (RuntimeException unreadable) {
+            plugin.getSLF4JLogger().warn("screens.conf could not be brought up to date: {}", unreadable.getMessage());
+        }
+    }
+
     /** Write the shipped defaults on first run. An existing file is never overwritten. */
     private void extractDefaults(Path dataFolder) {
         saveIfAbsent(dataFolder, "config.conf");
         mergeShippedConfig(dataFolder);
+        saveIfAbsent(dataFolder, "screens.conf");
+        mergeShippedScreens(dataFolder);
         saveIfAbsent(dataFolder, "commands.conf");
         saveSharedTheme(dataFolder);
         // The language files are discovered in the jar rather than named in a list here. A plugin gains a
