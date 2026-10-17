@@ -3,7 +3,7 @@ name: CI
 # Runs the same gate that CLAUDE.md asks for locally, on a machine nobody has
 # configured. The shaded jar is assembled here on purpose: a relocation problem
 # only appears in the assembled artifact, and no unit test can see it. That is what
-# `verifyJar` does, and `./gradlew build` runs it through `check` - see the Build step.
+# each module's `verifyJar` does, and `./gradlew build` runs it through `check` - see the Build step.
 on:
   push:
     branches: [main]
@@ -62,5 +62,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-reports
-          path: build/reports/tests/
+          # Per module, not the root: the root project has no tests.
+          path: '*/build/reports/tests/'
           retention-days: 7

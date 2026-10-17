@@ -9,6 +9,13 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-// The plugin id. scripts/new-plugin.sh rewrites it, along with the package root
-// and the jar name, when the template becomes a real plugin.
-rootProject.name = "uxmTemplate"
+rootProject.name = "uxmAuth"
+
+// Three modules, because a lone server and a network decide who a player is in two different places.
+// The common module holds every rule and every use case; a platform module holds only the translation
+// between a platform event and a use-case call. See docs/adr/0003.
+include(
+    ":uxmAuth-common",
+    ":uxmAuth-paper",
+    ":uxmAuth-velocity",
+)

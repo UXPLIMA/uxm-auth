@@ -1,36 +1,31 @@
-# uxmTemplate
+# uxmAuth
 
-The starting point for a UXPLIMA Paper plugin.
+Login and registration for offline-mode Minecraft servers and networks, on Paper, Folia and Velocity.
 
-Hexagonal architecture on Paper 26.2 and Java 25, built on uxmLib. Folia ready, fully
-configurable, multi-language, with every command renameable by the operator.
+A premium player never types a password. A Bedrock player never types a password. A cracked player
+registers and logs in through a window, before they are in the world. Nobody can take a name that is not
+theirs. One product, with no second plugin needed for any part of it.
 
-## Start a new plugin
+## Which jar goes where
 
-```bash
-git clone https://github.com/UXPLIMA/uxm-plugin-template.git uxm-<name>
-cd uxm-<name>
-scripts/new-plugin.sh <slug> <ClassPrefix> <command-root>
-```
+- A lone Paper or Folia server: `uxmAuth-paper`.
+- A Velocity network: `uxmAuth-velocity` on the proxy, and `uxmAuth-paper` on every backend.
 
-Then delete the worked example, and read `docs/00-README.md`.
+`docs/08-auth.md` describes what the plugin does. `uxm-briefs/uxm-auth.md` is the product it is built to.
 
 ## Build
 
 ```bash
 ./gradlew spotlessApply
-./gradlew build          # compile, static analysis, format check, tests
-./gradlew shadowJar      # the deployable jar
-./gradlew runServer      # a Paper dev server
+./gradlew build          # compile, static analysis, format check, tests, jar audit
+./gradlew shadowJar      # the deployable jars, one per platform module
 ```
 
-## What the template already gives you
+## Layout
 
-- The hexagonal package tree, with a worked example through every layer.
-- Error Prone, NullAway, Spotless and Palantir formatting, all under `-Werror`.
-- Seven ArchUnit fences and a source guard against untranslatable text, each one proved to
-  fail before it was committed.
-- A message key enum with English and Turkish catalogs, and a per-key default.
-- A typed configuration snapshot, and a `commands.conf` that is actually read, with a test
-  that proves the label reaches the built Brigadier node.
-- uxmLib shaded and relocated, so the jar runs on its own.
+- `uxmAuth-common`: the domain, the use cases, the hashing, the settings and the catalogue. No Bukkit,
+  no Velocity.
+- `uxmAuth-paper`: the Paper and Folia plugin.
+- `uxmAuth-velocity`: the Velocity plugin.
+
+`docs/adr/0003-three-gradle-modules.md` records why.

@@ -1,0 +1,10 @@
+{
+  "id": "uxmauth",
+  "name": "uxmAuth",
+  "version": "${version}",
+  "description": "Login and registration for offline-mode networks, with premium and Bedrock auto-login.",
+  "url": "https://github.com/UXPLIMA/uxm-auth",
+  "authors": ["UXPLIMA"],
+  "dependencies": [],
+  "main": "com.uxplima.auth.velocity.bootstrap.AuthVelocityPlugin"
+}

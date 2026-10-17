@@ -1,0 +1,43 @@
+name: uxmAuth
+version: '${version}'
+main: com.uxplima.auth.paper.bootstrap.AuthPlugin
+api-version: '26.2'
+authors: ['UXPLIMA']
+description: 'The starting point for a UXPLIMA plugin.'
+website: 'https://github.com/UXPLIMA/uxm-plugin-template'
+
+# Every scheduler call goes through the uxmLib Scheduler port, which routes to the
+# right global, region, entity or async scheduler. Nothing calls BukkitScheduler.
+folia-supported: true
+
+# Optional integrations. The plugin runs fully without any of them, because every
+# third-party symbol is reached only past a plugin-present guard.
+dependencies:
+  server:
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+
+permissions:
+  # What a player has by default.
+  uxmauth.language:
+    description: Choose the language you read this plugin in
+    default: true
+
+  # What an operator does. Off unless the server grants it, and admin.* grants the family
+  # in one line.
+  uxmauth.admin.*:
+    description: Everything an operator does with this plugin
+    default: op
+  uxmauth.admin.doctor:
+    description: Ask how this plugin is
+    default: op
+  uxmauth.admin.version:
+    description: Read the version this server runs
+    default: op
+  uxmauth.admin.reload:
+    description: Read the configuration again
+    default: op
+  uxmauth.admin.language:
+    description: Set or clear the language another player reads
+    default: op
