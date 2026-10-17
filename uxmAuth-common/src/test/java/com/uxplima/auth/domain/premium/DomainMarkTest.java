@@ -40,4 +40,14 @@ final class DomainMarkTest {
         assertThatThrownBy(() -> new DomainMark("\u2605", false)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new DomainMark("\u007f", false)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("a marked name gives back the name the player typed, and a name without the mark gives nothing")
+    void aMarkedNameGivesBackTheTypedOne() {
+        assertThat(new DomainMark("+", false).unmark("Notch+")).contains("Notch");
+        assertThat(new DomainMark("c_", true).unmark("c_Notch")).contains("Notch");
+        assertThat(new DomainMark("+", false).unmark("Notch")).isEmpty();
+        assertThat(new DomainMark("+", true).unmark("Notch+")).isEmpty();
+        assertThat(new DomainMark("+", false).unmark("+")).isEmpty();
+    }
 }

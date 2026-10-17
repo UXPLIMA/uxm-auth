@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -32,6 +33,8 @@ import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.network.Claims;
+import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
@@ -52,6 +55,7 @@ import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
 import com.uxplima.auth.paper.adapter.inbound.listener.HelloAtTheDoor;
 import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
+import com.uxplima.auth.paper.adapter.inbound.listener.NetworkDoor;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.BedrockForms;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConfigurationGate;
@@ -254,7 +258,8 @@ final class AuthGraph implements AutoCloseable {
                         scheduler,
                         plugin.getServer()::createProfile,
                         () -> settings.current().ownership().crackedMark(),
-                        boot.ownership().uuidScheme()),
+                        boot.ownership().uuidScheme(),
+                        new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger())),
                 notices,
                 door,
                 keeper,
@@ -315,6 +320,14 @@ final class AuthGraph implements AutoCloseable {
         hellos.close();
         web.close();
         lane.close();
+    }
+
+    /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */
+    private static Optional<Claims> claims(PluginSettings settings) {
+        AuthSettings.Network network = settings.current().network();
+        return network.enabled()
+                ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor()))
+                : Optional.empty();
     }
 
     /** The decision at the hello: the web sources, the operator's rule, and the memories of claims and failures. */

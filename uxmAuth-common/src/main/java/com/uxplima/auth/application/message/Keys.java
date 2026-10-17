@@ -132,6 +132,8 @@ public enum Keys implements MessageKey {
             "kick.claimed",
             "<body>Join again from the official Minecraft launcher. Your next connection from here proves this"
                     + " name is yours."),
+    KICK_NETWORK_CLAIM(
+            "kick.network-claim", "<body>This server could not confirm your login with the network. Join again."),
     KICK_NAME_CASE(
             "kick.name-case",
             "<body>This name is registered as <value><name><body>. Join again with exactly that spelling."),

@@ -78,10 +78,12 @@ public final class Arrivals {
     private final BiFunction<UUID, String, PlayerProfile> profiles;
     private final Supplier<DomainMark> mark;
     private final UuidScheme scheme;
+    private final NetworkDoor network;
 
     /**
      * @param mark the domain rule's mark, for a connection through the cracked address
      * @param scheme the UUID scheme this start recorded, which a cracked player plays under too
+     * @param network the proxy's word, on a server behind it
      */
     public Arrivals(
             ReadTheName names,
@@ -91,7 +93,8 @@ public final class Arrivals {
             Scheduler scheduler,
             BiFunction<UUID, String, PlayerProfile> profiles,
             Supplier<DomainMark> mark,
-            UuidScheme scheme) {
+            UuidScheme scheme,
+            NetworkDoor network) {
         this.names = Objects.requireNonNull(names, "names");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.hellos = Objects.requireNonNull(hellos, "hellos");
@@ -100,20 +103,41 @@ public final class Arrivals {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.mark = Objects.requireNonNull(mark, "mark");
         this.scheme = Objects.requireNonNull(scheme, "scheme");
+        this.network = Objects.requireNonNull(network, "network");
     }
 
     /** What this pre-login comes to. */
     public Arrival arrive(AsyncPlayerPreLoginEvent event) {
         Objects.requireNonNull(event, "event");
+        // Read first on every way in: the claim comes off the profile before anything else can see it.
+        NetworkDoor.Reading vouched = network.read(event);
         UUID id = event.getUniqueId();
         if (bedrock.vouches(id)) {
             return bedrockArrival(event);
         }
-        return switch (hellos.read(event.getName(), id, clientAddress(event))) {
+        return switch (vouched) {
+            case NetworkDoor.Reading.None none -> alone(event);
+            case NetworkDoor.Reading.LoggedIn in ->
+                new Arrival.Opens(id, new AuthState.Authenticated(in.account(), in.method()), null, List.of());
+            case NetworkDoor.Reading.Waiting waiting ->
+                usualArrival(
+                        event,
+                        new HelloAtTheDoor.Reading.Usual(
+                                waiting.flags().unverified(),
+                                waiting.flags().explain(),
+                                waiting.flags().marked()),
+                        true);
+            case NetworkDoor.Reading.Refused refused -> new Arrival.Refused(words.network());
+        };
+    }
+
+    /** A server that stands alone, or a player the proxy sent no claim with: the hello decides. */
+    private Arrival alone(AsyncPlayerPreLoginEvent event) {
+        return switch (hellos.read(event.getName(), event.getUniqueId(), clientAddress(event))) {
             case HelloAtTheDoor.Reading.Refused refused ->
                 new Arrival.Refused(words.refusal(refused.why(), refused.movedTo()));
             case HelloAtTheDoor.Reading.Premium premium -> premiumArrival(event, premium.state());
-            case HelloAtTheDoor.Reading.Usual usual -> usualArrival(event, usual);
+            case HelloAtTheDoor.Reading.Usual usual -> usualArrival(event, usual, false);
         };
     }
 
@@ -145,9 +169,19 @@ public final class Arrivals {
         return new Arrival.Opens(playAs, state, profile, List.of());
     }
 
-    private Arrival usualArrival(AsyncPlayerPreLoginEvent event, HelloAtTheDoor.Reading.Usual usual) {
+    /**
+     * @param networked whether the proxy sent the player: then the name already carries the mark, and the id the
+     *     proxy gave a new name is the one it plays under
+     */
+    private Arrival usualArrival(
+            AsyncPlayerPreLoginEvent event, HelloAtTheDoor.Reading.Usual usual, boolean networked) {
+        Optional<String> typed =
+                networked && usual.marked() ? mark.get().unmark(event.getName()) : Optional.of(event.getName());
+        if (typed.isEmpty()) {
+            return new Arrival.Refused(words.network());
+        }
         ReadTheName.Reading reading =
-                usual.marked() ? names.readMarked(event.getName(), mark.get()) : names.read(event.getName());
+                usual.marked() ? names.readMarked(typed.get(), mark.get()) : names.read(typed.get());
         if (reading instanceof ReadTheName.Reading.Refused refused) {
             return new Arrival.Refused(words.name(refused.verdict()));
         }
@@ -171,7 +205,7 @@ public final class Arrivals {
                                     () -> scheduler.async(() -> hellos.toldMove(account))),
                             true)));
         }
-        return played(event, state, notices);
+        return played(event, state, notices, networked);
     }
 
     /**
@@ -179,7 +213,7 @@ public final class Arrivals {
      * An offline server already derives the offline id from the name as typed, so a new name keeps it unless it
      * carries the mark or the scheme hands out its own.
      */
-    private Arrival played(AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices) {
+    private Arrival played(AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices, boolean networked) {
         PlayerName name;
         UUID id;
         if (state instanceof AuthState.Registered registered) {
@@ -187,7 +221,8 @@ public final class Arrivals {
             id = registered.account().id();
         } else {
             name = ((AuthState.Unregistered) state).name();
-            boolean derived = scheme != UuidScheme.RANDOM && name.value().equals(event.getName());
+            boolean derived =
+                    networked || (scheme != UuidScheme.RANDOM && name.value().equals(event.getName()));
             id = derived ? event.getUniqueId() : scheme.idFor(name, Optional.empty(), Optional.empty());
         }
         PlayerProfile profile = null;

@@ -44,6 +44,11 @@ public final class DoorWords {
         };
     }
 
+    /** Why a server behind the proxy turned away a player the network could not vouch for. */
+    public Component network() {
+        return messages.render(Audience.empty(), Keys.KICK_NETWORK_CLAIM);
+    }
+
     /** Why the operator's rules refuse the name. */
     public Component name(NameVerdict verdict) {
         Objects.requireNonNull(verdict, "verdict");
