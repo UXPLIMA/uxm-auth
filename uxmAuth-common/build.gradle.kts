@@ -20,6 +20,11 @@ dependencies {
     api(libs.configurate.hocon)
     // api: Database is in the signature of the repository a platform module opens.
     api(libs.uxmlib.storage)
+    // The drivers of the databases the brief names. uxmLib carries SQLite; the rest ride in both platform jars,
+    // because Velocity ships no driver at all and Paper ships only MySQL's and SQLite's.
+    runtimeOnly(libs.mariadb.jdbc)
+    runtimeOnly(libs.postgresql)
+    runtimeOnly(libs.h2)
     // Argon2id and BCrypt in pure Java. Shaded and relocated by each platform module.
     implementation(libs.bouncycastle)
 

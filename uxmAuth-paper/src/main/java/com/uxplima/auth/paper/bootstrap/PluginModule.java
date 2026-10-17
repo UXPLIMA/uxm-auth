@@ -13,7 +13,7 @@ import java.util.Set;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
-import com.uxplima.auth.adapter.outbound.AuthSchema;
+import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
@@ -182,14 +182,7 @@ final class PluginModule {
      * written down on the first start and held against every later one.
      */
     private Database openDatabase() {
-        PluginSettings.Storage storage = settings.current().storage();
-        Database opened = AuthSchema.migrate(Database.builder()
-                .poolName(plugin.getName())
-                .jdbcUrl(storage.jdbcUrl())
-                .username(storage.username())
-                .password(storage.password())
-                .maxPoolSize(storage.poolSize())
-                .build());
+        Database opened = AuthDatabase.open(settings.current().storage(), plugin.getName());
         try {
             new RecordedScheme(opened).check(settings.current().ownership().uuidScheme());
         } catch (RuntimeException refused) {

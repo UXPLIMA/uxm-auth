@@ -150,6 +150,10 @@ val requiredJarEntries =
     listOf(
         "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
         "com/uxplima/auth/paper/bootstrap/" to "The plugin's own classes are missing.",
+        "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",
+        "org/mariadb/jdbc/Driver.class" to "The MariaDB driver is missing, and it opens MySQL and MariaDB.",
+        "org/postgresql/Driver.class" to "The PostgreSQL driver is missing.",
+        "org/h2/Driver.class" to "The H2 driver is missing.",
     )
 
 val verifyJar =

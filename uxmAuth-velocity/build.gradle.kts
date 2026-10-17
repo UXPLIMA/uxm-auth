@@ -89,6 +89,17 @@ val forbiddenJarEntries =
         "org/bouncycastle/" to "BouncyCastle must be relocated, or two plugins that bundle it clash.",
     )
 
+// What a proxy jar must carry. Velocity ships no JDBC driver, so every database the brief names rides here.
+val requiredJarEntries =
+    listOf(
+        "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
+        "com/uxplima/auth/velocity/bootstrap/" to "The plugin's own classes are missing.",
+        "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",
+        "org/mariadb/jdbc/Driver.class" to "The MariaDB driver is missing, and it opens MySQL and MariaDB.",
+        "org/postgresql/Driver.class" to "The PostgreSQL driver is missing.",
+        "org/h2/Driver.class" to "The H2 driver is missing.",
+    )
+
 val verifyJar =
     tasks.register("verifyJar") {
         description = "Fail the build when the shaded jar carries a package it must not."
@@ -120,6 +131,15 @@ val verifyJar =
             }
             if (found.isNotEmpty()) {
                 throw GradleException("The jar carries packages it must not:\n" + found.joinToString("\n"))
+            }
+            val missing = mutableListOf<String>()
+            for ((prefix, why) in requiredJarEntries) {
+                if (names.none { name -> name.startsWith(prefix) }) {
+                    missing.add("  " + prefix + ": " + why)
+                }
+            }
+            if (missing.isNotEmpty()) {
+                throw GradleException("The jar is missing packages it must carry:\n" + missing.joinToString("\n"))
             }
         }
     }
