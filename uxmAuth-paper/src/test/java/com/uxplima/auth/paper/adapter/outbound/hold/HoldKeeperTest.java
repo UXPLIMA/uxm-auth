@@ -14,6 +14,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.paper.testing.DirectScheduler;
+import com.uxplima.auth.paper.testing.QueuedScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -186,6 +187,51 @@ final class HoldKeeperTest {
         assertThat(steve.isOp()).isTrue();
         assertThat(steve.getInventory().getItem(0)).isEqualTo(new ItemStack(Material.STONE));
         assertThat(steve.hasPotionEffect(PotionEffectType.BLINDNESS)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a login before the write leaves no file, whichever disk task the server runs first")
+    void aQuickLoginLeavesNoFile() {
+        QueuedScheduler queued = new QueuedScheduler();
+        HoldKeeper ordered = new HoldKeeper(
+                plugin,
+                queued,
+                store,
+                () -> new AuthSettings.Hold(
+                        true, true, true, List.of(), true, true, true, true, true, true, true, true, true, true, true),
+                player -> held.contains(player.getUniqueId()));
+        PlayerMock steve = joining("Steve");
+        steve.setOp(true);
+
+        ordered.arrive(steve);
+        queued.runOldest();
+        held.remove(steve.getUniqueId());
+        ordered.giveBack(steve);
+        queued.runNewestFirst();
+
+        assertThat(store.load(steve.getUniqueId())).isEmpty();
+        assertThat(steve.isOp()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a player who left before the hold was set up leaves no file behind")
+    void aPlayerWhoLeftFirstLeavesNoFile() {
+        QueuedScheduler queued = new QueuedScheduler();
+        HoldKeeper ordered = new HoldKeeper(
+                plugin,
+                queued,
+                store,
+                () -> new AuthSettings.Hold(
+                        true, true, true, List.of(), true, true, true, true, true, true, true, true, true, true, true),
+                player -> held.contains(player.getUniqueId()));
+        PlayerMock steve = joining("Steve");
+
+        ordered.arrive(steve);
+        ordered.leave(steve);
+        steve.disconnect();
+        queued.runOldestFirst();
+
+        assertThat(store.load(steve.getUniqueId())).isEmpty();
     }
 
     private PlayerMock joining(String name) {

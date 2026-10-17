@@ -7,9 +7,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 
 import org.bukkit.GameMode;
 import org.bukkit.attribute.Attribute;
@@ -30,6 +32,10 @@ import org.jspecify.annotations.Nullable;
  * <p>What is taken is written to disk before it is taken, so a crash never keeps it: the next join reads the
  * file and gives it back first. The disk is touched on the async scheduler and the player only on their own
  * thread, so this is safe on Folia.
+ *
+ * <p>The disk work of one player runs in one chain, in the order it was asked for. Two async tasks are
+ * otherwise free to finish in any order, and a write that landed after the delete of a quick login would
+ * leave a file that hands back an old inventory and an old operator status at some later join.
  */
 public final class HoldKeeper {
 
@@ -42,6 +48,7 @@ public final class HoldKeeper {
     private final Predicate<Player> isHeld;
     private final Map<UUID, HeldState> taken = new ConcurrentHashMap<>();
     private final Set<UUID> blinded = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, CompletableFuture<Void>> disk = new ConcurrentHashMap<>();
 
     public HoldKeeper(
             Plugin plugin,
@@ -63,7 +70,7 @@ public final class HoldKeeper {
     public void arrive(Player player) {
         Objects.requireNonNull(player, "player");
         UUID id = player.getUniqueId();
-        scheduler.async(() -> {
+        onDisk(id, () -> {
             Optional<HeldState> leftover = store.load(id);
             scheduler.entity(player, () -> settle(player, leftover));
         });
@@ -85,18 +92,27 @@ public final class HoldKeeper {
     }
 
     private void settle(Player player, Optional<HeldState> leftover) {
+        UUID id = player.getUniqueId();
+        if (!player.isOnline()) {
+            // Gone before the hold was set up. A leftover stays on disk for their next join.
+            return;
+        }
         leftover.ifPresent(state -> apply(player, state));
         hideTheWaitingFrom(player);
         if (!isHeld.test(player)) {
             if (leftover.isPresent()) {
-                scheduler.async(() -> store.delete(player.getUniqueId()));
+                onDisk(id, () -> store.delete(id));
             }
             return;
         }
         HeldState snapshot = capture(player, hold.get());
-        taken.put(player.getUniqueId(), snapshot);
-        scheduler.async(() -> {
-            store.save(player.getUniqueId(), snapshot);
+        taken.put(id, snapshot);
+        onDisk(id, () -> {
+            // Given back already: the player is whole and a file now would only be a stale one.
+            if (taken.get(id) != snapshot) {
+                return;
+            }
+            store.save(id, snapshot);
             scheduler.entity(player, () -> strip(player));
         });
     }
@@ -148,7 +164,32 @@ public final class HoldKeeper {
                 scheduler.entity(other, () -> other.showPlayer(plugin, player));
             }
         }
-        scheduler.async(() -> store.delete(id));
+        onDisk(id, () -> store.delete(id));
+    }
+
+    /**
+     * Runs disk work for one player after the disk work asked for before it, on the async scheduler.
+     *
+     * <p>Each call swaps in a gate of its own and waits on the gate it replaced, so the order of the calls is
+     * the order of the work. The gate opens when the work is done, whether it failed or not.
+     */
+    private void onDisk(UUID id, Runnable work) {
+        CompletableFuture<Void> gate = new CompletableFuture<>();
+        CompletableFuture<Void> before = disk.put(id, gate);
+        CompletableFuture<Void> unused = (before == null ? CompletableFuture.<Void>completedFuture(null) : before)
+                .thenRunAsync(work, scheduler::async)
+                .handle((done, failure) -> {
+                    if (failure != null) {
+                        plugin.getLogger()
+                                .log(
+                                        Level.WARNING,
+                                        "The held state of " + id + " could not be read or written",
+                                        failure);
+                    }
+                    disk.remove(id, gate);
+                    gate.complete(null);
+                    return null;
+                });
     }
 
     /** A newcomer and every player who waits do not see each other. */
