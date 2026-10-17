@@ -38,6 +38,20 @@ final class HeldStateStoreTest {
     }
 
     @Test
+    @DisplayName("where a player stood before the login world survives the file")
+    void thePlaceSurvives() {
+        HeldStateStore store = new HeldStateStore(folder);
+        UUID player = UUID.randomUUID();
+        HeldPlace place = new HeldPlace("world_nether", 10.5, 70.0, -3.25, 90.0f, -12.5f);
+        HeldState state = new HeldState(true, false, false, 0.2f, 0.1f, 20.0, 20, GameMode.SURVIVAL, List.of(), place);
+
+        store.save(player, state);
+
+        assertThat(store.load(player))
+                .hasValueSatisfying(read -> assertThat(read.place()).isEqualTo(place));
+    }
+
+    @Test
     @DisplayName("what is written is what is read back, the inventory included")
     void roundTrip() {
         HeldStateStore store = new HeldStateStore(folder);

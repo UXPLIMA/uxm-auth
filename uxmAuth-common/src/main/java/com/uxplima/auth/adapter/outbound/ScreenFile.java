@@ -58,7 +58,8 @@ public final class ScreenFile {
                         list(config, "rules", "lines", List.of("@rules.line-1", "@rules.line-2"))),
                 screen(config, "register"),
                 screen(config, "login"),
-                screen(config, "pin"));
+                screen(config, "pin"),
+                config.getString("login-world-name", ScreenSettings.LOGIN_WORLD));
     }
 
     private static ScreenSettings.Screen screen(HoconConfig config, String name) {

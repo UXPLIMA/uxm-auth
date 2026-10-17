@@ -31,6 +31,17 @@ final class ScreenFileTest {
         assertThat(screens.register().title()).isEqualTo("@screen.register.title");
         assertThat(screens.register().label("password")).isEqualTo("@screen.register.password");
         assertThat(screens.login().label("submit")).isEqualTo("@screen.login.submit");
+        assertThat(screens.loginWorld()).isEqualTo("uxmauth_login");
+    }
+
+    @Test
+    @DisplayName("the login world is named by the file")
+    void theLoginWorldIsNamedByTheFile(@TempDir Path folder) throws IOException {
+        ScreenSettings screens =
+                screensFrom(folder, "waiting-room = \"login-world\"\nlogin-world-name = \"lobby_wait\"\n");
+
+        assertThat(screens.waitingRoom()).isEqualTo(ScreenSettings.WaitingRoom.LOGIN_WORLD);
+        assertThat(screens.loginWorld()).isEqualTo("lobby_wait");
     }
 
     @Test

@@ -18,15 +18,36 @@ public record ScreenSettings(
         Rules rules,
         Screen register,
         Screen login,
-        Screen pin) {
+        Screen pin,
+        String loginWorld) {
+
+    /** The world a waiting player is moved to while the waiting room is the login world, unless the file names one. */
+    public static final String LOGIN_WORLD = "uxmauth_login";
 
     public ScreenSettings {
+        Objects.requireNonNull(loginWorld, "loginWorld");
+        if (loginWorld.isBlank()) {
+            throw new IllegalArgumentException("login-world-name names no world");
+        }
         Objects.requireNonNull(waitingRoom, "waitingRoom");
         Objects.requireNonNull(cancel, "cancel");
         Objects.requireNonNull(rules, "rules");
         Objects.requireNonNull(register, "register");
         Objects.requireNonNull(login, "login");
         Objects.requireNonNull(pin, "pin");
+    }
+
+    /** The screens with the login world under its usual name. */
+    public ScreenSettings(
+            WaitingRoom waitingRoom,
+            Cancel cancel,
+            boolean canClose,
+            boolean pinPad,
+            Rules rules,
+            Screen register,
+            Screen login,
+            Screen pin) {
+        this(waitingRoom, cancel, canClose, pinPad, rules, register, login, pin, LOGIN_WORLD);
     }
 
     /** Where an unauthenticated player waits. */

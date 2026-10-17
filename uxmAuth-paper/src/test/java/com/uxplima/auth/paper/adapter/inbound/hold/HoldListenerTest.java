@@ -50,6 +50,7 @@ final class HoldListenerTest {
     private Sessions sessions;
     private AtomicReference<AuthSettings.Hold> hold;
     private PlayerMock steve;
+    private final Set<java.util.UUID> passing = new java.util.HashSet<>();
 
     @BeforeEach
     void setUp() {
@@ -59,7 +60,12 @@ final class HoldListenerTest {
         hold = new AtomicReference<>(holding(true));
         server.getPluginManager()
                 .registerEvents(
-                        new HoldListener(sessions, hold::get, () -> Set.of("login", "l", "register"), "uxmauth"),
+                        new HoldListener(
+                                sessions,
+                                hold::get,
+                                () -> Set.of("login", "l", "register"),
+                                "uxmauth",
+                                passing::contains),
                         plugin);
         steve = server.addPlayer("Steve");
         sessions.open(steve.getUniqueId(), new AuthState.Registered(account(steve), Attempts.fresh(3)));
@@ -136,6 +142,17 @@ final class HoldListenerTest {
         assertThat(fire(new PlayerTeleportEvent(steve, from, from.clone().add(50, 0, 0)))
                         .isCancelled())
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("the plugin's own move of a held player, into the login world and back, goes through")
+    void thePluginsOwnMoveGoesThrough() {
+        Location from = steve.getLocation();
+        passing.add(steve.getUniqueId());
+
+        assertThat(fire(new PlayerTeleportEvent(steve, from, from.clone().add(50, 0, 0)))
+                        .isCancelled())
+                .isFalse();
     }
 
     @Test

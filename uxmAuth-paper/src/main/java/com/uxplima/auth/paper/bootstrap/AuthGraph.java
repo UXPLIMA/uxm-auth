@@ -46,9 +46,11 @@ import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
+import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilter;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordMask;
+import com.uxplima.auth.paper.adapter.outbound.world.LoginWorld;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.storage.sql.Database;
@@ -74,6 +76,7 @@ final class AuthGraph implements AutoCloseable {
     final LogoutCommand logout;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
+    private final LoginWorld loginWorld;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -96,17 +99,22 @@ final class AuthGraph implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
 
+        Passes passes = new Passes();
+        this.loginWorld = new LoginWorld(plugin.getServer(), screenFile::current, plugin.getLogger());
         this.hold = new HoldListener(
                 sessions,
                 () -> settings.current().hold(),
                 () -> labels,
-                plugin.getName().toLowerCase(Locale.ROOT));
+                plugin.getName().toLowerCase(Locale.ROOT),
+                passes::isPassing);
         HoldKeeper keeper = new HoldKeeper(
                 plugin,
                 scheduler,
                 new HeldStateStore(plugin.getDataFolder().toPath().resolve("held")),
                 () -> settings.current().hold(),
-                hold::isHeld);
+                hold::isHeld,
+                loginWorld::room,
+                passes);
         AuthMoments moments = new AuthMoments(
                 plugin.getServer(),
                 scheduler,
@@ -191,6 +199,7 @@ final class AuthGraph implements AutoCloseable {
 
     /** Listens, filters the log, and sends every player already online to the door. */
     void start() {
+        loginWorld.prepare();
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);

@@ -3,6 +3,7 @@ package com.uxplima.auth.paper.adapter.inbound.hold;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -53,6 +54,7 @@ import org.jspecify.annotations.Nullable;
 public final class HoldListener implements Listener {
 
     private final Sessions sessions;
+    private final Predicate<UUID> passing;
     private final Supplier<AuthSettings.Hold> hold;
     private final Supplier<Set<String>> ownCommands;
     private final String namespace;
@@ -64,6 +66,17 @@ public final class HoldListener implements Listener {
      */
     public HoldListener(
             Sessions sessions, Supplier<AuthSettings.Hold> hold, Supplier<Set<String>> ownCommands, String namespace) {
+        this(sessions, hold, ownCommands, namespace, player -> false);
+    }
+
+    /** @param passing whether a teleport of this player is the plugin's own, into the login world or back */
+    public HoldListener(
+            Sessions sessions,
+            Supplier<AuthSettings.Hold> hold,
+            Supplier<Set<String>> ownCommands,
+            String namespace,
+            Predicate<UUID> passing) {
+        this.passing = Objects.requireNonNull(passing, "passing");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.hold = Objects.requireNonNull(hold, "hold");
         this.ownCommands = Objects.requireNonNull(ownCommands, "ownCommands");
@@ -198,6 +211,9 @@ public final class HoldListener implements Listener {
     public void onTeleport(PlayerTeleportEvent event) {
         if (event instanceof PlayerPortalEvent) {
             stop(event, event.getPlayer(), AuthSettings.Hold::portals);
+            return;
+        }
+        if (passing.test(event.getPlayer().getUniqueId())) {
             return;
         }
         stop(event, event.getPlayer(), AuthSettings.Hold::teleports);

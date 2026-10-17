@@ -9,11 +9,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
@@ -46,6 +48,9 @@ public final class HoldKeeper {
     private final HeldStateStore store;
     private final Supplier<AuthSettings.Hold> hold;
     private final Predicate<Player> isHeld;
+    private final Supplier<Optional<Location>> room;
+    private final Passes passes;
+    private final BiFunction<Player, Location, CompletableFuture<Boolean>> mover;
     private final Map<UUID, HeldState> taken = new ConcurrentHashMap<>();
     private final Set<UUID> blinded = ConcurrentHashMap.newKeySet();
     private final Map<UUID, CompletableFuture<Void>> disk = new ConcurrentHashMap<>();
@@ -56,11 +61,42 @@ public final class HoldKeeper {
             HeldStateStore store,
             Supplier<AuthSettings.Hold> hold,
             Predicate<Player> isHeld) {
+        this(plugin, scheduler, store, hold, isHeld, Optional::empty, new Passes());
+    }
+
+    /**
+     * @param room where a waiting player is moved while the waiting room is the login world, or empty
+     * @param passes the players this keeper is moving, which the hold lets through
+     */
+    public HoldKeeper(
+            Plugin plugin,
+            Scheduler scheduler,
+            HeldStateStore store,
+            Supplier<AuthSettings.Hold> hold,
+            Predicate<Player> isHeld,
+            Supplier<Optional<Location>> room,
+            Passes passes) {
+        this(plugin, scheduler, store, hold, isHeld, room, passes, Player::teleportAsync);
+    }
+
+    /** @param mover how a player is moved, which a test without the server's teleport replaces */
+    public HoldKeeper(
+            Plugin plugin,
+            Scheduler scheduler,
+            HeldStateStore store,
+            Supplier<AuthSettings.Hold> hold,
+            Predicate<Player> isHeld,
+            Supplier<Optional<Location>> room,
+            Passes passes,
+            BiFunction<Player, Location, CompletableFuture<Boolean>> mover) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.store = Objects.requireNonNull(store, "store");
         this.hold = Objects.requireNonNull(hold, "hold");
         this.isHeld = Objects.requireNonNull(isHeld, "isHeld");
+        this.room = Objects.requireNonNull(room, "room");
+        this.passes = Objects.requireNonNull(passes, "passes");
+        this.mover = Objects.requireNonNull(mover, "mover");
     }
 
     /**
@@ -79,7 +115,7 @@ public final class HoldKeeper {
     /** The player logged in. Everything comes back on their own thread, and the file goes after. */
     public void giveBack(Player player) {
         Objects.requireNonNull(player, "player");
-        scheduler.entity(player, () -> restore(player));
+        scheduler.entity(player, () -> restore(player, false));
     }
 
     /**
@@ -88,7 +124,7 @@ public final class HoldKeeper {
      */
     public void leave(Player player) {
         Objects.requireNonNull(player, "player");
-        restore(player);
+        restore(player, true);
     }
 
     private void settle(Player player, Optional<HeldState> leftover) {
@@ -97,7 +133,7 @@ public final class HoldKeeper {
             // Gone before the hold was set up. A leftover stays on disk for their next join.
             return;
         }
-        leftover.ifPresent(state -> apply(player, state));
+        leftover.ifPresent(state -> apply(player, state, true));
         hideTheWaitingFrom(player);
         if (!isHeld.test(player)) {
             if (leftover.isPresent()) {
@@ -105,7 +141,9 @@ public final class HoldKeeper {
             }
             return;
         }
-        HeldState snapshot = capture(player, hold.get());
+        // A player still on their way back from the login world stood where the leftover says, not here.
+        HeldPlace place = room.get().isEmpty() ? null : placeOf(player, leftover);
+        HeldState snapshot = capture(player, hold.get(), place);
         taken.put(id, snapshot);
         onDisk(id, () -> {
             // Given back already: the player is whole and a file now would only be a stale one.
@@ -147,13 +185,18 @@ public final class HoldKeeper {
                 }
             }
         }
+        room.get().ifPresent(target -> move(player, target));
     }
 
-    private void restore(Player player) {
+    /**
+     * Gives back what was taken. A player leaving from the login world is not moved on the way out, which a
+     * quitting player cannot always finish; the file stays, and their next join moves them back.
+     */
+    private void restore(Player player, boolean leaving) {
         UUID id = player.getUniqueId();
         HeldState state = taken.remove(id);
         if (state != null) {
-            apply(player, state);
+            apply(player, state, !leaving);
         }
         if (blinded.remove(id)) {
             player.removePotionEffect(PotionEffectType.BLINDNESS);
@@ -164,7 +207,28 @@ public final class HoldKeeper {
                 scheduler.entity(other, () -> other.showPlayer(plugin, player));
             }
         }
-        onDisk(id, () -> store.delete(id));
+        if (!(leaving && state != null && state.place() != null)) {
+            onDisk(id, () -> store.delete(id));
+        }
+    }
+
+    private static @Nullable HeldPlace placeOf(Player player, Optional<HeldState> leftover) {
+        HeldPlace before = leftover.isPresent() ? leftover.get().place() : null;
+        if (before != null) {
+            return before;
+        }
+        Location here = player.getLocation();
+        return here == null || here.getWorld() == null ? null : HeldPlace.of(here);
+    }
+
+    /** Moves a player as the hold's own teleport, which the hold lets through. */
+    private void move(Player player, Location target) {
+        UUID id = player.getUniqueId();
+        passes.allow(id);
+        CompletableFuture<Void> unused = mover.apply(player, target).handle((moved, failure) -> {
+            passes.done(id);
+            return null;
+        });
     }
 
     /**
@@ -205,7 +269,7 @@ public final class HoldKeeper {
         }
     }
 
-    private static HeldState capture(Player player, AuthSettings.Hold switches) {
+    private static HeldState capture(Player player, AuthSettings.Hold switches, @Nullable HeldPlace place) {
         List<ItemStack> inventory = switches.hideInventory()
                 ? Arrays.stream(player.getInventory().getContents())
                         .map(HoldKeeper::orEmpty)
@@ -220,10 +284,11 @@ public final class HoldKeeper {
                 player.getHealth(),
                 player.getFoodLevel(),
                 player.getGameMode(),
-                inventory);
+                inventory,
+                place);
     }
 
-    private static void apply(Player player, HeldState state) {
+    private void apply(Player player, HeldState state, boolean moveBack) {
         player.setOp(state.op());
         player.setGameMode(state.gameMode());
         player.setAllowFlight(state.allowFlight());
@@ -234,6 +299,10 @@ public final class HoldKeeper {
         player.setFoodLevel(state.food());
         if (!state.inventory().isEmpty()) {
             player.getInventory().setContents(state.inventory().toArray(ItemStack[]::new));
+        }
+        HeldPlace place = state.place();
+        if (moveBack && place != null) {
+            place.on(plugin.getServer()).ifPresent(target -> move(player, target));
         }
     }
 

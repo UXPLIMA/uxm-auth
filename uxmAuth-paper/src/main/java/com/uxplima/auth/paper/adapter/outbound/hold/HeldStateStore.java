@@ -16,6 +16,7 @@ import java.util.UUID;
 import org.bukkit.GameMode;
 import org.bukkit.inventory.ItemStack;
 
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.configurate.CommentedConfigurationNode;
 import org.spongepowered.configurate.ConfigurateException;
 import org.spongepowered.configurate.ConfigurationNode;
@@ -103,6 +104,30 @@ public final class HeldStateStore {
             slots.add(item.isEmpty() ? "" : Base64.getEncoder().encodeToString(item.serializeAsBytes()));
         }
         root.node("inventory").setList(String.class, slots);
+        HeldPlace place = state.place();
+        if (place != null) {
+            ConfigurationNode at = root.node("place");
+            at.node("world").set(place.world());
+            at.node("x").set(place.x());
+            at.node("y").set(place.y());
+            at.node("z").set(place.z());
+            at.node("yaw").set(place.yaw());
+            at.node("pitch").set(place.pitch());
+        }
+    }
+
+    private static @Nullable HeldPlace place(ConfigurationNode root) {
+        ConfigurationNode at = root.node("place");
+        if (at.virtual()) {
+            return null;
+        }
+        return new HeldPlace(
+                required(at, "world").getString(""),
+                required(at, "x").getDouble(),
+                required(at, "y").getDouble(),
+                required(at, "z").getDouble(),
+                required(at, "yaw").getFloat(),
+                required(at, "pitch").getFloat());
     }
 
     private static HeldState read(ConfigurationNode root) throws ConfigurateException {
@@ -122,7 +147,8 @@ public final class HeldStateStore {
                 required(root, "health").getDouble(),
                 required(root, "food").getInt(),
                 GameMode.valueOf(required(root, "game-mode").getString("").toUpperCase(Locale.ROOT)),
-                inventory);
+                inventory,
+                place(root));
     }
 
     /** A value the file must hold. A file that lacks one is a file a crash cut short. */

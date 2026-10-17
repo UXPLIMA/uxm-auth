@@ -3,12 +3,17 @@ package com.uxplima.auth.paper.adapter.outbound.hold;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
 
@@ -36,6 +41,9 @@ final class HoldKeeperTest {
     private HeldStateStore store;
     private final Set<java.util.UUID> held = ConcurrentHashMap.newKeySet();
     private HoldKeeper keeper;
+    private final List<Boolean> moves = new ArrayList<>();
+    private final List<Runnable> later = new ArrayList<>();
+    private boolean slowMoves;
 
     @BeforeEach
     void setUp() {
@@ -234,10 +242,116 @@ final class HoldKeeperTest {
         assertThat(store.load(steve.getUniqueId())).isEmpty();
     }
 
+    @Test
+    @DisplayName("with a login world, a waiting player is moved there and back to where they stood after the login")
+    void aLoginWorldTakesThePlayerAndBringsThemBack() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)));
+        PlayerMock steve = joining("Steve");
+        Location stood = new Location(steve.getWorld(), 10.5, 70, -3.5, 90, 0);
+        steve.teleport(stood);
+
+        keeper.arrive(steve);
+        assertThat(steve.getWorld()).isEqualTo(room);
+        assertThat(store.load(steve.getUniqueId()).orElseThrow().place()).isEqualTo(HeldPlace.of(stood));
+
+        held.remove(steve.getUniqueId());
+        keeper.giveBack(steve);
+
+        assertThat(steve.getLocation()).isEqualTo(stood);
+    }
+
+    @Test
+    @DisplayName("a player who leaves from the login world keeps the file, and the next join brings them back")
+    void aQuitFromTheLoginWorldIsBroughtBackAtTheNextJoin() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)));
+        PlayerMock steve = joining("Steve");
+        Location stood = new Location(steve.getWorld(), 10.5, 70, -3.5);
+        steve.teleport(stood);
+        keeper.arrive(steve);
+
+        keeper.leave(steve);
+        assertThat(store.load(steve.getUniqueId())).isPresent();
+
+        held.remove(steve.getUniqueId());
+        keeper.arrive(steve);
+
+        assertThat(steve.getLocation()).isEqualTo(stood);
+        assertThat(store.load(steve.getUniqueId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the plugin's own move to the login world is let through the hold that stops every other teleport")
+    void theMoveIsMarkedAsTheKeepersOwn() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        Passes passes = new Passes();
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)), passes);
+        PlayerMock steve = joining("Steve");
+
+        keeper.arrive(steve);
+
+        assertThat(moves).containsExactly(true);
+        assertThat(passes.isPassing(steve.getUniqueId())).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+            "a crash in the login world, then a join that waits again, still brings the player back to their place")
+    void aCrashInTheLoginWorldKeepsThePlace() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)));
+        PlayerMock steve = joining("Steve");
+        Location stood = new Location(steve.getWorld(), 10.5, 70, -3.5);
+        store.save(
+                steve.getUniqueId(),
+                new HeldState(
+                        false, false, false, 0.2f, 0.1f, 20.0, 20, GameMode.SURVIVAL, List.of(), HeldPlace.of(stood)));
+        // The server saved them where the hold had put them.
+        steve.teleport(new Location(room, 0.5, 65, 0.5));
+        slowMoves = true;
+
+        keeper.arrive(steve);
+        later.forEach(Runnable::run);
+        slowMoves = false;
+        assertThat(steve.getWorld()).isEqualTo(room);
+
+        held.remove(steve.getUniqueId());
+        keeper.giveBack(steve);
+
+        assertThat(steve.getLocation()).isEqualTo(stood);
+    }
+
     private PlayerMock joining(String name) {
         PlayerMock player = server.addPlayer(name);
         held.add(player.getUniqueId());
         return player;
+    }
+
+    private HoldKeeper keeper(HeldStateStore files, Optional<Location> room) {
+        return keeper(files, room, new Passes());
+    }
+
+    private HoldKeeper keeper(HeldStateStore files, Optional<Location> room, Passes passes) {
+        return new HoldKeeper(
+                plugin,
+                new DirectScheduler(),
+                files,
+                () -> new AuthSettings.Hold(
+                        true, true, true, List.of(), true, true, true, true, true, true, true, true, true, true, true),
+                player -> held.contains(player.getUniqueId()),
+                () -> room,
+                passes,
+                (player, target) -> {
+                    // MockBukkit has no teleportAsync; the move is made here, and whether it was marked is kept.
+                    moves.add(passes.isPassing(player.getUniqueId()));
+                    if (slowMoves) {
+                        // A real teleport finishes later; until then the player still stands where they were.
+                        later.add(() -> player.teleport(target));
+                        return CompletableFuture.completedFuture(true);
+                    }
+                    return CompletableFuture.completedFuture(player.teleport(target));
+                });
     }
 
     private HoldKeeper keeper(HeldStateStore files) {
