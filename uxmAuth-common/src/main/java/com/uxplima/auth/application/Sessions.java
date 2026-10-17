@@ -24,13 +24,15 @@ import com.uxplima.auth.domain.state.AuthState;
 public final class Sessions {
 
     /**
-     * A connection's state, which opening of that connection it belongs to, and the visit it came as: the nonce
-     * of the proxy's claim on a network, or a random id a server gave it, so a bulletin can name this session.
+     * A connection's state, which opening of that connection it belongs to, the visit it came as (the nonce of
+     * the proxy's claim on a network, or a random id a server gave it, so a bulletin can name this session), and
+     * the host the player typed, empty when nobody knows it.
      */
-    public record Held(long generation, AuthState state, String visit) {
+    public record Held(long generation, AuthState state, String visit, String host) {
         public Held {
             Objects.requireNonNull(state, "state");
             Objects.requireNonNull(visit, "visit");
+            Objects.requireNonNull(host, "host");
         }
     }
 
@@ -44,10 +46,16 @@ public final class Sessions {
 
     /** Opens the connection as the visit the proxy named. */
     public void open(UUID connection, AuthState state, String visit) {
+        open(connection, state, visit, "");
+    }
+
+    /** Opens the connection as this visit, through the host the player typed. */
+    public void open(UUID connection, AuthState state, String visit, String host) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(visit, "visit");
-        states.compute(connection, (key, previous) -> new Held(generations.incrementAndGet(), state, visit));
+        Objects.requireNonNull(host, "host");
+        states.compute(connection, (key, previous) -> new Held(generations.incrementAndGet(), state, visit, host));
     }
 
     public Optional<AuthState> state(UUID connection) {
@@ -86,7 +94,8 @@ public final class Sessions {
         Objects.requireNonNull(change, "change");
         Held after = states.computeIfPresent(
                 connection,
-                (key, current) -> new Held(current.generation(), change.apply(current.state()), current.visit()));
+                (key, current) ->
+                        new Held(current.generation(), change.apply(current.state()), current.visit(), current.host()));
         return Optional.ofNullable(after).map(Held::state);
     }
 
@@ -103,7 +112,7 @@ public final class Sessions {
                 return current;
             }
             same.set(true);
-            return new Held(generation, change.apply(current.state()), current.visit());
+            return new Held(generation, change.apply(current.state()), current.visit(), current.host());
         });
         return same.get() && after != null ? Optional.of(after.state()) : Optional.empty();
     }

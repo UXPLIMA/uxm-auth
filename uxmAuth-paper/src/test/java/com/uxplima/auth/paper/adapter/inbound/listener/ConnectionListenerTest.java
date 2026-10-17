@@ -87,6 +87,7 @@ final class ConnectionListenerTest {
     private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
     private NetworkDoor network = NetworkDoor.none();
     private Admission admission = Admission.none();
+    private Arrivals.Resume resume = (account, address, host) -> false;
 
     @BeforeEach
     void setUp() {
@@ -144,6 +145,39 @@ final class ConnectionListenerTest {
         assertThat(world.sessions.held(alone).orElseThrow().visit())
                 .isNotBlank()
                 .isNotEqualTo("n0nce-1");
+        assertThat(world.sessions.held(alone).orElseThrow().host()).isEqualTo("localhost");
+    }
+
+    @Test
+    @DisplayName(
+            "a registered name back from where its session holds is let in by the session, and from elsewhere waits")
+    void aRememberedSessionLetsThePlayerIn() throws Exception {
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+        UUID account = steve.getUniqueId();
+        java.util.List<String> asked = new java.util.ArrayList<>();
+        resume = (id, address, host) -> {
+            asked.add(id + " " + address + " " + host);
+            return address.equals(MINE.getAddress().getHostAddress());
+        };
+
+        AsyncPlayerPreLoginEvent first = preLogin(server.createProfile(account, "Steve"), loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(first);
+        assertThat(world.sessions.state(account))
+                .hasValueSatisfying(state -> assertThat(state)
+                        .isInstanceOfSatisfying(
+                                AuthState.Authenticated.class,
+                                in -> assertThat(in.method())
+                                        .isEqualTo(com.uxplima.auth.domain.state.AuthMethod.SESSION)));
+        assertThat(asked).containsExactly(account + " " + MINE.getAddress().getHostAddress() + " localhost");
+
+        world.sessions.close(account);
+        listener(world.accounts)
+                .onPreLogin(preLogin(
+                        server.createProfile(account, "Steve"),
+                        loginConnection(new InetSocketAddress(ELSEWHERE, 50002), true)));
+        assertThat(world.sessions.state(account)).containsInstanceOf(AuthState.Registered.class);
     }
 
     @Test
@@ -767,7 +801,8 @@ final class ConnectionListenerTest {
                         () -> new DomainMark("+", false),
                         scheme,
                         network,
-                        admission),
+                        admission,
+                        resume),
                 world.notices,
                 world.door,
                 world.keeper,

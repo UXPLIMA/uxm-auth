@@ -87,7 +87,9 @@ final class ChangePasswordTest {
         change(connection, "wrong999", "fresh777");
         assertThat(heard).isEmpty();
 
+        fixture.remembered.remember(account, "10.0.0.7", fixture.clock.instant().plusSeconds(60));
         change(connection, "hunter22", "fresh777");
+        assertThat(fixture.remembered.until).isEmpty();
         String visit = fixture.sessions.held(connection).orElseThrow().visit();
         assertThat(heard).containsExactly(new Bulletin.SessionsEnded(account, java.util.Optional.of(visit)));
     }
@@ -132,7 +134,13 @@ final class ChangePasswordTest {
     void aReplaceSkipsTheOldPassword() {
         UUID connection = loggedIn("Steve", "hunter22");
         ChangePassword useCase = new ChangePassword(
-                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy, events);
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                events,
+                fixture.remembered);
 
         assertThat(useCase.replace(connection, Password.of("abc")).join())
                 .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.TooShort(6)));
@@ -151,7 +159,8 @@ final class ChangePasswordTest {
                                 fixture.lane,
                                 fixture.sessions,
                                 () -> fixture.policy,
-                                events)
+                                events,
+                                fixture.remembered)
                         .replace(connection, Password.of("fresh777"))
                         .join())
                 .isEqualTo(new ChangeResult.NotLoggedIn());
@@ -164,7 +173,7 @@ final class ChangePasswordTest {
     }
 
     private boolean login(UUID connection, String password) {
-        new LogOut(fixture.sessions, () -> AuthFixture.MAX_ATTEMPTS).run(connection);
+        new LogOut(fixture.sessions, () -> AuthFixture.MAX_ATTEMPTS, fixture.remembered).run(connection);
         return new LogIn(fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, fixture.clock)
                         .run(connection, Password.of(password), "10.0.0.7")
                         .join()
@@ -173,7 +182,13 @@ final class ChangePasswordTest {
 
     private ChangeResult change(UUID connection, String old, String fresh) {
         return new ChangePassword(
-                        fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy, events)
+                        fixture.accounts,
+                        fixture.hashing,
+                        fixture.lane,
+                        fixture.sessions,
+                        () -> fixture.policy,
+                        events,
+                        fixture.remembered)
                 .run(connection, Password.of(old), Password.of(fresh))
                 .join();
     }

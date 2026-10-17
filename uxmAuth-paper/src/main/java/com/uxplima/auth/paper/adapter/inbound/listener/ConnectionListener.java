@@ -146,9 +146,12 @@ public final class ConnectionListener implements Listener {
         if (profile != null) {
             event.setPlayerProfile(profile);
         }
-        opens.visit()
-                .ifPresentOrElse(
-                        visit -> sessions.open(id, opens.state(), visit), () -> sessions.open(id, opens.state()));
+        String host = event.getHostname();
+        sessions.open(
+                id,
+                opens.state(),
+                opens.visit().orElseGet(() -> UUID.randomUUID().toString()),
+                host);
         for (Arrivals.Notice notice : opens.notices()) {
             if (notice.afterLogin()) {
                 notices.onceIn(id, notice.notice());

@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.NetworkEvents;
+import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
@@ -29,6 +30,7 @@ public final class ChangePassword {
     private final Sessions sessions;
     private final Supplier<PasswordPolicy> policy;
     private final NetworkEvents events;
+    private final RememberedSessions remembered;
 
     public ChangePassword(
             AccountRepository accounts,
@@ -36,13 +38,15 @@ public final class ChangePassword {
             HashingLane lane,
             Sessions sessions,
             Supplier<PasswordPolicy> policy,
-            NetworkEvents events) {
+            NetworkEvents events,
+            RememberedSessions remembered) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.policy = Objects.requireNonNull(policy, "policy");
         this.events = Objects.requireNonNull(events, "events");
+        this.remembered = Objects.requireNonNull(remembered, "remembered");
     }
 
     /** Both passwords are wiped once the answer is known, whatever it is. */
@@ -109,13 +113,20 @@ public final class ChangePassword {
                 state -> state instanceof AuthState.Authenticated authenticated
                         ? new AuthState.Authenticated(updated, authenticated.method())
                         : state);
-        // The password ends every session of the account on every server, but the one that changed it.
-        // A visit that cannot be named keeps nothing: every session ends, this one too.
+        endOtherSessions(connection, id);
+        return new ChangeResult.Changed();
+    }
+
+    /**
+     * The password ends every session of the account on every server, and every remembered one, but the one that
+     * changed it. A visit that cannot be named keeps nothing: every session ends, this one too.
+     */
+    private void endOtherSessions(UUID connection, UUID id) {
         Optional<String> keep = sessions.held(connection)
                 .map(Sessions.Held::visit)
                 .filter(visit -> Bulletin.VISIT.matcher(visit).matches());
+        remembered.forget(id);
         events.publish(new Bulletin.SessionsEnded(id, keep));
-        return new ChangeResult.Changed();
     }
 
     private boolean wrong(Password old, PasswordHash stored) {

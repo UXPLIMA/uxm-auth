@@ -23,6 +23,7 @@ import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.uxmlib.scheduler.Scheduler;
@@ -72,6 +73,12 @@ public final class Arrivals {
         }
     }
 
+    /** Whether an account back from this address, through this host, is let in by a session it still has. */
+    @FunctionalInterface
+    public interface Resume {
+        boolean resumes(UUID account, String address, String host);
+    }
+
     /** Something the player is told once they stand in the world, before or after their login. */
     public record Notice(Notices.Notice notice, boolean afterLogin) {
         public Notice {
@@ -89,12 +96,14 @@ public final class Arrivals {
     private final UuidScheme scheme;
     private final NetworkDoor network;
     private final Admission admission;
+    private final Resume resume;
 
     /**
      * @param mark the domain rule's mark, for a connection through the cracked address
      * @param scheme the UUID scheme this start recorded, which a cracked player plays under too
      * @param network the proxy's word, on a server behind it
      * @param admission the rules a connection meets before its name is read, on a server alone
+     * @param resume whether an account back from this address through this host is let in by its session
      */
     public Arrivals(
             ReadTheName names,
@@ -106,7 +115,8 @@ public final class Arrivals {
             Supplier<DomainMark> mark,
             UuidScheme scheme,
             NetworkDoor network,
-            Admission admission) {
+            Admission admission,
+            Resume resume) {
         this.names = Objects.requireNonNull(names, "names");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.hellos = Objects.requireNonNull(hellos, "hellos");
@@ -117,6 +127,7 @@ public final class Arrivals {
         this.scheme = Objects.requireNonNull(scheme, "scheme");
         this.network = Objects.requireNonNull(network, "network");
         this.admission = Objects.requireNonNull(admission, "admission");
+        this.resume = Objects.requireNonNull(resume, "resume");
     }
 
     /** What this pre-login comes to. */
@@ -220,6 +231,13 @@ public final class Arrivals {
         if (usual.unverified() && state instanceof AuthState.Unregistered unregistered) {
             state = new AuthState.Unregistered(unregistered.name(), true);
         }
+        if (!networked
+                && state instanceof AuthState.Registered registered
+                && resume.resumes(
+                        registered.account().id(), event.getAddress().getHostAddress(), event.getHostname())) {
+            // Behind a proxy the proxy's door resumes a session; alone, this one does.
+            state = new AuthState.Authenticated(registered.account(), AuthMethod.SESSION);
+        }
         return played(event, state, notices(usual, state), visit);
     }
 
@@ -245,7 +263,8 @@ public final class Arrivals {
     }
 
     /**
-     * The id and name a player with a password plays under: an account's own, or the scheme's for a new name.
+     * The id and name a player with a password plays under: an account's own, waiting or resumed by its session,
+     * or the scheme's for a new name.
      * An offline server already derives the offline id from the name as typed, so a new name keeps it unless it
      * carries the mark or the scheme hands out its own.
      */
@@ -257,6 +276,9 @@ public final class Arrivals {
         if (state instanceof AuthState.Registered registered) {
             name = registered.account().name();
             id = registered.account().id();
+        } else if (state instanceof AuthState.Authenticated resumed) {
+            name = resumed.account().name();
+            id = resumed.account().id();
         } else {
             name = ((AuthState.Unregistered) state).name();
             boolean derived =

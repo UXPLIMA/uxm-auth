@@ -22,6 +22,7 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LogOut;
@@ -32,6 +33,7 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.Argon2idHasher;
@@ -53,6 +55,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
+import com.uxplima.auth.paper.adapter.inbound.hold.Remembering;
 import com.uxplima.auth.paper.adapter.inbound.hold.Reports;
 import com.uxplima.auth.paper.adapter.inbound.hold.ScreenOffer;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
@@ -103,6 +106,13 @@ public final class AuthWorld implements AutoCloseable {
     public final LogIn logIn;
     public final ChangePassword change;
     public final LogOut logOut;
+    public final SqlRememberedSessions remembered;
+    public final Remember remember;
+    /** The shared-address hosts of this world; a test sets them. */
+    public List<String> sharedHosts = List.of();
+
+    /** For whom sessions are on in this world; a test sets it. */
+    public Remember.Settings sessionSettings = new Remember.Settings(Remember.Mode.CHOSEN, Duration.ofMinutes(60));
 
     public AuthWorld(Plugin plugin, Path folder, AuthSettings.Passwords passwords) {
         this.passwords = passwords;
@@ -127,6 +137,9 @@ public final class AuthWorld implements AutoCloseable {
                 moments,
                 messages);
         this.notices = new Notices(messages);
+        this.remembered = new SqlRememberedSessions(database, clock);
+        this.remember =
+                new Remember(remembered, () -> sessionSettings, () -> new HostPatterns(sharedHosts), clock::instant);
         this.door = new Door(
                 sessions,
                 keeper,
@@ -151,11 +164,13 @@ public final class AuthWorld implements AutoCloseable {
                     public void waiting(Player player) {
                         reported.add("waiting");
                     }
-                });
+                },
+                new Remembering(remember, sessions, scheduler));
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
-        this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents());
-        this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS);
+        this.change =
+                new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered);
+        this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS, remembered);
     }
 
     /** The defaults the shipped file has. */

@@ -3,6 +3,7 @@ package com.uxplima.auth.paper.bootstrap;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -20,6 +21,7 @@ import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LetBedrockIn;
@@ -37,6 +39,7 @@ import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.Admission;
+import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
@@ -55,6 +58,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
+import com.uxplima.auth.paper.adapter.inbound.hold.Remembering;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
 import com.uxplima.auth.paper.adapter.inbound.listener.Arrivals;
@@ -142,6 +146,12 @@ final class AuthGraph implements AutoCloseable {
         this.channelReports = new ChannelReports(plugin, () -> claims(settings), Clock.systemUTC());
         Hashing hashing = boot.hashers();
         SqlAccountRepository accounts = new SqlAccountRepository(database);
+        SqlRememberedSessions remembered = new SqlRememberedSessions(database);
+        Remember remember = new Remember(
+                remembered,
+                () -> settings.current().protection().sessions(),
+                () -> settings.current().protection().sharedHosts(),
+                Instant::now);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
 
@@ -237,7 +247,8 @@ final class AuthGraph implements AutoCloseable {
                         shower),
                 welcomes,
                 notices,
-                channelReports);
+                channelReports,
+                new Remembering(remember, sessions, scheduler));
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -272,7 +283,8 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        new Admission(() -> settings.current().protection().sharedHosts(), List.of())),
+                        new Admission(() -> settings.current().protection().sharedHosts(), List.of()),
+                        remember::resumes),
                 notices,
                 door,
                 keeper,
@@ -292,13 +304,14 @@ final class AuthGraph implements AutoCloseable {
                         lane,
                         sessions,
                         () -> settings.current().passwordPolicy(),
-                        events),
+                        events,
+                        remembered),
                 moments,
                 () -> settings.current().passwords(),
                 messages,
                 replies);
         LogOut logOut =
-                new LogOut(sessions, () -> settings.current().passwords().maxAttempts());
+                new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), remembered);
         this.logout = new LogoutCommand(logOut, door, moments, messages);
         events.listen(
                 new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));

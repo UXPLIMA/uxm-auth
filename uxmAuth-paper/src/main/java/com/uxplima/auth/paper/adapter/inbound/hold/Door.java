@@ -26,6 +26,7 @@ public final class Door {
     private final Welcomes welcomes;
     private final Notices notices;
     private final Reports reports;
+    private final Remembering remembering;
 
     public Door(
             Sessions sessions,
@@ -36,7 +37,8 @@ public final class Door {
             ScreenOffer screens,
             Welcomes welcomes,
             Notices notices,
-            Reports reports) {
+            Reports reports,
+            Remembering remembering) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -46,6 +48,7 @@ public final class Door {
         this.welcomes = Objects.requireNonNull(welcomes, "welcomes");
         this.notices = Objects.requireNonNull(notices, "notices");
         this.reports = Objects.requireNonNull(reports, "reports");
+        this.remembering = Objects.requireNonNull(remembering, "remembering");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -54,18 +57,7 @@ public final class Door {
         keeper.arrive(player);
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
         if (state instanceof AuthState.Authenticated in) {
-            if (in.method() != AuthMethod.NETWORK) {
-                // A login the network vouched for came from the proxy, which already knows it.
-                reports.loggedIn(player, in.method());
-            }
-            // Let in before the world, by the dialog, by Floodgate or by Mojang: the way-in moment waited for a
-            // world.
-            welcomes.take(player.getUniqueId())
-                    .or(() -> in.method() == AuthMethod.BEDROCK || in.method() == AuthMethod.PREMIUM
-                            ? Optional.of(AuthSettings.Moment.LOGGED_IN)
-                            : Optional.empty())
-                    .ifPresent(moment -> greeter.welcome(player, moment));
-            notices.deliver(player, true);
+            arrivedIn(player, in);
             return;
         }
         if (state == null) {
@@ -80,6 +72,25 @@ public final class Door {
                 state instanceof AuthState.Unregistered
                         ? AuthSettings.Moment.JOIN_UNREGISTERED
                         : AuthSettings.Moment.JOIN_REGISTERED);
+    }
+
+    /** A player who arrives already let in: told to the proxy, remembered, and greeted. */
+    private void arrivedIn(Player player, AuthState.Authenticated in) {
+        if (in.method() != AuthMethod.NETWORK) {
+            // A login the network vouched for came from the proxy, which already knows it.
+            reports.loggedIn(player, in.method());
+        }
+        remembering.loggedIn(player, in);
+        // Let in before the world, by the dialog, by a session, by Floodgate or by Mojang: the way-in moment
+        // waited for a world.
+        welcomes.take(player.getUniqueId())
+                .or(() -> in.method() == AuthMethod.BEDROCK
+                                || in.method() == AuthMethod.PREMIUM
+                                || in.method() == AuthMethod.SESSION
+                        ? Optional.of(AuthSettings.Moment.LOGGED_IN)
+                        : Optional.empty())
+                .ifPresent(moment -> greeter.welcome(player, moment));
+        notices.deliver(player, true);
     }
 
     /** The player left: a greeting and the notices that waited for them are dropped. */
@@ -102,7 +113,10 @@ public final class Door {
         sessions.state(player.getUniqueId())
                 .filter(AuthState.Authenticated.class::isInstance)
                 .map(AuthState.Authenticated.class::cast)
-                .ifPresent(in -> reports.loggedIn(player, in.method()));
+                .ifPresent(in -> {
+                    reports.loggedIn(player, in.method());
+                    remembering.loggedIn(player, in);
+                });
         moments.fire(player, moment);
         notices.deliver(player, true);
     }

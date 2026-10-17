@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntSupplier;
 
+import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthState;
 
@@ -23,10 +24,13 @@ public final class LogOut {
 
     private final Sessions sessions;
     private final IntSupplier maxAttempts;
+    private final RememberedSessions remembered;
 
-    public LogOut(Sessions sessions, IntSupplier maxAttempts) {
+    /** @param remembered the sessions a logout ends, so the next join asks the password */
+    public LogOut(Sessions sessions, IntSupplier maxAttempts, RememberedSessions remembered) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.maxAttempts = Objects.requireNonNull(maxAttempts, "maxAttempts");
+        this.remembered = Objects.requireNonNull(remembered, "remembered");
     }
 
     /** Sends the player to the door, if they were in and have a password to come back with. */
@@ -44,6 +48,13 @@ public final class LogOut {
             result.set(Result.LOGGED_OUT);
             return new AuthState.Registered(authenticated.account(), Attempts.fresh(maxAttempts.getAsInt()));
         });
-        return Objects.requireNonNull(result.get(), "result");
+        Result done = Objects.requireNonNull(result.get(), "result");
+        if (done == Result.LOGGED_OUT) {
+            sessions.state(connection)
+                    .filter(AuthState.Registered.class::isInstance)
+                    .map(state -> ((AuthState.Registered) state).account().id())
+                    .ifPresent(remembered::forget);
+        }
+        return done;
     }
 }

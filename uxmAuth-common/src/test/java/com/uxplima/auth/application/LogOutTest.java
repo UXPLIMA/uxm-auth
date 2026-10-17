@@ -31,7 +31,8 @@ final class LogOutTest {
                 .run(connection, Password.of("hunter22"), "10.0.0.7")
                 .join();
 
-        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isEqualTo(LogOut.Result.LOGGED_OUT);
+        assertThat(new LogOut(fixture.sessions, () -> 5, fixture.remembered).run(connection))
+                .isEqualTo(LogOut.Result.LOGGED_OUT);
 
         assertThat(fixture.sessions.state(connection))
                 .hasValueSatisfying(state -> assertThat(state)
@@ -41,11 +42,32 @@ final class LogOutTest {
     }
 
     @Test
+    @DisplayName("a logout ends the account's remembered sessions, and a player not logged in ends none")
+    void logoutEndsTheRememberedSessions() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        UUID account = fixture.accounts
+                .findByName(new PlayerName("Steve"))
+                .orElseThrow()
+                .id();
+        fixture.remembered.remember(account, "10.0.0.7", fixture.clock.instant().plusSeconds(60));
+
+        new LogOut(fixture.sessions, () -> 5, fixture.remembered).run(connection);
+        assertThat(fixture.remembered.until).isNotEmpty();
+
+        new LogIn(fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, fixture.clock)
+                .run(connection, Password.of("hunter22"), "10.0.0.7")
+                .join();
+        new LogOut(fixture.sessions, () -> 5, fixture.remembered).run(connection);
+        assertThat(fixture.remembered.until).isEmpty();
+    }
+
+    @Test
     @DisplayName("a player who is not logged in has nothing to log out of")
     void nothingToLogOutOf() {
         UUID connection = fixture.registered("Steve", "hunter22");
 
-        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isEqualTo(LogOut.Result.NOT_LOGGED_IN);
+        assertThat(new LogOut(fixture.sessions, () -> 5, fixture.remembered).run(connection))
+                .isEqualTo(LogOut.Result.NOT_LOGGED_IN);
     }
 
     @Test
@@ -56,7 +78,8 @@ final class LogOutTest {
                 .admit(connection, new PlayerName(".Steve"), false, "10.0.0.7");
         fixture.sessions.open(connection, state);
 
-        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isEqualTo(LogOut.Result.NO_PASSWORD);
+        assertThat(new LogOut(fixture.sessions, () -> 5, fixture.remembered).run(connection))
+                .isEqualTo(LogOut.Result.NO_PASSWORD);
         assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Authenticated.class);
     }
 }

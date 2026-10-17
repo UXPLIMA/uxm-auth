@@ -30,6 +30,7 @@ public final class AuthFixture implements AutoCloseable {
 
     public final InMemoryAccounts accounts = new InMemoryAccounts();
     public final Sessions sessions = new Sessions();
+    public final KeptSessions remembered = new KeptSessions();
     public final Hashing hashing = new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4)));
     public final PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 72);
     public final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);

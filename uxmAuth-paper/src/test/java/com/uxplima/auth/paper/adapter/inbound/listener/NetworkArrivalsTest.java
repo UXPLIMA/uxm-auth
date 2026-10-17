@@ -94,7 +94,8 @@ final class NetworkArrivalsTest {
                 () -> new DomainMark("+", false),
                 scheme,
                 new NetworkDoor(() -> Optional.of(claims), world.accounts::findById, world.clock, logger),
-                com.uxplima.auth.application.protection.Admission.none());
+                com.uxplima.auth.application.protection.Admission.none(),
+                (account, address, host) -> true);
     }
 
     private AsyncPlayerPreLoginEvent arriving(UUID id, String name, Optional<String> claim) {
@@ -151,6 +152,20 @@ final class NetworkArrivalsTest {
         assertThat(opened.state()).isEqualTo(new AuthState.Unregistered(new PlayerName("Newbie"), true));
         assertThat(opened.id()).isEqualTo(given);
         assertThat(opened.visit()).contains("n0nce");
+    }
+
+    @Test
+    @DisplayName(
+            "a registered player the proxy sent waiting waits here too: behind a proxy only its door resumes a session")
+    void aWaitingClaimIsNotResumedHere() {
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        AsyncPlayerPreLoginEvent event = arriving(
+                steve.getUniqueId(),
+                "Steve",
+                Optional.of(signed(steve.getUniqueId(), "Steve", new Claim.Waiting(false, false, false))));
+
+        assertThat(opens(arrivals().arrive(event)).state()).isInstanceOf(AuthState.Registered.class);
     }
 
     @Test

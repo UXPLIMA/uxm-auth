@@ -6,14 +6,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
-import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.testing.KeptSessions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -25,39 +22,7 @@ final class RememberTest {
     private static final String PLAY = "play.example.org";
     private static final Instant NOW = Instant.parse("2026-10-18T10:00:00Z");
 
-    /** The sessions in memory, keyed by account and address. */
-    private static final class Kept implements RememberedSessions {
-        final Map<String, Instant> until = new HashMap<>();
-        final Map<UUID, Boolean> choices = new HashMap<>();
-
-        @Override
-        public void remember(UUID account, String address, Instant expires) {
-            until.put(account + "@" + address, expires);
-        }
-
-        @Override
-        public boolean holds(UUID account, String address, Instant now) {
-            Instant expires = until.get(account + "@" + address);
-            return expires != null && now.isBefore(expires);
-        }
-
-        @Override
-        public void forget(UUID account) {
-            until.keySet().removeIf(key -> key.startsWith(account + "@"));
-        }
-
-        @Override
-        public Optional<Boolean> choice(UUID account) {
-            return Optional.ofNullable(choices.get(account));
-        }
-
-        @Override
-        public void choose(UUID account, boolean remember) {
-            choices.put(account, remember);
-        }
-    }
-
-    private final Kept kept = new Kept();
+    private final KeptSessions kept = new KeptSessions();
     private Remember.Mode mode = Remember.Mode.CHOSEN;
     private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
