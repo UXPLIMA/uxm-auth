@@ -57,7 +57,9 @@ final class HoldListenerTest {
         sessions = new Sessions();
         hold = new AtomicReference<>(holding(true));
         server.getPluginManager()
-                .registerEvents(new HoldListener(sessions, hold::get, () -> Set.of("login", "l", "register")), plugin);
+                .registerEvents(
+                        new HoldListener(sessions, hold::get, () -> Set.of("login", "l", "register"), "uxmauth"),
+                        plugin);
         steve = server.addPlayer("Steve");
         sessions.open(steve.getUniqueId(), new AuthState.Registered(account(steve), Attempts.fresh(3)));
     }
@@ -156,6 +158,53 @@ final class HoldListenerTest {
         assertThat(fire(new PlayerMoveEvent(npc, from, from.clone().add(1, 0, 0)))
                         .isCancelled())
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("another plugin's command under one of this plugin's labels is held")
+    void aNamespacedCommandOfAnotherPluginIsHeld() {
+        assertThat(command("/evil:login hunter22").isCancelled()).isTrue();
+        assertThat(command("/uxmauth:login hunter22").isCancelled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("an allowed command is compared whole, so a namespace passes only when it is written")
+    void allowedCommandsAreComparedWhole() {
+        hold.set(new AuthSettings.Hold(
+                true, true, true, List.of("spawn"), true, true, true, true, true, true, true, true, true, true, true));
+        assertThat(command("/essentials:spawn").isCancelled()).isTrue();
+
+        hold.set(new AuthSettings.Hold(
+                true,
+                true,
+                true,
+                List.of("essentials:spawn"),
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true));
+        assertThat(command("/essentials:spawn").isCancelled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the legacy chat event is held too, so no old chat listener reads a typed password")
+    @SuppressWarnings("deprecation")
+    void legacyChatIsHeld() {
+        org.bukkit.event.player.AsyncPlayerChatEvent legacy =
+                new org.bukkit.event.player.AsyncPlayerChatEvent(true, steve, "hunter22", Set.of());
+
+        java.util.concurrent.Future<?> fired = server.getScheduler().executeAsyncEvent(legacy);
+        server.getScheduler().waitAsyncEventsFinished();
+
+        assertThat(fired).isDone();
+        assertThat(legacy.isCancelled()).isTrue();
     }
 
     private PlayerCommandPreprocessEvent command(String line) {

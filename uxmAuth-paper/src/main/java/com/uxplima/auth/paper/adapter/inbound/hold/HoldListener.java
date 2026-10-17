@@ -54,15 +54,19 @@ public final class HoldListener implements Listener {
     private final Sessions sessions;
     private final Supplier<AuthSettings.Hold> hold;
     private final Supplier<Set<String>> ownCommands;
+    private final String namespace;
 
     /**
      * @param ownCommands every label and alias of this plugin's player commands, in lower case, which a
      *     waiting player must always be able to run
+     * @param namespace the prefix the server puts before this plugin's commands, in lower case
      */
-    public HoldListener(Sessions sessions, Supplier<AuthSettings.Hold> hold, Supplier<Set<String>> ownCommands) {
+    public HoldListener(
+            Sessions sessions, Supplier<AuthSettings.Hold> hold, Supplier<Set<String>> ownCommands, String namespace) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.hold = Objects.requireNonNull(hold, "hold");
         this.ownCommands = Objects.requireNonNull(ownCommands, "ownCommands");
+        this.namespace = Objects.requireNonNull(namespace, "namespace").toLowerCase(Locale.ROOT);
     }
 
     /** Whether this player waits to log in. */
@@ -83,6 +87,16 @@ public final class HoldListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::chat);
+    }
+
+    /**
+     * The older chat event, which Paper still fires for listeners written against it. A chat bridge or a log
+     * that listens here would otherwise read a password a waiting player typed into chat by mistake.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    @SuppressWarnings("deprecation")
+    public void onLegacyChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
         stop(event, event.getPlayer(), AuthSettings.Hold::chat);
     }
 
@@ -185,19 +199,25 @@ public final class HoldListener implements Listener {
         }
     }
 
+    /**
+     * Whether a waiting player may run this label. This plugin's own commands pass bare or under this plugin's
+     * own namespace, never under another plugin's. An operator's allowed command is compared whole, so
+     * {@code spawn} allows {@code /spawn} and only {@code essentials:spawn} allows {@code /essentials:spawn}.
+     */
     private boolean allowed(String label) {
-        return ownCommands.get().contains(label)
+        int colon = label.indexOf(':');
+        String bare = colon < 0 ? label : label.substring(colon + 1);
+        boolean ours = colon < 0 || label.substring(0, colon).equals(namespace);
+        return (ours && ownCommands.get().contains(bare))
                 || hold.get().allowedCommands().stream().anyMatch(command -> command.equalsIgnoreCase(label));
     }
 
-    /** The command's label in lower case, without its slash and without a plugin's namespace. */
+    /** The command's label in lower case, without its slash, with its namespace if it was written. */
     static String labelOf(String line) {
         String trimmed = line.strip();
         String withoutSlash = trimmed.startsWith("/") ? trimmed.substring(1) : trimmed;
         int space = withoutSlash.indexOf(' ');
-        String label = space < 0 ? withoutSlash : withoutSlash.substring(0, space);
-        int colon = label.indexOf(':');
-        return (colon < 0 ? label : label.substring(colon + 1)).toLowerCase(Locale.ROOT);
+        return (space < 0 ? withoutSlash : withoutSlash.substring(0, space)).toLowerCase(Locale.ROOT);
     }
 
     private static @Nullable Entity dealer(Entity damager) {
