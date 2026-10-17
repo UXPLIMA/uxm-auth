@@ -39,6 +39,9 @@ public final class ScreenAnswers {
         boolean ticked(String key);
     }
 
+    private static final String LOGIN_PERMISSION = "uxmauth.login";
+    private static final String REGISTER_PERMISSION = "uxmauth.register";
+
     private final AuthScreens screens;
     private final RegisterAccount register;
     private final LogIn logIn;
@@ -78,9 +81,16 @@ public final class ScreenAnswers {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(action, "action");
         Objects.requireNonNull(answer, "answer");
+        // A screen is another way to type the command, so it asks the command's permission.
         return switch (action) {
-            case AuthScreens.LOGIN -> login(player, answer);
-            case AuthScreens.REGISTER -> register(player, answer);
+            case AuthScreens.LOGIN ->
+                player.hasPermission(LOGIN_PERMISSION)
+                        ? login(player, answer)
+                        : CompletableFuture.completedFuture(null);
+            case AuthScreens.REGISTER ->
+                player.hasPermission(REGISTER_PERMISSION)
+                        ? register(player, answer)
+                        : CompletableFuture.completedFuture(null);
             case AuthScreens.CANCEL -> cancel(player);
             default -> CompletableFuture.completedFuture(null);
         };

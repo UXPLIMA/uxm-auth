@@ -7,6 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionDefault;
+
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
@@ -43,6 +46,9 @@ final class ScreenAnswersTest {
     void setUp() {
         server = MockBukkit.mock();
         world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords());
+        // The plugin file grants both to everyone; the test server has to be told so.
+        server.getPluginManager().addPermission(new Permission("uxmauth.login", PermissionDefault.TRUE));
+        server.getPluginManager().addPermission(new Permission("uxmauth.register", PermissionDefault.TRUE));
         steve = server.addPlayer("Steve");
         settings = new com.uxplima.auth.adapter.outbound.ScreenFile(folder.resolve("screens.conf")).current();
     }
@@ -125,6 +131,29 @@ final class ScreenAnswersTest {
         settings = withCancel(ScreenSettings.Cancel.KICK);
         world.scheduler.settle(answers().answer(steve, AuthScreens.CANCEL, answer(Map.of())));
         assertThat(steve.isOnline()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a player denied the login command cannot log in through the screen either")
+    void theLoginScreenAsksTheCommandsPermission() {
+        world.registered(steve, "hunter22");
+        steve.addAttachment(MockBukkit.createMockPlugin("Perms"), "uxmauth.login", false);
+
+        world.scheduler.settle(answers().answer(steve, AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a player denied the register command cannot register through the screen either")
+    void theRegisterScreenAsksTheCommandsPermission() {
+        world.unregistered(steve);
+        steve.addAttachment(MockBukkit.createMockPlugin("Perms"), "uxmauth.register", false);
+
+        world.scheduler.settle(answers()
+                .answer(steve, AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
     }
 
     private ScreenSettings withCancel(ScreenSettings.Cancel cancel) {
