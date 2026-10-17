@@ -39,6 +39,7 @@ public final class ScreenAnswers {
 
     private static final String LOGIN_PERMISSION = "uxmauth.login";
     private static final String REGISTER_PERMISSION = "uxmauth.register";
+    private static final String CLAIM_PERMISSION = "uxmauth.claim";
 
     private final AuthScreens screens;
     private final RegisterAccount register;
@@ -126,7 +127,10 @@ public final class ScreenAnswers {
             case AuthScreens.REGISTER ->
                 guest.may(REGISTER_PERMISSION) ? register(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.CANCEL -> cancel(guest);
-            case AuthScreens.CLAIM -> claim(guest);
+            case AuthScreens.CLAIM ->
+                guest.may(CLAIM_PERMISSION) && screens.offersClaim()
+                        ? claim(guest)
+                        : CompletableFuture.completedFuture(null);
             default -> CompletableFuture.completedFuture(null);
         };
     }

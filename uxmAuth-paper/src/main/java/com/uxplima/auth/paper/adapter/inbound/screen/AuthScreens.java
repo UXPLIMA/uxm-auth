@@ -188,10 +188,22 @@ public final class AuthScreens {
                 key, text(reader, screen.label(key)), passwords.get().maxLength());
     }
 
-    /** Log in, "this name is mine" while a name can be claimed and the operator labels it, and leave. */
+    /**
+     * Whether the login screen carries "this name is mine" now: a name can be claimed here, the operator labels
+     * the button, and the screen is not the pad. A press is honoured only while this holds, whatever a client
+     * sends.
+     */
+    public boolean offersClaim() {
+        ScreenSettings settings = screens.get();
+        return claimable.getAsBoolean()
+                && !settings.pinPad()
+                && !settings.login().label(CLAIM).isEmpty();
+    }
+
+    /** Log in, "this name is mine" while the screen offers it, and leave. */
     private List<DialogSpec.Button> loginButtons(Audience reader, ScreenSettings.Screen screen) {
         String claim = screen.label(CLAIM);
-        if (claim.isEmpty() || !claimable.getAsBoolean()) {
+        if (!offersClaim()) {
             return buttons(reader, screen, LOGIN);
         }
         return List.of(

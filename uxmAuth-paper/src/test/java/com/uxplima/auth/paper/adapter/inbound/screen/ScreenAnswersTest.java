@@ -51,6 +51,7 @@ final class ScreenAnswersTest {
         // The plugin file grants both to everyone; the test server has to be told so.
         server.getPluginManager().addPermission(new Permission("uxmauth.login", PermissionDefault.TRUE));
         server.getPluginManager().addPermission(new Permission("uxmauth.register", PermissionDefault.TRUE));
+        server.getPluginManager().addPermission(new Permission("uxmauth.claim", PermissionDefault.TRUE));
         steve = server.addPlayer("Steve");
         settings = new com.uxplima.auth.adapter.outbound.ScreenFile(folder.resolve("screens.conf")).current();
     }
@@ -162,6 +163,30 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("a claim press where the login screen offers no claim is thrown away, whatever the client sends")
+    void aClaimPressWithoutTheButtonIsThrownAway() {
+        world.registered(steve, "hunter22");
+        claimable = false;
+
+        world.scheduler.settle(answers().answer(guest(), "claim", answer(Map.of())));
+
+        assertThat(steve.isOnline()).isTrue();
+        assertThat(claimed).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a player denied the claim command cannot claim through the screen either")
+    void theClaimButtonAsksTheCommandsPermission() {
+        world.registered(steve, "hunter22");
+        steve.addAttachment(MockBukkit.createMockPlugin(), "uxmauth.claim", false);
+
+        world.scheduler.settle(answers().answer(guest(), "claim", answer(Map.of())));
+
+        assertThat(steve.isOnline()).isTrue();
+        assertThat(claimed).isEmpty();
+    }
+
+    @Test
     @DisplayName("a player denied the login command cannot log in through the screen either")
     void theLoginScreenAsksTheCommandsPermission() {
         world.registered(steve, "hunter22");
@@ -198,10 +223,11 @@ final class ScreenAnswersTest {
 
     private final List<String> claimed = new java.util.ArrayList<>();
     private ClaimName.Result claimResult = ClaimName.Result.ASKED;
+    private boolean claimable = true;
 
     private ScreenAnswers answers() {
-        AuthScreens screens =
-                new AuthScreens(() -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
+        AuthScreens screens = new AuthScreens(
+                () -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()), () -> claimable);
         ScreenShower shower = new ScreenShower() {
             @Override
             public void show(Audience who, DialogSpec spec) {
