@@ -102,6 +102,14 @@ public final class AuthSettings {
         }
     }
 
+    /** Where a player waits on a network before logging in. */
+    public enum WaitIn {
+        /** On a server, at its dialog or in its frozen world. */
+        SERVER,
+        /** In a world LimboAPI builds inside the proxy, which no server sees. */
+        LIMBO
+    }
+
     /**
      * Where the proxy sends a player: an auth server while they wait, and once logged in a lobby, their last
      * server or the server of the address they typed. Every name is a server in the proxy's own list.
@@ -137,12 +145,20 @@ public final class AuthSettings {
      * @param allowedCommands the proxy's own commands a player may run before logging in
      */
     public record Network(
-            boolean enabled, String secret, Duration claimFor, List<String> allowedCommands, Routing routing) {
+            boolean enabled,
+            String secret,
+            Duration claimFor,
+            List<String> allowedCommands,
+            Routing routing,
+            WaitIn waitIn,
+            String limboFile) {
         public Network {
             Objects.requireNonNull(secret, "secret");
             Objects.requireNonNull(claimFor, "claimFor");
             allowedCommands = List.copyOf(Objects.requireNonNull(allowedCommands, "allowedCommands"));
             Objects.requireNonNull(routing, "routing");
+            Objects.requireNonNull(waitIn, "waitIn");
+            Objects.requireNonNull(limboFile, "limboFile");
             if (enabled && secret.isBlank()) {
                 throw new IllegalArgumentException("network.enabled is true and network.secret is empty. The proxy"
                         + " writes the secret into its own data folder on its first start: copy it here.");

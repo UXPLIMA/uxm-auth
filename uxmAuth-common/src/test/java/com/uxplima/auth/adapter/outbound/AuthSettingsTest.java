@@ -388,6 +388,17 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("a waiting player waits on a server unless the proxy is told to keep them in a LimboAPI world")
+    void theWaitIsOnAServerByDefault(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").network().waitIn()).isEqualTo(AuthSettings.WaitIn.SERVER);
+        assertThat(settingsFrom(folder, "").network().limboFile()).isEqualTo("limbo.schem");
+        assertThat(settingsFrom(folder, "network { wait-in = limbo }\n")
+                        .network()
+                        .waitIn())
+                .isEqualTo(AuthSettings.WaitIn.LIMBO);
+    }
+
+    @Test
     @DisplayName("the proxy commands allowed before login are read without their slash and in lower case")
     void theAllowedProxyCommandsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "network { allowed-commands = [\"/GList\", \" server \"] }\n")

@@ -112,7 +112,9 @@ final class SettingsReader {
                 list(config, "network", "allowed-commands", List.of()).stream()
                         .map(command -> command.trim().toLowerCase(Locale.ROOT).replaceFirst("^/", ""))
                         .toList(),
-                routing(config));
+                routing(config),
+                word(config, "network.wait-in", "server", AuthSettings.WaitIn.class),
+                config.getString("network.limbo-file", "limbo.schem").trim());
     }
 
     private static AuthSettings.Routing routing(HoconConfig config) {
