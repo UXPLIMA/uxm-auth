@@ -25,4 +25,19 @@ final class PluginHealthTest {
         assertThat(result.status()).isEqualTo(HealthStatus.OK);
         assertThat(result.message()).contains("2");
     }
+
+    @Test
+    @DisplayName("a database that answers is reported as answering")
+    void storageThatAnswers() {
+        assertThat(PluginHealth.storage(() -> true).check().status()).isEqualTo(HealthStatus.OK);
+    }
+
+    @Test
+    @DisplayName("a database that does not answer is a failure: nobody can register or log in")
+    void storageThatDoesNotAnswer() {
+        HealthResult result = PluginHealth.storage(() -> false).check();
+
+        assertThat(result.status()).isEqualTo(HealthStatus.FAIL);
+        assertThat(result.message()).contains("log in");
+    }
 }

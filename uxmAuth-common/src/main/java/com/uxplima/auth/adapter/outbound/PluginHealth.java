@@ -1,6 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -36,6 +37,21 @@ public final class PluginHealth {
                     ? HealthResult.fail("no language file was found: every line is the default the code carries")
                     : HealthResult.ok(count + " found");
         });
+    }
+
+    /**
+     * Whether the database answers.
+     *
+     * <p>A failure, never a warning: without it nobody registers and nobody logs in, so every player is held
+     * at the door.
+     */
+    public static HealthCheck storage(BooleanSupplier answers) {
+        Objects.requireNonNull(answers, "answers");
+        return check(
+                "storage",
+                () -> answers.getAsBoolean()
+                        ? HealthResult.ok("the database answered")
+                        : HealthResult.fail("the database did not answer: nobody can register or log in"));
     }
 
     private static HealthCheck check(String name, Supplier<HealthResult> answer) {

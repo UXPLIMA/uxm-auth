@@ -1,6 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -52,6 +53,51 @@ final class PluginSettingsTest {
         assertThat(language.defaultLocale()).isEqualTo(Locale.ENGLISH);
         assertThat(language.followClient()).isTrue();
         assertThat(language.forcedLocale()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an empty storage URL is the SQLite file beside the configuration")
+    void storageDefaultsToSqliteBesideTheFile(@TempDir Path folder) throws IOException {
+        PluginSettings.Storage storage = storageFrom(folder, "");
+
+        assertThat(storage.jdbcUrl()).isEqualTo("jdbc:sqlite:" + folder.resolve("auth.db"));
+        assertThat(storage.poolSize()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("a storage URL the operator wrote is used as written, with its account")
+    void storageReadsWhatTheOperatorWrote(@TempDir Path folder) throws IOException {
+        PluginSettings.Storage storage = storageFrom(folder, """
+                storage {
+                  jdbc-url  = "jdbc:mysql://db:3306/uxm"
+                  username  = "operator"
+                  password  = "secret"
+                  pool-size = 8
+                }
+                """);
+
+        assertThat(storage).isEqualTo(new PluginSettings.Storage("jdbc:mysql://db:3306/uxm", "operator", "secret", 8));
+    }
+
+    @Test
+    @DisplayName("a pool of no connections is refused when the file is read")
+    void anEmptyPoolIsRefused() {
+        assertThatThrownBy(() -> new PluginSettings.Storage("jdbc:sqlite:x", "", "", 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("storage.pool-size");
+    }
+
+    @Test
+    @DisplayName("the storage password never reaches a log line through toString")
+    void thePasswordIsNotPrinted() {
+        assertThat(new PluginSettings.Storage("jdbc:mysql://db/uxm", "operator", "secret", 4).toString())
+                .doesNotContain("secret");
+    }
+
+    private static PluginSettings.Storage storageFrom(Path folder, String body) throws IOException {
+        Path file = folder.resolve("config.conf");
+        Files.writeString(file, body, StandardCharsets.UTF_8);
+        return new PluginSettings(file).current().storage();
     }
 
     private static LanguageSettings settingsFrom(Path folder, String body) throws IOException {

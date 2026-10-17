@@ -18,6 +18,8 @@ dependencies {
     // signatures that a platform module has to name, so they belong on its compile classpath.
     api(libs.uxmlib.common)
     api(libs.configurate.hocon)
+    // api: Database is in the signature of the repository a platform module opens.
+    api(libs.uxmlib.storage)
     // Argon2id and BCrypt in pure Java. Shaded and relocated by each platform module.
     implementation(libs.bouncycastle)
 

@@ -13,6 +13,7 @@ import java.util.Set;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
@@ -27,6 +28,7 @@ import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 import com.uxplima.uxmlib.scheduler.PaperScheduler;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.scheduler.TaskHandle;
+import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.language.FilePlayerLanguages;
 import com.uxplima.uxmlib.text.language.LanguageChoices;
 import com.uxplima.uxmlib.text.language.LanguageFiles;
@@ -77,6 +79,8 @@ final class PluginModule {
 
     private @Nullable TaskHandle saveTask;
 
+    private @Nullable Database database;
+
     PluginModule(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         Path dataFolder = plugin.getDataFolder().toPath();
@@ -89,6 +93,7 @@ final class PluginModule {
     void wire() {
         Scheduler scheduler = new PaperScheduler(plugin);
         reportLanguageProblems();
+        this.database = openDatabase();
 
         FilePlayerLanguages chosen =
                 FilePlayerLanguages.loadedFrom(plugin.getDataFolder().toPath().resolve("languages.conf"));
@@ -122,7 +127,10 @@ final class PluginModule {
      * says so. Every check is read only, which is why the branch runs the whole list on the lane.
      */
     private java.util.List<com.uxplima.uxmlib.health.HealthCheck> healthChecks() {
-        return java.util.List.of(PluginHealth.languages(() -> foundLocales().size()));
+        return java.util.List.of(PluginHealth.languages(() -> foundLocales().size()), PluginHealth.storage(() -> {
+            Database open = database;
+            return open != null && open.ping();
+        }));
     }
 
     /**
@@ -139,6 +147,27 @@ final class PluginModule {
         }
         saveChoices();
         store = null;
+        if (database != null) {
+            database.close();
+            database = null;
+        }
+    }
+
+    /**
+     * Open the database and bring its tables up to date.
+     *
+     * <p>Done at enable, before anything that reads an account is registered, so the first join finds the
+     * tables. The migrations are read from the jar, and an operator never runs SQL by hand.
+     */
+    private Database openDatabase() {
+        PluginSettings.Storage storage = settings.current().storage();
+        return AuthSchema.migrate(Database.builder()
+                .poolName(plugin.getName())
+                .jdbcUrl(storage.jdbcUrl())
+                .username(storage.username())
+                .password(storage.password())
+                .maxPoolSize(storage.poolSize())
+                .build());
     }
 
     /**

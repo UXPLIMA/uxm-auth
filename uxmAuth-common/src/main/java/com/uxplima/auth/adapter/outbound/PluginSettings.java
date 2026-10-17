@@ -39,10 +39,11 @@ public final class PluginSettings {
     }
 
     /** One immutable snapshot of the file. */
-    public record Snapshot(LanguageSettings language) {
+    public record Snapshot(LanguageSettings language, Storage storage) {
 
         public Snapshot {
             Objects.requireNonNull(language, "language");
+            Objects.requireNonNull(storage, "storage");
         }
 
         /** The language every message falls back to. */
@@ -50,6 +51,29 @@ public final class PluginSettings {
             return language.defaultLocale();
         }
     }
+
+    /** Where the accounts live. */
+    public record Storage(String jdbcUrl, String username, String password, int poolSize) {
+
+        public Storage {
+            Objects.requireNonNull(jdbcUrl, "jdbcUrl");
+            Objects.requireNonNull(username, "username");
+            Objects.requireNonNull(password, "password");
+            if (poolSize < 1) {
+                throw new IllegalArgumentException("storage.pool-size must be at least 1, got: " + poolSize);
+            }
+        }
+
+        /** Everything but the password, because a settings snapshot is the kind of thing that gets logged. */
+        @Override
+        public String toString() {
+            return "Storage[jdbcUrl=" + jdbcUrl + ", username=" + username + ", password=hidden, poolSize=" + poolSize
+                    + "]";
+        }
+    }
+
+    /** The file the accounts are kept in when the operator names no database. */
+    private static final String SQLITE_FILE = "auth.db";
 
     private final Path file;
 
@@ -94,7 +118,7 @@ public final class PluginSettings {
 
     private Snapshot read() {
         HoconConfig config = HoconConfig.load(file);
-        return new Snapshot(language(config));
+        return new Snapshot(language(config), storage(config));
     }
 
     /**
@@ -108,6 +132,20 @@ public final class PluginSettings {
                 localeOf(config.getString("language.default", "en"), Locale.ENGLISH),
                 config.getBoolean("language.follow-client", true),
                 forcedLocale(config.getString("language.force", "")));
+    }
+
+    /**
+     * An empty URL is the SQLite file beside this configuration, so a server that sets nothing has accounts
+     * that survive a restart without anybody installing a database.
+     */
+    private Storage storage(HoconConfig config) {
+        String configured = config.getString("storage.jdbc-url", "").trim();
+        Path folder = Objects.requireNonNull(file.toAbsolutePath().getParent(), "the configuration has no folder");
+        return new Storage(
+                configured.isEmpty() ? "jdbc:sqlite:" + folder.resolve(SQLITE_FILE) : configured,
+                config.getString("storage.username", ""),
+                config.getString("storage.password", ""),
+                config.getInt("storage.pool-size", 4));
     }
 
     private static @Nullable Locale forcedLocale(String tag) {
