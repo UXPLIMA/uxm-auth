@@ -18,6 +18,8 @@ dependencies {
     // signatures that a platform module has to name, so they belong on its compile classpath.
     api(libs.uxmlib.common)
     api(libs.configurate.hocon)
+    // Argon2id and BCrypt in pure Java. Shaded and relocated by each platform module.
+    implementation(libs.bouncycastle)
 
     // Adventure is compileOnly on purpose. Paper and Velocity each ship it, and a shaded
     // copy would break the serializers the platform uses on its own components.
