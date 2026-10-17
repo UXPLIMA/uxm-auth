@@ -27,7 +27,7 @@ import com.uxplima.auth.domain.state.AuthMethod;
 public final class NetworkDoor {
 
     /** The profile property the claim travels in. */
-    public static final String PROPERTY = "uxmauth";
+    public static final String PROPERTY = Claims.PROPERTY;
 
     /** What the claim on a connection came to. */
     public sealed interface Reading {

@@ -34,6 +34,7 @@ import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
+import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyLocales;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
 import com.uxplima.uxmlib.storage.sql.Database;
@@ -138,10 +139,17 @@ final class ProxyModule {
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
                 clock);
-        ProxySessions sessions = new ProxySessions();
-        proxy.getEventManager().register(plugin, new DoorListener(door, sessions, new DoorWords(words), logger));
-        proxy.getEventManager().register(plugin, new ClaimWriter(sessions, claims(settings), clock));
+        listen(door, new DoorWords(words), claims(settings), clock);
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+    }
+
+    /** The door before every connection, the claim before every server, and the servers' reports after. */
+    private void listen(ProxyDoor door, DoorWords words, Supplier<Optional<Claims>> claims, Clock clock) {
+        ProxySessions sessions = new ProxySessions();
+        proxy.getEventManager().register(plugin, new DoorListener(door, sessions, words, logger));
+        proxy.getEventManager().register(plugin, new ClaimWriter(sessions, claims, clock));
+        proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
+        proxy.getEventManager().register(plugin, new ReportListener(sessions, claims, clock, logger));
     }
 
     /**

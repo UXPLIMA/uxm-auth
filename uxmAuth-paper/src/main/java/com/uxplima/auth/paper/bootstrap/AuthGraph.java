@@ -79,6 +79,7 @@ import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilter;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordMask;
+import com.uxplima.auth.paper.adapter.outbound.network.ChannelReports;
 import com.uxplima.auth.paper.adapter.outbound.world.LoginWorld;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
@@ -225,7 +226,8 @@ final class AuthGraph implements AutoCloseable {
                         hold::isHeld,
                         shower),
                 welcomes,
-                notices);
+                notices,
+                new ChannelReports(plugin, () -> claims(settings), clock));
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -302,6 +304,8 @@ final class AuthGraph implements AutoCloseable {
                                 + "\". A Bedrock name with it can be a Java"
                                 + " name too, and an unlinked Bedrock player could then reach a Java player's account."
                                 + " Set it in Floodgate's config.yml to a character no Java name has, such as a dot."));
+        // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
+        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);

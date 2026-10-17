@@ -39,6 +39,12 @@ public final class Claims {
         }
     }
 
+    /** The forwarded profile property a claim travels in, from the proxy to a server. */
+    public static final String PROPERTY = "uxmauth";
+
+    /** The plugin channel a report travels on, from a server to the proxy. */
+    public static final String CHANNEL = "uxmauth:network";
+
     private static final String ALGORITHM = "HmacSHA256";
 
     /** How far ahead of a backend's clock a proxy's may run before a claim reads as from the future. */

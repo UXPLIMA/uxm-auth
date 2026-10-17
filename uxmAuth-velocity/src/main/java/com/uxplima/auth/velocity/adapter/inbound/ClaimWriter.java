@@ -22,7 +22,7 @@ import com.velocitypowered.api.util.GameProfile;
 public final class ClaimWriter {
 
     /** The profile property the claim travels in. */
-    public static final String PROPERTY = "uxmauth";
+    public static final String PROPERTY = Claims.PROPERTY;
 
     /** Below every plugin that leaves the default, so the server another plugin picked is the one written for. */
     private static final short LATE = -1000;

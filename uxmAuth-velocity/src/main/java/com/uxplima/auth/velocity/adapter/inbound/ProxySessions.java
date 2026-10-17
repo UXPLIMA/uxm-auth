@@ -32,6 +32,12 @@ public final class ProxySessions {
         sessions.put(Objects.requireNonNull(id, "id"), new Session(new Claim.LoggedIn(method), false));
     }
 
+    /** A server reported that the player logged in there, by this method; that server already greeted it. */
+    public void reported(UUID id, AuthMethod method) {
+        Objects.requireNonNull(method, "method");
+        sessions.put(Objects.requireNonNull(id, "id"), new Session(new Claim.LoggedIn(method), true));
+    }
+
     /**
      * What the claim to the next server says. A login is told by its own method once, so the first server greets
      * it; every server after that reads a login the network already greeted.

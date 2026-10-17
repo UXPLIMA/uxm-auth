@@ -25,6 +25,7 @@ public final class Door {
     private final ScreenOffer screens;
     private final Welcomes welcomes;
     private final Notices notices;
+    private final Reports reports;
 
     public Door(
             Sessions sessions,
@@ -34,7 +35,8 @@ public final class Door {
             Greeter greeter,
             ScreenOffer screens,
             Welcomes welcomes,
-            Notices notices) {
+            Notices notices,
+            Reports reports) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -43,6 +45,7 @@ public final class Door {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.welcomes = Objects.requireNonNull(welcomes, "welcomes");
         this.notices = Objects.requireNonNull(notices, "notices");
+        this.reports = Objects.requireNonNull(reports, "reports");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -51,6 +54,10 @@ public final class Door {
         keeper.arrive(player);
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
         if (state instanceof AuthState.Authenticated in) {
+            if (in.method() != AuthMethod.NETWORK) {
+                // A login the network vouched for came from the proxy, which already knows it.
+                reports.loggedIn(player, in.method());
+            }
             // Let in before the world, by the dialog, by Floodgate or by Mojang: the way-in moment waited for a
             // world.
             welcomes.take(player.getUniqueId())
@@ -64,6 +71,7 @@ public final class Door {
         if (state == null) {
             return;
         }
+        reports.waiting(player);
         notices.deliver(player, false);
         clock.start(player);
         screens.offer(player, state);
@@ -91,6 +99,10 @@ public final class Door {
         Objects.requireNonNull(moment, "moment");
         greeter.forget(player);
         keeper.giveBack(player);
+        sessions.state(player.getUniqueId())
+                .filter(AuthState.Authenticated.class::isInstance)
+                .map(AuthState.Authenticated.class::cast)
+                .ifPresent(in -> reports.loggedIn(player, in.method()));
         moments.fire(player, moment);
         notices.deliver(player, true);
     }
