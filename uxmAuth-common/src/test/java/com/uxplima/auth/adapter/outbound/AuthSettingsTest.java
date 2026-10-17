@@ -434,6 +434,27 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("sessions are for those who choose them, an hour long, and a mode not on the list is refused")
+    void sessionsAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").protection().sessions())
+                .isEqualTo(new com.uxplima.auth.application.protection.Remember.Settings(
+                        com.uxplima.auth.application.protection.Remember.Mode.CHOSEN,
+                        java.time.Duration.ofMinutes(60)));
+        assertThat(settingsFrom(folder, "sessions { mode = everyone, minutes = 15 }\n")
+                        .protection()
+                        .sessions())
+                .isEqualTo(new com.uxplima.auth.application.protection.Remember.Settings(
+                        com.uxplima.auth.application.protection.Remember.Mode.EVERYONE,
+                        java.time.Duration.ofMinutes(15)));
+        assertThatThrownBy(() -> settingsFrom(folder, "sessions { mode = always }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sessions.mode");
+        assertThatThrownBy(() -> settingsFrom(folder, "sessions { minutes = 0 }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sessions.minutes");
+    }
+
+    @Test
     @DisplayName("no host is a shared-address filter until the operator lists one")
     void sharedHostsAreListed(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().sharedHosts().matches("mc.tcpshield.com"))
