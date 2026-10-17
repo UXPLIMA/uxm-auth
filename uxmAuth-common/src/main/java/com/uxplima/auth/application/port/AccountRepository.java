@@ -1,11 +1,14 @@
 package com.uxplima.auth.application.port;
 
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Where accounts are kept.
@@ -26,8 +29,17 @@ public interface AccountRepository {
      */
     Insert insert(Account account);
 
-    /** Writes every field of an account that exists. */
+    /** Writes every field of an account that exists. For staff tools, which mean every field. */
     void update(Account account);
+
+    /** Records a login, and touches nothing else on the row. */
+    void recordLogin(UUID id, Instant at, String address);
+
+    /**
+     * Replaces the password only if the row still holds {@code expected}. A password changed on another server
+     * between the read and this write is kept, and the answer is false.
+     */
+    boolean replacePassword(UUID id, @Nullable PasswordHash expected, PasswordHash fresh);
 
     /** How many accounts were registered from this address, for the accounts-per-address limit. */
     int countRegisteredFrom(String address);

@@ -67,6 +67,19 @@ final class ChangePasswordTest {
         assertThat(change(connection, "hunter22", "fresh777")).isEqualTo(new ChangeResult.NotLoggedIn());
     }
 
+    @Test
+    @DisplayName("the old password is checked against what is stored now, not what was read at the join")
+    void changeChecksTheStoredPassword() {
+        UUID connection = loggedIn("Steve", "hunter22");
+        fixture.accounts.seed(fixture.accounts
+                .findByName(new PlayerName("Steve"))
+                .orElseThrow()
+                .withPassword(fixture.hashing.hash(Password.of("changed99"))));
+
+        assertThat(change(connection, "hunter22", "fresh777")).isEqualTo(new ChangeResult.WrongOld());
+        assertThat(change(connection, "changed99", "fresh777")).isEqualTo(new ChangeResult.Changed());
+    }
+
     private UUID loggedIn(String name, String password) {
         UUID connection = fixture.registered(name, password);
         assertThat(login(connection, password)).isTrue();

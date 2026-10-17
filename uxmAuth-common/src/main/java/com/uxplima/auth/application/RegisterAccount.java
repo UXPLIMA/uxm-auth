@@ -63,11 +63,11 @@ public final class RegisterAccount {
 
     private CompletableFuture<RegisterResult> attempt(
             UUID connection, PlayerName name, Password password, Password confirm, String address) {
-        AuthState state = sessions.state(connection).orElse(null);
-        if (state == null) {
+        Sessions.Held held = sessions.held(connection).orElse(null);
+        if (held == null) {
             return CompletableFuture.completedFuture(new RegisterResult.Gone());
         }
-        if (!(state instanceof AuthState.Unregistered)) {
+        if (!(held.state() instanceof AuthState.Unregistered)) {
             return CompletableFuture.completedFuture(new RegisterResult.AlreadyRegistered());
         }
         if (!password.sameAs(confirm)) {
@@ -77,11 +77,12 @@ public final class RegisterAccount {
         if (!(verdict instanceof PasswordVerdict.Accepted)) {
             return CompletableFuture.completedFuture(new RegisterResult.Rejected(verdict));
         }
-        return lane.submit(() -> store(connection, name, hashing.hash(password), address));
+        long generation = held.generation();
+        return lane.submit(() -> store(connection, generation, name, hashing.hash(password), address));
     }
 
-    private RegisterResult store(UUID connection, PlayerName name, PasswordHash hash, String address) {
-        if (!sessions.isOpen(connection)) {
+    private RegisterResult store(UUID connection, long generation, PlayerName name, PasswordHash hash, String address) {
+        if (!sessions.isOpen(connection, generation)) {
             return new RegisterResult.Gone();
         }
         Instant now = clock.instant();

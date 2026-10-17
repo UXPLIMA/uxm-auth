@@ -47,37 +47,50 @@ public final class ChangePassword {
     }
 
     private CompletableFuture<ChangeResult> attempt(UUID connection, Password old, Password fresh) {
-        AuthState state = sessions.state(connection).orElse(null);
-        if (state == null) {
+        Sessions.Held held = sessions.held(connection).orElse(null);
+        if (held == null) {
             return CompletableFuture.completedFuture(new ChangeResult.Gone());
         }
-        if (!(state instanceof AuthState.Authenticated authenticated)) {
+        if (!(held.state() instanceof AuthState.Authenticated authenticated)) {
             return CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn());
         }
         PasswordVerdict verdict = policy.get().check(fresh);
         if (!(verdict instanceof PasswordVerdict.Accepted)) {
             return CompletableFuture.completedFuture(new ChangeResult.Rejected(verdict));
         }
-        PasswordHash stored = authenticated.account().password();
-        if (stored == null) {
-            return CompletableFuture.completedFuture(new ChangeResult.WrongOld());
-        }
-        return lane.submit(() -> hashing.verify(old, stored) instanceof Verification.Wrong
-                ? new ChangeResult.WrongOld()
-                : store(connection, authenticated.account(), hashing.hash(fresh)));
+        long generation = held.generation();
+        UUID id = authenticated.account().id();
+        return lane.submit(() -> change(connection, generation, id, old, fresh));
     }
 
-    private ChangeResult store(UUID connection, Account account, PasswordHash hash) {
-        if (!sessions.isOpen(connection)) {
+    /**
+     * The old password is checked against the row as it is now, and the new one replaces exactly that row's
+     * value. A change made on another server in between wins, and this one answers that the old password
+     * was wrong, which by then it is.
+     */
+    private ChangeResult change(UUID connection, long generation, UUID id, Password old, Password fresh) {
+        if (!sessions.isOpen(connection, generation)) {
             return new ChangeResult.Gone();
         }
-        Account updated = account.withPassword(hash);
-        accounts.update(updated);
+        Account current = accounts.findById(id).orElse(null);
+        PasswordHash stored = current == null ? null : current.password();
+        if (current == null || stored == null || hashing.verify(old, stored) instanceof Verification.Wrong) {
+            return new ChangeResult.WrongOld();
+        }
+        PasswordHash hash = hashing.hash(fresh);
+        if (!sessions.isOpen(connection, generation)) {
+            return new ChangeResult.Gone();
+        }
+        if (!accounts.replacePassword(id, stored, hash)) {
+            return new ChangeResult.WrongOld();
+        }
+        Account updated = current.withPassword(hash);
         sessions.update(
                 connection,
-                current -> current instanceof AuthState.Authenticated authenticated
+                generation,
+                state -> state instanceof AuthState.Authenticated authenticated
                         ? new AuthState.Authenticated(updated, authenticated.method())
-                        : current);
+                        : state);
         return new ChangeResult.Changed();
     }
 }

@@ -154,6 +154,53 @@ final class SqlAccountRepositoryTest {
         assertThat(repository.findById(UUID.randomUUID())).isEmpty();
     }
 
+    @Test
+    @DisplayName("a login is recorded without touching the rest of the row")
+    void recordsALogin() {
+        Account notch = cracked("Notch", "10.0.0.1");
+        repository.insert(notch);
+
+        repository.recordLogin(notch.id(), REGISTERED.plusSeconds(5), "10.0.0.5");
+
+        assertThat(repository.findById(notch.id())).contains(notch.loggedIn(REGISTERED.plusSeconds(5), "10.0.0.5"));
+    }
+
+    @Test
+    @DisplayName("a password is replaced only while the row still holds the one expected")
+    void replacesAPasswordOnlyFromTheExpectedOne() {
+        Account notch = cracked("Notch", "10.0.0.1");
+        repository.insert(notch);
+        PasswordHash first = new PasswordHash("$2b$04$abcdefghijklmnopqrstuu5Lo0g67CiD3M4RpN1BmBb4Crp5w7dbK");
+        PasswordHash second = new PasswordHash("$2b$04$abcdefghijklmnopqrstuurPnzXnWtHMiY8oTl6PjtlkbaZ.nozZW");
+
+        assertThat(repository.replacePassword(notch.id(), notch.password(), first))
+                .isTrue();
+        assertThat(repository.replacePassword(notch.id(), notch.password(), second))
+                .isFalse();
+
+        assertThat(repository.findById(notch.id()).orElseThrow().password()).isEqualTo(first);
+    }
+
+    @Test
+    @DisplayName("an account with no password takes its first one only while it still has none")
+    void replacesAMissingPassword() {
+        Account bare = new Account(
+                UUID.randomUUID(),
+                new PlayerName("Jeb_"),
+                AccountKind.PREMIUM,
+                null,
+                null,
+                REGISTERED,
+                "10.0.0.1",
+                null,
+                null);
+        repository.insert(bare);
+        PasswordHash first = new PasswordHash("$2b$04$abcdefghijklmnopqrstuu5Lo0g67CiD3M4RpN1BmBb4Crp5w7dbK");
+
+        assertThat(repository.replacePassword(bare.id(), null, first)).isTrue();
+        assertThat(repository.replacePassword(bare.id(), null, first)).isFalse();
+    }
+
     private static Account cracked(String name, String address) {
         return new Account(
                 UUID.randomUUID(),

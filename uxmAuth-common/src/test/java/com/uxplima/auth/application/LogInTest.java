@@ -2,6 +2,8 @@ package com.uxplima.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -118,6 +120,75 @@ final class LogInTest {
         login(connection, "hunter22");
 
         assertThat(login(connection, "whatever")).isEqualTo(new LoginResult.AlreadyLoggedIn());
+    }
+
+    @Test
+    @DisplayName("logins sent together cannot try more passwords than the limit allows")
+    void concurrentLoginsCannotOutrunTheAttemptLimit() throws InterruptedException {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        CountDownLatch busy = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<Boolean> blocker = fixture.lane.submit(() -> {
+            busy.countDown();
+            return await(release);
+        });
+        assertThat(busy.await(5, TimeUnit.SECONDS)).isTrue();
+
+        List<CompletableFuture<LoginResult>> wrong = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            wrong.add(useCase().run(connection, Password.of("nope" + i + "234"), "10.0.0.7"));
+        }
+        CompletableFuture<LoginResult> right = useCase().run(connection, Password.of("hunter22"), "10.0.0.7");
+        release.countDown();
+
+        assertThat(blocker.join()).isTrue();
+        assertThat(right.join()).isEqualTo(new LoginResult.TooManyAttempts());
+        assertThat(wrong.stream().map(CompletableFuture::join))
+                .filteredOn(LoginResult.Wrong.class::isInstance)
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("a password changed elsewhere after the join is the one checked, and it is not undone")
+    void aPasswordChangedElsewhereIsNotUndone() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        Account changed = fixture.accounts
+                .findByName(new PlayerName("Steve"))
+                .orElseThrow()
+                .withPassword(fixture.hashing.hash(Password.of("changed99")));
+        fixture.accounts.seed(changed);
+
+        assertThat(login(connection, "hunter22")).isEqualTo(new LoginResult.Wrong(2));
+        assertThat(login(connection, "changed99")).isInstanceOf(LoginResult.LoggedIn.class);
+        assertThat(fixture.accounts
+                        .findByName(new PlayerName("Steve"))
+                        .orElseThrow()
+                        .password())
+                .isEqualTo(changed.password());
+    }
+
+    @Test
+    @DisplayName("a player who rejoins under the same id does not inherit a login that was in flight")
+    void aReconnectDoesNotInheritALoginInFlight() throws InterruptedException {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        AuthState waiting = fixture.sessions.state(connection).orElseThrow();
+        CountDownLatch busy = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<Boolean> blocker = fixture.lane.submit(() -> {
+            busy.countDown();
+            return await(release);
+        });
+        assertThat(busy.await(5, TimeUnit.SECONDS)).isTrue();
+
+        CompletableFuture<LoginResult> pending = useCase().run(connection, Password.of("hunter22"), "10.0.0.7");
+        fixture.sessions.close(connection);
+        fixture.sessions.open(connection, waiting);
+        release.countDown();
+
+        assertThat(blocker.join()).isTrue();
+        assertThat(pending.join()).isEqualTo(new LoginResult.Gone());
+        assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Registered.class);
+        assertThat(fixture.accounts.writes()).isZero();
     }
 
     private LoginResult login(UUID connection, String password) {

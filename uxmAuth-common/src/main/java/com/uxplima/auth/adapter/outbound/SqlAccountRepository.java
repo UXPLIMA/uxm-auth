@@ -29,6 +29,12 @@ public final class SqlAccountRepository implements AccountRepository {
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
             + " premium_id = ?, password = ?, registered_at = ?, registration_address = ?, last_login_at = ?,"
             + " last_address = ? WHERE id = ?";
+    private static final String RECORD_LOGIN =
+            "UPDATE uxmauth_account SET last_login_at = ?, last_address = ? WHERE id = ?";
+    private static final String REPLACE_PASSWORD =
+            "UPDATE uxmauth_account SET password = ? WHERE id = ? AND password = ?";
+    private static final String SET_FIRST_PASSWORD =
+            "UPDATE uxmauth_account SET password = ? WHERE id = ? AND password IS NULL";
     private static final String COUNT_FROM =
             "SELECT COUNT(*) AS registered FROM uxmauth_account WHERE registration_address = ?";
 
@@ -81,6 +87,33 @@ public final class SqlAccountRepository implements AccountRepository {
             bindFields(statement, 1, account);
             statement.setString(10, account.id().toString());
         }));
+    }
+
+    @Override
+    public void recordLogin(UUID id, Instant at, String address) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(at, "at");
+        Objects.requireNonNull(address, "address");
+        database.inTransaction(sql -> sql.update(RECORD_LOGIN, statement -> {
+            statement.setLong(1, at.toEpochMilli());
+            statement.setString(2, address);
+            statement.setString(3, id.toString());
+        }));
+    }
+
+    @Override
+    public boolean replacePassword(UUID id, @Nullable PasswordHash expected, PasswordHash fresh) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(fresh, "fresh");
+        String statementText = expected == null ? SET_FIRST_PASSWORD : REPLACE_PASSWORD;
+        int changed = database.transaction(sql -> sql.update(statementText, statement -> {
+            statement.setString(1, fresh.encoded());
+            statement.setString(2, id.toString());
+            if (expected != null) {
+                statement.setString(3, expected.encoded());
+            }
+        }));
+        return changed == 1;
     }
 
     @Override

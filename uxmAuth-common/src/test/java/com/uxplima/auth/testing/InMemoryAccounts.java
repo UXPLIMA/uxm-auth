@@ -1,6 +1,8 @@
 package com.uxplima.auth.testing;
 
+import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -8,7 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
+import org.jspecify.annotations.Nullable;
 
 /** Accounts in memory, with the same one-row-per-name rule the SQL table keeps, and a count of writes. */
 public final class InMemoryAccounts implements AccountRepository {
@@ -39,6 +43,20 @@ public final class InMemoryAccounts implements AccountRepository {
     public void update(Account account) {
         writes.incrementAndGet();
         byKey.put(account.name().key(), account);
+    }
+
+    @Override
+    public void recordLogin(UUID id, Instant at, String address) {
+        writes.incrementAndGet();
+        findById(id).ifPresent(account -> byKey.put(account.name().key(), account.loggedIn(at, address)));
+    }
+
+    @Override
+    public synchronized boolean replacePassword(UUID id, @Nullable PasswordHash expected, PasswordHash fresh) {
+        writes.incrementAndGet();
+        Optional<Account> held = findById(id).filter(account -> Objects.equals(account.password(), expected));
+        held.ifPresent(account -> byKey.put(account.name().key(), account.withPassword(fresh)));
+        return held.isPresent();
     }
 
     @Override
