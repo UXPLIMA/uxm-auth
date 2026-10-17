@@ -27,6 +27,7 @@ import io.papermc.paper.connection.PlayerConnection;
 
 import net.kyori.adventure.audience.Audience;
 
+import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AccountRepository;
@@ -234,6 +235,29 @@ public final class ConnectionListener implements Listener {
     public void onLocale(PlayerLocaleChangeEvent event) {
         Player player = event.getPlayer();
         scheduler.entity(player, () -> door.languageKnown(player));
+    }
+
+    /**
+     * A connection closed. The event names an id, not a connection, so only an opening whose own connection is
+     * gone is forgotten, and its session with it when that connection never stood in the world: one that left
+     * at the dialog, or before it, would otherwise hold its session for as long as the server runs.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onClose(PlayerConnectionCloseEvent event) {
+        UUID id = event.getPlayerUniqueId();
+        Opening opening = openings.get(id);
+        if (opening == null || opening.connection().isConnected() || !openings.remove(id, opening)) {
+            return;
+        }
+        Joined mine = joined.get(id);
+        if (mine == null || mine.generation() != opening.generation()) {
+            sessions.close(id, opening.generation());
+        }
+    }
+
+    /** How many openings are remembered, for a test that proves they are let go. */
+    int openings() {
+        return openings.size();
     }
 
     /** A player who leaves while held gets everything back before the server saves them. */

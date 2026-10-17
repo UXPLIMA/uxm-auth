@@ -23,6 +23,7 @@ import io.papermc.paper.connection.PlayerLoginConnection;
 
 import net.kyori.adventure.text.Component;
 
+import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.port.AccountRepository;
@@ -145,6 +146,35 @@ final class ConnectionListenerTest {
                 "Newcomer", id, loginConnection(new InetSocketAddress(InetAddress.getLoopbackAddress(), 40003), true));
         listener.onPreLogin(third);
         assertThat(third.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
+    }
+
+    @Test
+    @DisplayName("a connection that closes before it joins leaves no session and no opening behind")
+    void aConnectionClosedBeforeJoiningLeavesNothing() throws Exception {
+        UUID id = UUID.randomUUID();
+        PlayerLoginConnection connection = loginConnection(new InetSocketAddress(ELSEWHERE, 40001), true);
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Newcomer", id, connection));
+        assertThat(world.sessions.isOpen(id)).isTrue();
+
+        when(connection.isConnected()).thenReturn(false);
+        listener.onClose(new PlayerConnectionCloseEvent(id, "Newcomer", ELSEWHERE, false));
+
+        assertThat(world.sessions.isOpen(id)).isFalse();
+        assertThat(listener.openings()).isZero();
+    }
+
+    @Test
+    @DisplayName("the close of a refused second connection leaves the first one's session and opening alone")
+    void aRefusedConnectionsCloseLeavesTheFirst() throws Exception {
+        UUID id = UUID.randomUUID();
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Newcomer", id, loginConnection(new InetSocketAddress(ELSEWHERE, 40001), true)));
+
+        listener.onClose(new PlayerConnectionCloseEvent(id, "Newcomer", ELSEWHERE, false));
+
+        assertThat(world.sessions.isOpen(id)).isTrue();
+        assertThat(listener.openings()).isOne();
     }
 
     @Test
