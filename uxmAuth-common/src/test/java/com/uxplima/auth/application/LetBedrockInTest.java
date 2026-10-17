@@ -74,6 +74,27 @@ final class LetBedrockInTest {
     }
 
     @Test
+    @DisplayName("another Xbox identity under a Bedrock account's name is not let into that account")
+    void anotherIdentityUnderABedrockNameIsNotLetIn() {
+        useCase.admit(UUID.randomUUID(), new PlayerName(".Steve"), false, "10.0.0.7");
+
+        AuthState state = useCase.admit(UUID.randomUUID(), new PlayerName(".Steve"), false, "10.0.0.9");
+
+        assertThat(state).isNotInstanceOf(AuthState.Authenticated.class);
+    }
+
+    @Test
+    @DisplayName("a linked player is let into the Java account only when Floodgate names that account's id")
+    void aLinkedPlayerOnlyReachesTheAccountWithTheirId() {
+        Account java = AuthFixture.account("Steve", fixture.hashing.hash(Password.of("hunter22")));
+        fixture.accounts.seed(java);
+
+        AuthState state = useCase.admit(UUID.randomUUID(), new PlayerName("Steve"), true, "10.0.0.7");
+
+        assertThat(state).isInstanceOf(AuthState.Registered.class);
+    }
+
+    @Test
     @DisplayName("an unlinked Bedrock player under a Java account's name is asked for that account's password")
     void anUnlinkedPlayerUnderAJavaNameIsAskedForThePassword() {
         Account java = AuthFixture.account("Steve", fixture.hashing.hash(Password.of("hunter22")));

@@ -20,7 +20,7 @@ import com.uxplima.auth.domain.state.AuthState;
  *
  * <p>Their own Bedrock account lets them in, and a first visit makes one with no password. A player Floodgate
  * linked to a Java account gets into that Java account, because the link is Floodgate's proof that the two are
- * one person. An unlinked player whose name is a Java account's is asked for that account's password like
+ * one person. Either way the account's id must be the id Floodgate gave the connection. An unlinked player whose name is a Java account's is asked for that account's password like
  * anyone else: Xbox Live proves who they are on Bedrock, not that the Java account is theirs.
  *
  * <p>This runs on the thread the server gives the pre-login, which may wait on the database.
@@ -53,7 +53,10 @@ public final class LetBedrockIn {
             found = accounts.findByName(name);
         }
         Account account = found.orElseThrow(() -> new IllegalStateException("the account of " + name + " vanished"));
-        if (account.kind() != AccountKind.BEDROCK && !linked) {
+        // Floodgate's id is the proof: the player's own Xbox identity, or the Java account it is linked to. A
+        // name alone proves nothing, since a gamertag can change hands.
+        boolean theirs = account.id().equals(connection) && (account.kind() == AccountKind.BEDROCK || linked);
+        if (!theirs) {
             return new AuthState.Registered(account, Attempts.fresh(maxAttempts.getAsInt()));
         }
         Instant now = clock.instant();
