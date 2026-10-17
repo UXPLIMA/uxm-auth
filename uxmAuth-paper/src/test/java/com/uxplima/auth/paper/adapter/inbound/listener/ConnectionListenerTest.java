@@ -564,7 +564,46 @@ final class ConnectionListenerTest {
 
         @Override
         public int countRegisteredFrom(String address) {
-            throw new StorageException("down", new java.sql.SQLException("connection refused"));
+            throw down();
+        }
+
+        @Override
+        public Optional<Account> findByPremiumId(UUID premiumId) {
+            throw down();
+        }
+
+        @Override
+        public Insert rename(UUID id, PlayerName to, java.time.Instant at) {
+            throw down();
+        }
+
+        @Override
+        public Optional<PlayerName> renamedFrom(PlayerName old) {
+            throw down();
+        }
+
+        @Override
+        public Optional<Renamed> untoldRename(UUID id) {
+            throw down();
+        }
+
+        @Override
+        public void markRenameTold(UUID id) {
+            throw down();
+        }
+
+        @Override
+        public void delete(UUID id) {
+            throw down();
+        }
+
+        @Override
+        public void moveId(UUID from, UUID to) {
+            throw down();
+        }
+
+        private static StorageException down() {
+            return new StorageException("down", new java.sql.SQLException("connection refused"));
         }
     }
 }

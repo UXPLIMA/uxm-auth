@@ -162,6 +162,81 @@ final class SqlAccountRepositoryTest {
     }
 
     @Test
+    @DisplayName("a premium account is found by its Mojang id, whatever name it holds now")
+    void findsByPremiumId() {
+        UUID mojang = UUID.randomUUID();
+        Account premium = new Account(
+                UUID.randomUUID(),
+                new PlayerName("Jeb_"),
+                AccountKind.PREMIUM,
+                mojang,
+                null,
+                REGISTERED,
+                "10.0.0.1",
+                null,
+                null);
+        repository.insert(premium);
+        repository.insert(cracked("Steve", "10.0.0.1"));
+
+        assertThat(repository.findByPremiumId(mojang)).contains(premium);
+        assertThat(repository.findByPremiumId(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a rename moves the name and keeps the id, frees the old name, and remembers where it went")
+    void aRenameMovesTheName() {
+        Account steve = cracked("Notch", "10.0.0.1");
+        repository.insert(steve);
+
+        assertThat(repository.rename(steve.id(), new PlayerName("Notch_"), REGISTERED))
+                .isEqualTo(new AccountRepository.Inserted());
+
+        assertThat(repository.findById(steve.id()))
+                .hasValueSatisfying(found -> assertThat(found.name().value()).isEqualTo("Notch_"));
+        assertThat(repository.findByName(new PlayerName("notch"))).isEmpty();
+        assertThat(repository.renamedFrom(new PlayerName("NOTCH"))).contains(new PlayerName("Notch_"));
+        assertThat(repository.untoldRename(steve.id()))
+                .contains(new AccountRepository.Renamed(new PlayerName("Notch"), new PlayerName("Notch_")));
+
+        repository.markRenameTold(steve.id());
+        assertThat(repository.untoldRename(steve.id())).isEmpty();
+        assertThat(repository.renamedFrom(new PlayerName("Notch"))).contains(new PlayerName("Notch_"));
+    }
+
+    @Test
+    @DisplayName("a rename to a name somebody holds is refused, and nothing moves")
+    void aRenameToATakenNameIsRefused() {
+        Account steve = cracked("Notch", "10.0.0.1");
+        repository.insert(steve);
+        repository.insert(cracked("Notch_", "10.0.0.2"));
+
+        assertThat(repository.rename(steve.id(), new PlayerName("NOTCH_"), REGISTERED))
+                .isEqualTo(new AccountRepository.NameTaken(new PlayerName("Notch_")));
+
+        assertThat(repository.findById(steve.id()))
+                .hasValueSatisfying(found -> assertThat(found.name().value()).isEqualTo("Notch"));
+        assertThat(repository.renamedFrom(new PlayerName("Notch"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an account can be deleted, and an id moved to another")
+    void deletesAndMovesIds() {
+        Account steve = cracked("Steve", "10.0.0.1");
+        Account alex = cracked("Alex", "10.0.0.1");
+        repository.insert(steve);
+        repository.insert(alex);
+        UUID fresh = UUID.randomUUID();
+
+        repository.delete(steve.id());
+        repository.moveId(alex.id(), fresh);
+
+        assertThat(repository.findById(steve.id())).isEmpty();
+        assertThat(repository.findById(alex.id())).isEmpty();
+        assertThat(repository.findById(fresh))
+                .hasValueSatisfying(found -> assertThat(found.name().value()).isEqualTo("Alex"));
+    }
+
+    @Test
     @DisplayName("a name nobody registered finds nothing")
     void anUnknownNameFindsNothing() {
         assertThat(repository.findByName(new PlayerName("Nobody"))).isEmpty();

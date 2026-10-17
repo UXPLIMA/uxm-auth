@@ -38,6 +38,19 @@ public final class SqlAccountRepository implements AccountRepository {
     private static final String COUNT_FROM =
             "SELECT COUNT(*) AS registered FROM uxmauth_account WHERE registration_address = ?";
 
+    private static final String RENAME = "UPDATE uxmauth_account SET name = ?, name_key = ? WHERE id = ?";
+    private static final String REMEMBER_RENAME = "INSERT INTO uxmauth_rename (account_id, old_key, old_name,"
+            + " new_name, renamed_at, told) VALUES (?, ?, ?, ?, ?, 0)";
+    private static final String RENAMED_FROM = "SELECT a.name AS current_name FROM uxmauth_rename r"
+            + " JOIN uxmauth_account a ON a.id = r.account_id WHERE r.old_key = ? ORDER BY r.renamed_at DESC";
+    private static final String UNTOLD = "SELECT old_name, new_name FROM uxmauth_rename"
+            + " WHERE account_id = ? AND told = 0 ORDER BY renamed_at DESC";
+    private static final String TOLD = "UPDATE uxmauth_rename SET told = 1 WHERE account_id = ?";
+    private static final String DELETE = "DELETE FROM uxmauth_account WHERE id = ?";
+    private static final String DELETE_RENAMES = "DELETE FROM uxmauth_rename WHERE account_id = ?";
+    private static final String MOVE_ID = "UPDATE uxmauth_account SET id = ? WHERE id = ?";
+    private static final String MOVE_RENAMES = "UPDATE uxmauth_rename SET account_id = ? WHERE account_id = ?";
+
     private final Database database;
 
     public SqlAccountRepository(Database database) {
@@ -122,6 +135,97 @@ public final class SqlAccountRepository implements AccountRepository {
         return database.transaction(sql -> sql.queryFirst(
                         COUNT_FROM, statement -> statement.setString(1, address), row -> row.getInt("registered")))
                 .orElse(0);
+    }
+
+    @Override
+    public Optional<Account> findByPremiumId(UUID premiumId) {
+        Objects.requireNonNull(premiumId, "premiumId");
+        return database.transaction(sql -> sql.queryFirst(
+                SELECT + "premium_id = ?",
+                statement -> statement.setString(1, premiumId.toString()),
+                SqlAccountRepository::read));
+    }
+
+    /** The unique index on {@code name_key} decides here too; the move and its memory are one transaction. */
+    @Override
+    public Insert rename(UUID id, PlayerName to, Instant at) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(to, "to");
+        Objects.requireNonNull(at, "at");
+        Account before = findById(id).orElseThrow(() -> new IllegalArgumentException("no account " + id));
+        try {
+            database.inTransaction(sql -> {
+                sql.update(RENAME, statement -> {
+                    statement.setString(1, to.value());
+                    statement.setString(2, to.key());
+                    statement.setString(3, id.toString());
+                });
+                sql.update(REMEMBER_RENAME, statement -> {
+                    statement.setString(1, id.toString());
+                    statement.setString(2, before.name().key());
+                    statement.setString(3, before.name().value());
+                    statement.setString(4, to.value());
+                    statement.setLong(5, at.toEpochMilli());
+                });
+            });
+            return new Inserted();
+        } catch (StorageException refused) {
+            Optional<Account> holder = findByName(to);
+            if (holder.isPresent()) {
+                return new NameTaken(holder.get().name());
+            }
+            throw refused;
+        }
+    }
+
+    @Override
+    public Optional<PlayerName> renamedFrom(PlayerName old) {
+        Objects.requireNonNull(old, "old");
+        return database.transaction(sql -> sql.queryFirst(
+                RENAMED_FROM,
+                statement -> statement.setString(1, old.key()),
+                row -> new PlayerName(row.getString("current_name"))));
+    }
+
+    @Override
+    public Optional<Renamed> untoldRename(UUID id) {
+        Objects.requireNonNull(id, "id");
+        return database.transaction(sql -> sql.queryFirst(
+                UNTOLD,
+                statement -> statement.setString(1, id.toString()),
+                row -> new Renamed(
+                        new PlayerName(row.getString("old_name")), new PlayerName(row.getString("new_name")))));
+    }
+
+    @Override
+    public void markRenameTold(UUID id) {
+        Objects.requireNonNull(id, "id");
+        database.inTransaction(sql -> sql.update(TOLD, statement -> statement.setString(1, id.toString())));
+    }
+
+    @Override
+    public void delete(UUID id) {
+        Objects.requireNonNull(id, "id");
+        database.inTransaction(sql -> {
+            sql.update(DELETE_RENAMES, statement -> statement.setString(1, id.toString()));
+            sql.update(DELETE, statement -> statement.setString(1, id.toString()));
+        });
+    }
+
+    @Override
+    public void moveId(UUID from, UUID to) {
+        Objects.requireNonNull(from, "from");
+        Objects.requireNonNull(to, "to");
+        database.inTransaction(sql -> {
+            sql.update(MOVE_ID, statement -> {
+                statement.setString(1, to.toString());
+                statement.setString(2, from.toString());
+            });
+            sql.update(MOVE_RENAMES, statement -> {
+                statement.setString(1, to.toString());
+                statement.setString(2, from.toString());
+            });
+        });
     }
 
     /** Binds every column but the id, in table order, starting at {@code first}. */

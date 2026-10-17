@@ -44,6 +44,38 @@ public interface AccountRepository {
     /** How many accounts were registered from this address, for the accounts-per-address limit. */
     int countRegisteredFrom(String address);
 
+    /** The premium account that proved this Mojang id, under whatever name it holds now. */
+    Optional<Account> findByPremiumId(UUID premiumId);
+
+    /**
+     * Moves an account to another name and keeps its id, so everything keyed by the id stays where it is. The old
+     * name is remembered with where it went. A name somebody holds is refused, and nothing moves.
+     */
+    Insert rename(UUID id, PlayerName to, Instant at);
+
+    /** The name the account last moved away from this name holds now, if one did. */
+    Optional<PlayerName> renamedFrom(PlayerName old);
+
+    /** The latest move of this account its player has not been told of yet. */
+    Optional<Renamed> untoldRename(UUID id);
+
+    /** The player of this account has been told of its moves. */
+    void markRenameTold(UUID id);
+
+    /** Removes an account and what is remembered of its moves. */
+    void delete(UUID id);
+
+    /** Gives an account another id, as a scheme that follows Mojang's does when a cracked account turns premium. */
+    void moveId(UUID from, UUID to);
+
+    /** An account moved from one name to another. */
+    record Renamed(PlayerName from, PlayerName to) {
+        public Renamed {
+            Objects.requireNonNull(from, "from");
+            Objects.requireNonNull(to, "to");
+        }
+    }
+
     /** What an insert found. */
     sealed interface Insert permits Inserted, NameTaken {}
 
