@@ -19,6 +19,7 @@ import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.premium.Arrival;
+import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.Decision;
 import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameRule;
@@ -72,7 +73,21 @@ final class AuthSettingsTest {
                         Duration.ofMinutes(10),
                         List.of(),
                         List.of(),
-                        UuidScheme.KEEP_FIRST));
+                        UuidScheme.KEEP_FIRST,
+                        ConflictStrategy.RENAME,
+                        "_"));
+    }
+
+    @Test
+    @DisplayName("the conflict strategy is read in the words config.conf uses, and a rename mark cannot be empty")
+    void theConflictStrategyIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "ownership { conflict = premium-takes }\n")
+                        .ownership()
+                        .conflict())
+                .isEqualTo(ConflictStrategy.PREMIUM_TAKES);
+        assertThatThrownBy(() -> settingsFrom(folder, "ownership { rename-mark = \"\" }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ownership.rename-mark");
     }
 
     @Test

@@ -15,6 +15,8 @@ import java.util.regex.PatternSyntaxException;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
+import com.uxplima.auth.domain.premium.ConflictStrategy;
+import com.uxplima.auth.domain.premium.MarkedName;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
@@ -137,7 +139,18 @@ final class SettingsReader {
                 Duration.ofMinutes(positive(config, "ownership.claim-minutes", 10)),
                 premiumDomains,
                 list(config, "ownership.domains", "cracked", List.of()),
-                word(config, "ownership.uuid-scheme", "keep-first", UuidScheme.class));
+                word(config, "ownership.uuid-scheme", "keep-first", UuidScheme.class),
+                word(config, "ownership.conflict", "rename", ConflictStrategy.class),
+                renameMark(config));
+    }
+
+    private static String renameMark(HoconConfig config) {
+        String mark = config.getString("ownership.rename-mark", "_");
+        if (mark.isEmpty() || mark.length() > MarkedName.LONGEST - 3) {
+            throw new IllegalArgumentException("ownership.rename-mark must be from 1 to " + (MarkedName.LONGEST - 3)
+                    + " characters, got: \"" + mark + "\"");
+        }
+        return mark;
     }
 
     /** One of an enum's constants, written in config.conf in lower case with dashes. */

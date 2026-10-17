@@ -10,6 +10,7 @@ import java.util.Set;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
+import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
@@ -61,8 +62,8 @@ public final class AuthSettings {
 
     /**
      * Who owns a name: the rule, what a name nobody could look up is taken for, how long a failed handshake is
-     * remembered, how long a claim waits for its next connection, the addresses of the domain rule, and the UUID
-     * a player plays under.
+     * remembered, how long a claim waits for its next connection, the addresses of the domain rule, the UUID a
+     * player plays under, and what happens to a cracked account whose name its paid owner proves.
      */
     public record Ownership(
             NameRule rule,
@@ -71,9 +72,13 @@ public final class AuthSettings {
             Duration claimMemory,
             List<String> premiumDomains,
             List<String> crackedDomains,
-            UuidScheme uuidScheme) {
+            UuidScheme uuidScheme,
+            ConflictStrategy conflict,
+            String renameMark) {
         public Ownership {
             Objects.requireNonNull(uuidScheme, "uuidScheme");
+            Objects.requireNonNull(conflict, "conflict");
+            Objects.requireNonNull(renameMark, "renameMark");
             Objects.requireNonNull(rule, "rule");
             Objects.requireNonNull(whenUnknown, "whenUnknown");
             Objects.requireNonNull(failedMemory, "failedMemory");
