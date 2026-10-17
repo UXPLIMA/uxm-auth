@@ -71,6 +71,7 @@ public final class AuthWorld implements AutoCloseable {
     public final List<AuthSettings.Moment> fired = new ArrayList<>();
     public final MomentRunner moments = (Player player, AuthSettings.Moment moment) -> fired.add(moment);
     public final AuthSettings.Passwords passwords;
+    public final HoldKeeper keeper;
     public final Door door;
     public final Replies replies = new Replies(scheduler, messages, Logger.getLogger("uxmauth-test"));
     public final RegisterAccount register;
@@ -85,7 +86,7 @@ public final class AuthWorld implements AutoCloseable {
                 .poolName("uxmauth-test-" + UUID.randomUUID())
                 .build());
         this.accounts = new SqlAccountRepository(database);
-        HoldKeeper keeper = new HoldKeeper(
+        this.keeper = new HoldKeeper(
                 plugin,
                 scheduler,
                 new HeldStateStore(folder.resolve("held")),

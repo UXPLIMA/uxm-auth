@@ -144,6 +144,20 @@ final class AuthSettingsTest {
         assertThat(settings.current()).isSameAs(before);
     }
 
+    @Test
+    @DisplayName("a join shows its title and subtitle together, as the one subtitle line the engine reads both from")
+    void theJoinTitleAndSubtitleAreOneLine(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot settings = settingsFrom(folder, "");
+
+        for (AuthSettings.Moment moment :
+                List.of(AuthSettings.Moment.JOIN_UNREGISTERED, AuthSettings.Moment.JOIN_REGISTERED)) {
+            assertThat(settings.effects().of(moment))
+                    .describedAs("a [title] line and a [subtitle] line are two titles, the second over the first")
+                    .noneMatch(line -> line.startsWith("[title]"))
+                    .anyMatch(line -> line.startsWith("[subtitle]") && line.contains("|"));
+        }
+    }
+
     private static PluginSettings.Snapshot settingsFrom(Path folder, String body) throws IOException {
         Path file = folder.resolve("config.conf");
         Files.writeString(file, body, StandardCharsets.UTF_8);

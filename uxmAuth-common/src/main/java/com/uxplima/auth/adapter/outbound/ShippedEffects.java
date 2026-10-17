@@ -11,8 +11,8 @@ final class ShippedEffects {
 
     static List<String> of(AuthSettings.Moment moment) {
         return switch (moment) {
-            case JOIN_UNREGISTERED -> List.of("[title] @join.register-title", "[subtitle] @join.register-subtitle");
-            case JOIN_REGISTERED -> List.of("[title] @join.login-title", "[subtitle] @join.login-subtitle");
+            case JOIN_UNREGISTERED -> List.of("[subtitle] @join.register-title | @join.register-subtitle");
+            case JOIN_REGISTERED -> List.of("[subtitle] @join.login-title | @join.login-subtitle");
             case REMINDER_REGISTER -> List.of("[actionbar] @reminder.register");
             case REMINDER_LOGIN -> List.of("[actionbar] @reminder.login");
             case WRONG_PASSWORD -> List.of("[sound] block.note_block.bass 0.8 0.6");

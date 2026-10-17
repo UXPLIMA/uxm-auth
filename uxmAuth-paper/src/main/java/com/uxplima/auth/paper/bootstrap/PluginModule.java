@@ -18,7 +18,11 @@ import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LanguageSuggestions;
+import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.listener.LanguageListener;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
 import com.uxplima.uxmlib.command.annotation.CommandMessages;
@@ -80,6 +84,8 @@ final class PluginModule {
     private @Nullable TaskHandle saveTask;
 
     private @Nullable Database database;
+
+    private @Nullable AuthGraph auth;
 
     PluginModule(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -147,6 +153,10 @@ final class PluginModule {
         }
         saveChoices();
         store = null;
+        if (auth != null) {
+            auth.close();
+            auth = null;
+        }
         if (database != null) {
             database.close();
             database = null;
@@ -200,6 +210,22 @@ final class PluginModule {
                 .replacer(FromConfig.class, commands.replacer())
                 .suggestions(LanguageSuggestions.KEY, new LanguageSuggestions(choices));
 
+        AuthGraph graph = new AuthGraph(
+                plugin,
+                scheduler,
+                settings,
+                Objects.requireNonNull(database, "database"),
+                messages,
+                styler(),
+                commands);
+        this.auth = graph;
+        graph.start();
+        registerIfEnabled(commands, LoginCommand.KEY, "login", graph.login, resolvers, scheduler);
+        registerIfEnabled(commands, RegisterCommand.KEY, "register", graph.register, resolvers, scheduler);
+        registerIfEnabled(
+                commands, ChangePasswordCommand.KEY, "changepassword", graph.changePassword, resolvers, scheduler);
+        registerIfEnabled(commands, LogoutCommand.KEY, "logout", graph.logout, resolvers, scheduler);
+
         if (commands.isEnabled(AdminCommand.KEY, "uxmauth")) {
             AnnotatedCommands.register(
                     plugin,
@@ -212,6 +238,18 @@ final class PluginModule {
                             choices),
                     resolvers,
                     scheduler);
+        }
+    }
+
+    private void registerIfEnabled(
+            ConfiguredCommands commands,
+            String key,
+            String fallbackName,
+            Object handler,
+            ParamResolvers resolvers,
+            Scheduler scheduler) {
+        if (commands.isEnabled(key, fallbackName)) {
+            AnnotatedCommands.register(plugin, handler, resolvers, scheduler);
         }
     }
 

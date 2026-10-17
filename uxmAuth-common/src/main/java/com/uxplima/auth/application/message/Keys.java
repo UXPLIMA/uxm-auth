@@ -90,9 +90,10 @@ public enum Keys implements MessageKey {
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
     KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more."),
+    KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
     KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),
 
-    LOGIN_WRONG("login.wrong", "<etag:'ERROR'> <body>That password is wrong. <value><left><body> tries left."),
+    LOGIN_WRONG("login.wrong", "<etag:'ERROR'> <body>That password is wrong. Tries left: <value><left><body>."),
     LOGIN_NOT_REGISTERED(
             "login.not-registered",
             "<etag:'ERROR'> <body>You have no password here yet. Register with <value>/register<body>."),
