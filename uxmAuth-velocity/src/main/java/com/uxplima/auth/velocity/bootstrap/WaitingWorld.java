@@ -66,12 +66,30 @@ final class WaitingWorld implements AutoCloseable {
                     + " on a server instead: on an auth server when network.auth-servers names one.");
             return;
         }
+        try {
+            hold(limboApi.get(), settings, accounts, words, network);
+        } catch (RuntimeException | LinkageError foreign) {
+            // A LimboAPI of another major version names its types elsewhere; the proxy starts without the world.
+            close();
+            logger.warn(
+                    "The LimboAPI on this proxy is not one this uxmAuth speaks to: it needs LimboAPI 2, made for"
+                            + " Velocity 4. Players who must log in wait on a server instead.",
+                    foreign);
+        }
+    }
+
+    private void hold(
+            Object limboApi,
+            PluginSettings settings,
+            SqlAccountRepository accounts,
+            Messages words,
+            ProxySessions network) {
         Path commands = folder.resolve(COMMANDS);
         Set<String> login = CommandFile.labels(commands, "login");
         Set<String> register = CommandFile.labels(commands, "register");
         LimboLogin passwords = passwords(settings, accounts, words, login, register);
         LimboWait wait = new LimboWait(
-                LimboWorld.open(limboApi.get(), folder, settings.current().network(), metas(login, register), logger),
+                LimboWorld.open(limboApi, folder, settings.current().network(), metas(login, register), logger),
                 network::waitsAtTheProxy,
                 (player, exit) -> visit(passwords, network, player, exit),
                 () -> settings.current().timeouts(),

@@ -251,6 +251,26 @@ final class ProxyModuleTest {
     }
 
     @Test
+    @DisplayName("a LimboAPI this plugin cannot speak to leaves the players on a server, and the proxy starts")
+    void aForeignLimboApiLeavesThePlayersOnAServer(@TempDir Path folder) throws IOException {
+        PluginContainer container = mock(PluginContainer.class);
+        doReturn(Optional.of(new Object())).when(container).getInstance();
+        PluginManager plugins = mock(PluginManager.class);
+        when(proxy.getPluginManager()).thenReturn(plugins);
+        when(plugins.getPlugin("limboapi")).thenReturn(Optional.of(container));
+        CommandManager commands = mock(CommandManager.class);
+        when(proxy.getCommandManager()).thenReturn(commands);
+        when(commands.metaBuilder(anyString())).thenReturn(mock(CommandMeta.Builder.class, RETURNS_SELF));
+        ProxyModule module = askingForTheWorld(folder);
+
+        assertThat(module.wire()).isTrue();
+        module.shutdown();
+
+        verify(events, never()).register(eq(plugin), any(LimboWait.class));
+        verify(logger).warn(contains("not one this uxmAuth speaks to"), any(Throwable.class));
+    }
+
+    @Test
     @DisplayName("a proxy that keeps players on a server never asks for LimboAPI")
     void aServerWaitNeverAsksForLimboApi(@TempDir Path folder) {
         ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
