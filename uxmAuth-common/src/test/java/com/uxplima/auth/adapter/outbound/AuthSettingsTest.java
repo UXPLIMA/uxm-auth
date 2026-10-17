@@ -335,6 +335,31 @@ final class AuthSettingsTest {
         }
     }
 
+    @Test
+    @DisplayName("a server stands alone unless network.enabled says otherwise, and a claim is fresh for 30 seconds")
+    void theNetworkIsOffByDefault(@TempDir Path folder) throws IOException {
+        AuthSettings.Network network = settingsFrom(folder, "").network();
+
+        assertThat(network.enabled()).isFalse();
+        assertThat(network.secret()).isEmpty();
+        assertThat(network.claimFor()).isEqualTo(Duration.ofSeconds(30));
+    }
+
+    @Test
+    @DisplayName("a backend on a network refuses to start with no secret, and says where the secret comes from")
+    void aNetworkNeedsTheSecret(@TempDir Path folder) throws IOException {
+        assertThatThrownBy(() -> settingsFrom(folder, "network { enabled = true }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("network.secret")
+                .hasMessageContaining("proxy");
+        AuthSettings.Network network = settingsFrom(
+                        folder, "network { enabled = true, secret = \"" + "a".repeat(43) + "\", claim-seconds = 10 }\n")
+                .network();
+        assertThat(network.enabled()).isTrue();
+        assertThat(network.secret()).hasSize(43);
+        assertThat(network.claimFor()).isEqualTo(Duration.ofSeconds(10));
+    }
+
     private static PluginSettings.Snapshot settingsFrom(Path folder, String body) throws IOException {
         Path file = folder.resolve("config.conf");
         Files.writeString(file, body, StandardCharsets.UTF_8);

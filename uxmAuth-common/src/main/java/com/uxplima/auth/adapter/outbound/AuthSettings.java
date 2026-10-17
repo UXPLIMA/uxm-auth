@@ -100,6 +100,29 @@ public final class AuthSettings {
     /** What a Bedrock player Floodgate vouched for gets: in at once, or the same password as everyone. */
     public record Bedrock(boolean autoLogin) {}
 
+    /**
+     * Whether this server is a backend behind the proxy half, and what the two share.
+     *
+     * @param secret the key the proxy signs its claims with, copied from the proxy's data folder
+     * @param claimFor how long a signed claim stays fresh after the proxy wrote it
+     */
+    public record Network(boolean enabled, String secret, Duration claimFor) {
+        public Network {
+            Objects.requireNonNull(secret, "secret");
+            Objects.requireNonNull(claimFor, "claimFor");
+            if (enabled && secret.isBlank()) {
+                throw new IllegalArgumentException("network.enabled is true and network.secret is empty. The proxy"
+                        + " writes the secret into its own data folder on its first start: copy it here.");
+            }
+        }
+
+        /** Never printed: the secret is what keeps a forged claim out. */
+        @Override
+        public String toString() {
+            return "Network[enabled=" + enabled + ", claimFor=" + claimFor + "]";
+        }
+    }
+
     /** What a password may be, which confirmations are asked, and how many wrong ones a player gets. */
     public record Passwords(
             int minLength,

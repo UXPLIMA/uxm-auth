@@ -100,6 +100,13 @@ final class SettingsReader {
         return new AuthSettings.Bedrock(config.getBoolean("bedrock.auto-login", true));
     }
 
+    static AuthSettings.Network network(HoconConfig config) {
+        return new AuthSettings.Network(
+                config.getBoolean("network.enabled", false),
+                config.getString("network.secret", "").trim(),
+                Duration.ofSeconds(positive(config, "network.claim-seconds", 30)));
+    }
+
     /** Mojang refuses past this many requests in ten minutes. */
     private static final int MOJANG_LIMIT = 600;
 

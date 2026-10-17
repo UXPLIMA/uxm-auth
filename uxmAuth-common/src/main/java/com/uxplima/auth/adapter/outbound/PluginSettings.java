@@ -61,7 +61,8 @@ public final class PluginSettings {
             AuthSettings.Effects effects,
             AuthSettings.Bedrock bedrock,
             AuthSettings.Premium premium,
-            AuthSettings.Ownership ownership) {
+            AuthSettings.Ownership ownership,
+            AuthSettings.Network network) {
 
         public Snapshot {
             Objects.requireNonNull(language, "language");
@@ -76,6 +77,7 @@ public final class PluginSettings {
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
             Objects.requireNonNull(ownership, "ownership");
+            Objects.requireNonNull(network, "network");
             if (hashing.algorithm() == HashAlgorithm.BCRYPT && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
                 throw new IllegalArgumentException("passwords.max-length is " + passwords.maxLength()
                         + ", and bcrypt reads only the first " + AuthSettings.BCRYPT_BYTES
@@ -215,7 +217,8 @@ public final class PluginSettings {
                 SettingsReader.effects(config),
                 SettingsReader.bedrock(config),
                 SettingsReader.premium(config),
-                SettingsReader.ownership(config));
+                SettingsReader.ownership(config),
+                SettingsReader.network(config));
     }
 
     /**
