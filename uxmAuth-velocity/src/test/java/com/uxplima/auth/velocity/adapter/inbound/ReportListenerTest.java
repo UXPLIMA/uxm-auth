@@ -76,6 +76,17 @@ final class ReportListenerTest {
     }
 
     @Test
+    @DisplayName("a server's wait after a login gives back the door's own flags, not the server's")
+    void aWaitKeepsTheDoorsFlags() {
+        sessions.waiting(STEVE, new Claim.Waiting(true, false, true));
+        report(server, STEVE, "Steve", new Claim.LoggedIn(AuthMethod.PASSWORD));
+
+        report(server, STEVE, "Steve", new Claim.Waiting(false, false, false));
+
+        assertThat(sessions.nextStanding(STEVE)).contains(new Claim.Waiting(true, false, true));
+    }
+
+    @Test
     @DisplayName("the channel from a client is dropped and never passed on, whatever it says")
     void aClientsReportIsDropped() {
         PluginMessageEvent event = report(steve, STEVE, "Steve", new Claim.LoggedIn(AuthMethod.PASSWORD));

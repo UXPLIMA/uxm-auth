@@ -61,7 +61,8 @@ public final class ReportListener {
             case Claims.Reading.Valid valid -> {
                 switch (valid.claim().standing()) {
                     case Claim.LoggedIn in -> sessions.reported(player.getUniqueId(), in.method());
-                    case Claim.Waiting waiting -> sessions.waiting(player.getUniqueId(), waiting);
+                    // The server knows no door flags of the proxy's; the proxy keeps its own.
+                    case Claim.Waiting waiting -> sessions.loggedOut(player.getUniqueId());
                 }
             }
             case Claims.Reading.Refused refused ->
