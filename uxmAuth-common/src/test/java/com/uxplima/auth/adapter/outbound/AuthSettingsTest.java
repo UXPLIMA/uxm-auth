@@ -21,6 +21,7 @@ import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.premium.Arrival;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.Decision;
+import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
@@ -75,7 +76,26 @@ final class AuthSettingsTest {
                         List.of(),
                         UuidScheme.KEEP_FIRST,
                         ConflictStrategy.RENAME,
-                        "_"));
+                        "_",
+                        new DomainMark("+", false)));
+    }
+
+    @Test
+    @DisplayName("the domain rule's mark is read with its place, before or after the name")
+    void theDomainMarkIsRead(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot settings = settingsFrom(folder, """
+                ownership {
+                  domains {
+                    cracked-mark = "c_"
+                    mark-at = start
+                  }
+                }
+                """);
+
+        assertThat(settings.ownership().crackedMark()).isEqualTo(new DomainMark("c_", true));
+        assertThatThrownBy(() -> settingsFrom(folder, "ownership { domains { mark-at = middle } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ownership.domains.mark-at");
     }
 
     @Test

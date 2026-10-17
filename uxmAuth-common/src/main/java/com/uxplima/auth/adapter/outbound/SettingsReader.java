@@ -16,6 +16,7 @@ import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
+import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.MarkedName;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.UuidScheme;
@@ -141,7 +142,21 @@ final class SettingsReader {
                 list(config, "ownership.domains", "cracked", List.of()),
                 word(config, "ownership.uuid-scheme", "keep-first", UuidScheme.class),
                 word(config, "ownership.conflict", "rename", ConflictStrategy.class),
-                renameMark(config));
+                renameMark(config),
+                crackedMark(config));
+    }
+
+    private static DomainMark crackedMark(HoconConfig config) {
+        String mark = config.getString("ownership.domains.cracked-mark", "+");
+        String at = config.getString("ownership.domains.mark-at", "end").trim().toLowerCase(Locale.ROOT);
+        if (!at.equals("start") && !at.equals("end")) {
+            throw new IllegalArgumentException("ownership.domains.mark-at is " + at + ", and it is start or end");
+        }
+        try {
+            return new DomainMark(mark, at.equals("start"));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("ownership.domains.cracked-mark: " + wrong.getMessage(), wrong);
+        }
     }
 
     private static String renameMark(HoconConfig config) {

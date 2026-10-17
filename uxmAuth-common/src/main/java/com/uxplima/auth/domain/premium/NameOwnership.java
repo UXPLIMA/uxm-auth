@@ -31,6 +31,11 @@ public final class NameOwnership {
         if (arrival.holder() == Holder.BEDROCK) {
             return new Decision.Cracked(false, false);
         }
+        if (rule == NameRule.DOMAIN && !throughThePremiumAddress(arrival)) {
+            // Through the cracked address the player is the marked name, an account of its own: the holder of the
+            // name they typed is somebody else's business.
+            return new Decision.Cracked(false, false, true);
+        }
         if (arrival.holder() == Holder.PREMIUM) {
             // An account that proved itself has no password to fall back on, under any rule and any address. A
             // try that failed lately is told why once, rather than shown "Invalid session" again.
@@ -67,11 +72,14 @@ public final class NameOwnership {
         return web;
     }
 
-    private Decision domain(Arrival arrival) {
-        if (!premiumHosts.matches(arrival.host()) || crackedHosts.matches(arrival.host())) {
-            return new Decision.Cracked(false, false);
-        }
+    /** Through the premium address, where the cracked one is decided before this. */
+    private static Decision domain(Arrival arrival) {
         return arrival.failedBefore() ? new Decision.Refuse(Refusal.PREMIUM_ADDRESS) : new Decision.Handshake();
+    }
+
+    /** An address on both lists counts as cracked, and one on neither too. */
+    private boolean throughThePremiumAddress(Arrival arrival) {
+        return premiumHosts.matches(arrival.host()) && !crackedHosts.matches(arrival.host());
     }
 
     /** A cracked account whose player asked for the handshake gets it once; a failure leaves it as it was. */

@@ -43,6 +43,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.Decision;
+import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
@@ -78,6 +79,7 @@ final class ConnectionListenerTest {
     private boolean sameAddress;
     private BedrockAdmission bedrock = BedrockAdmission.NONE;
     private final FakeHellos hellos = new FakeHellos();
+    private UuidScheme scheme = UuidScheme.KEEP_FIRST;
     private @org.jspecify.annotations.Nullable AtTheDoor door;
     private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
 
@@ -474,14 +476,17 @@ final class ConnectionListenerTest {
     @DisplayName("a player whose account moved is told at their next login, once, and the move is marked read")
     void aMovedPlayerIsToldAtTheirLogin() throws Exception {
         hellos.installed = true;
-        PlayerMock steve = new PlayerMock(server, "Notch_");
         PlayerMock was = new PlayerMock(server, "Notch");
         world.registered(was, "hunter22");
         world.sessions.close(was.getUniqueId());
         world.accounts.rename(was.getUniqueId(), new PlayerName("Notch_"), world.clock.instant());
         hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(false, false)));
         ConnectionListener listener = listener(world.accounts);
-        listener.onPreLogin(preLogin("Notch_", steve.getUniqueId(), loginConnection(MINE, true)));
+        AsyncPlayerPreLoginEvent event =
+                preLogin("Notch_", UuidScheme.offline(new PlayerName("Notch_")), loginConnection(MINE, true));
+        listener.onPreLogin(event);
+        assertThat(event.getPlayerProfile().getId()).isEqualTo(was.getUniqueId());
+        PlayerMock steve = new PlayerMock(server, "Notch_", was.getUniqueId());
         server.addPlayer(steve);
 
         world.door.open(steve, AuthSettings.Moment.LOGGED_IN);
@@ -489,6 +494,67 @@ final class ConnectionListenerTest {
 
         assertThat(said(steve)).contains("Notch_");
         assertThat(world.accounts.untoldRename(was.getUniqueId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("through the cracked address of the domain rule a player plays under the marked name and its own UUID")
+    void aMarkedPlayerPlaysUnderTheMark() throws Exception {
+        hellos.installed = true;
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(false, false, true)));
+        UUID marked = UuidScheme.offline(new PlayerName("Notch+"));
+
+        AsyncPlayerPreLoginEvent event = preLogin(
+                server.createProfile(UuidScheme.offline(new PlayerName("Notch")), "Notch"),
+                loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
+        assertThat(event.getPlayerProfile().getName()).isEqualTo("Notch+");
+        assertThat(event.getPlayerProfile().getId()).isEqualTo(marked);
+        assertThat(world.sessions.state(marked)).contains(new AuthState.Unregistered(new PlayerName("Notch+")));
+    }
+
+    @Test
+    @DisplayName(
+            "a holder renamed onto the mark keeps its first UUID and still plays under the marked name, never the paid one")
+    void aRenamedHolderPlaysUnderTheMarkedName() throws Exception {
+        hellos.installed = true;
+        UUID first = UuidScheme.offline(new PlayerName("Steve"));
+        PlayerMock steve = new PlayerMock(server, "Steve", first);
+        world.registered(steve, "hunter22");
+        world.sessions.close(first);
+        world.accounts.rename(first, new PlayerName("Steve+"), world.clock.instant());
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(false, false, true)));
+
+        AsyncPlayerPreLoginEvent event = preLogin(server.createProfile(first, "Steve"), loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getPlayerProfile().getId()).isEqualTo(first);
+        assertThat(event.getPlayerProfile().getName()).isEqualTo("Steve+");
+    }
+
+    @Test
+    @DisplayName("under the random scheme a new cracked player plays under a fresh UUID, a returning one under theirs")
+    void theRandomSchemeGivesCrackedPlayersTheirOwn() throws Exception {
+        scheme = UuidScheme.RANDOM;
+        UUID offline = UuidScheme.offline(new PlayerName("Newbie"));
+
+        AsyncPlayerPreLoginEvent fresh = preLogin(server.createProfile(offline, "Newbie"), loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(fresh);
+
+        UUID given = fresh.getPlayerProfile().getId();
+        assertThat(given).isNotNull().isNotEqualTo(offline);
+        assertThat(world.sessions.state(Objects.requireNonNull(given))).isPresent();
+
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+        AsyncPlayerPreLoginEvent back = preLogin(
+                server.createProfile(UuidScheme.offline(new PlayerName("Steve")), "Steve"),
+                loginConnection(new InetSocketAddress(ELSEWHERE, 40002), true));
+        listener(world.accounts).onPreLogin(back);
+
+        assertThat(back.getPlayerProfile().getId()).isEqualTo(steve.getUniqueId());
     }
 
     @Test
@@ -644,7 +710,9 @@ final class ConnectionListenerTest {
                         hellos.installed ? helloDoor(accounts) : new HelloAtTheDoor(),
                         world.messages,
                         world.scheduler,
-                        server::createProfile),
+                        server::createProfile,
+                        () -> new DomainMark("+", false),
+                        scheme),
                 world.notices,
                 world.door,
                 world.keeper,

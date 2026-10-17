@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 
@@ -19,6 +20,8 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.DomainMark;
+import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.uxmlib.scheduler.Scheduler;
@@ -73,20 +76,30 @@ public final class Arrivals {
     private final Messages messages;
     private final Scheduler scheduler;
     private final BiFunction<UUID, String, PlayerProfile> profiles;
+    private final Supplier<DomainMark> mark;
+    private final UuidScheme scheme;
 
+    /**
+     * @param mark the domain rule's mark, for a connection through the cracked address
+     * @param scheme the UUID scheme this start recorded, which a cracked player plays under too
+     */
     public Arrivals(
             ReadTheName names,
             BedrockAdmission bedrock,
             HelloAtTheDoor hellos,
             Messages messages,
             Scheduler scheduler,
-            BiFunction<UUID, String, PlayerProfile> profiles) {
+            BiFunction<UUID, String, PlayerProfile> profiles,
+            Supplier<DomainMark> mark,
+            UuidScheme scheme) {
         this.names = Objects.requireNonNull(names, "names");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.hellos = Objects.requireNonNull(hellos, "hellos");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
+        this.mark = Objects.requireNonNull(mark, "mark");
+        this.scheme = Objects.requireNonNull(scheme, "scheme");
     }
 
     /** What this pre-login comes to. */
@@ -132,7 +145,8 @@ public final class Arrivals {
     }
 
     private Arrival usualArrival(AsyncPlayerPreLoginEvent event, HelloAtTheDoor.Reading.Usual usual) {
-        ReadTheName.Reading reading = names.read(event.getName());
+        ReadTheName.Reading reading =
+                usual.marked() ? names.readMarked(event.getName(), mark.get()) : names.read(event.getName());
         if (reading instanceof ReadTheName.Reading.Refused refused) {
             return new Arrival.Refused(refusal(refused.verdict()));
         }
@@ -156,7 +170,31 @@ public final class Arrivals {
                                     () -> scheduler.async(() -> hellos.toldMove(account))),
                             true)));
         }
-        return new Arrival.Opens(event.getUniqueId(), state, null, notices);
+        return played(event, state, notices);
+    }
+
+    /**
+     * The id and name a player with a password plays under: an account's own, or the scheme's for a new name.
+     * An offline server already derives the offline id from the name as typed, so a new name keeps it unless it
+     * carries the mark or the scheme hands out its own.
+     */
+    private Arrival played(AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices) {
+        PlayerName name;
+        UUID id;
+        if (state instanceof AuthState.Registered registered) {
+            name = registered.account().name();
+            id = registered.account().id();
+        } else {
+            name = ((AuthState.Unregistered) state).name();
+            boolean derived = scheme != UuidScheme.RANDOM && name.value().equals(event.getName());
+            id = derived ? event.getUniqueId() : scheme.idFor(name, Optional.empty(), Optional.empty());
+        }
+        PlayerProfile profile = null;
+        if (!id.equals(event.getUniqueId()) || !name.value().equals(event.getName())) {
+            profile = profiles.apply(id, name.value());
+            profile.setProperties(event.getPlayerProfile().getProperties());
+        }
+        return new Arrival.Opens(id, state, profile, notices);
     }
 
     private static InetSocketAddress clientAddress(AsyncPlayerPreLoginEvent event) {

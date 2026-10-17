@@ -10,6 +10,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthState;
 
@@ -63,6 +64,28 @@ public final class ReadTheName {
             return new Reading.Refused(new NameVerdict.WrongCase(account.get().name()));
         }
         return new Reading.Opens(waitingFor(accepted.name(), account));
+    }
+
+    /**
+     * What a connection under the domain rule's mark opens with. The operator's rules hold the name as the player
+     * typed it, with room left for the mark; the account and its case are the marked name's.
+     */
+    public Reading readMarked(String raw, DomainMark mark) {
+        Objects.requireNonNull(raw, "raw");
+        Objects.requireNonNull(mark, "mark");
+        NameVerdict verdict = policy.get().check(raw);
+        if (!(verdict instanceof NameVerdict.Accepted accepted)) {
+            return new Reading.Refused(verdict);
+        }
+        if (raw.length() > mark.longestName()) {
+            return new Reading.Refused(new NameVerdict.TooLong(mark.longestName()));
+        }
+        PlayerName marked = mark.on(accepted.name());
+        Optional<Account> account = accounts.findByName(marked);
+        if (account.isPresent() && !account.get().name().value().equals(marked.value())) {
+            return new Reading.Refused(new NameVerdict.WrongCase(account.get().name()));
+        }
+        return new Reading.Opens(waitingFor(marked, account));
     }
 
     /**

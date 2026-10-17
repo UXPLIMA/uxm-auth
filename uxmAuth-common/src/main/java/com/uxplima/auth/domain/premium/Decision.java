@@ -13,8 +13,15 @@ public sealed interface Decision {
      *
      * @param unverified whether no source could say who owns the name, so the account asks again next time
      * @param explain whether this connection failed the handshake lately and is told why it joins this way
+     * @param marked whether it plays under the domain rule's mark, a name of its own beside the paid one
      */
-    record Cracked(boolean unverified, boolean explain) implements Decision {}
+    record Cracked(boolean unverified, boolean explain, boolean marked) implements Decision {
+
+        /** A password, under the name the player typed. */
+        public Cracked(boolean unverified, boolean explain) {
+            this(unverified, explain, false);
+        }
+    }
 
     /** Turn it away, with the reason in plain words. */
     record Refuse(Refusal why) implements Decision {

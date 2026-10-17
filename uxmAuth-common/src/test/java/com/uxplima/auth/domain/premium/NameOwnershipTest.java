@@ -22,6 +22,7 @@ final class NameOwnershipTest {
     private static final Decision JOINS_CRACKED = new Decision.Cracked(false, false);
     private static final Decision JOINS_UNVERIFIED = new Decision.Cracked(true, false);
     private static final Decision JOINS_EXPLAINED = new Decision.Cracked(false, true);
+    private static final Decision JOINS_MARKED = new Decision.Cracked(false, false, true);
 
     private final AtomicInteger asked = new AtomicInteger();
 
@@ -100,7 +101,8 @@ final class NameOwnershipTest {
     @DisplayName("every rule asks a premium account for the handshake, and lets a Bedrock account through")
     void everyRuleKnowsPremiumAndBedrockAccounts() {
         for (NameRule each : NameRule.values()) {
-            assertThat(rule(each).decide(arrival(Holder.PREMIUM), web(UNKNOWN)))
+            String host = each == NameRule.DOMAIN ? "premium.example.org" : "play.example.org";
+            assertThat(rule(each).decide(new Arrival(Holder.PREMIUM, false, false, host), web(UNKNOWN)))
                     .as(each.name())
                     .isEqualTo(HANDSHAKE);
         }
@@ -168,26 +170,38 @@ final class NameOwnershipTest {
         assertThat(domain.decide(new Arrival(Holder.NOBODY, false, false, "eu.paid.example.org"), web(CRACKED)))
                 .isEqualTo(HANDSHAKE);
         assertThat(domain.decide(new Arrival(Holder.NOBODY, false, false, "10.0.0.1"), web(PREMIUM)))
-                .isEqualTo(JOINS_CRACKED);
+                .isEqualTo(JOINS_MARKED);
+        assertThat(domain.decide(new Arrival(Holder.CRACKED, false, false, "cracked.example.org"), web(PREMIUM)))
+                .isEqualTo(JOINS_MARKED);
         assertThat(asked).hasValue(0);
     }
 
     @Test
     @DisplayName(
-            "by domain: a premium account joining through the cracked address still proves itself, never a password")
-    void domainNeverHandsAPremiumAccountToAPassword() {
+            "by domain: a paid name through the cracked address plays marked, a name of its own, never the paid one")
+    void domainMarksAPaidNameThroughTheCrackedAddress() {
         Arrival throughTheCrackedAddress = new Arrival(Holder.PREMIUM, false, false, "cracked.example.org");
 
         assertThat(rule(NameRule.DOMAIN).decide(throughTheCrackedAddress, web(PREMIUM)))
-                .isEqualTo(HANDSHAKE);
+                .isEqualTo(JOINS_MARKED);
+    }
+
+    @Test
+    @DisplayName("no rule but the domain rule marks a name")
+    void onlyTheDomainRuleMarks() {
+        for (NameRule each : List.of(NameRule.AUTOMATIC, NameRule.OPT_IN, NameRule.STRICT)) {
+            assertThat(rule(each).decide(arrival(Holder.NOBODY), web(CRACKED)))
+                    .as(each.name())
+                    .isEqualTo(JOINS_CRACKED);
+        }
     }
 
     @Test
     @DisplayName("a premium account whose last try failed is refused once with the reason, under every rule")
     void aPremiumAccountThatFailedIsToldWhy() {
-        Arrival failed = new Arrival(Holder.PREMIUM, false, true, "play.example.org");
-
         for (NameRule each : NameRule.values()) {
+            String host = each == NameRule.DOMAIN ? "premium.example.org" : "play.example.org";
+            Arrival failed = new Arrival(Holder.PREMIUM, false, true, host);
             assertThat(rule(each).decide(failed, web(PREMIUM)))
                     .as(each.name())
                     .isEqualTo(new Decision.Refuse(Refusal.PAID_NAME));

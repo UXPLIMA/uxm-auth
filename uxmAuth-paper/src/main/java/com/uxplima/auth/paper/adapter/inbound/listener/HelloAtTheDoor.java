@@ -30,8 +30,14 @@ public final class HelloAtTheDoor {
     /** What the pre-login does with the connection. */
     public sealed interface Reading {
 
-        /** Go on to the name check and the password. */
-        record Usual(boolean unverified, boolean explain) implements Reading {}
+        /** Go on to the name check and the password, under the domain rule's mark when {@code marked}. */
+        record Usual(boolean unverified, boolean explain, boolean marked) implements Reading {
+
+            /** Under the name the player typed. */
+            public Usual(boolean unverified, boolean explain) {
+                this(unverified, explain, false);
+            }
+        }
 
         /** In, logged in to this premium account. */
         record Premium(AuthState.Authenticated state) implements Reading {
@@ -97,7 +103,8 @@ public final class HelloAtTheDoor {
 
     private Reading decided(Decision decision, String raw) {
         return switch (decision) {
-            case Decision.Cracked cracked -> new Reading.Usual(cracked.unverified(), cracked.explain());
+            case Decision.Cracked cracked ->
+                new Reading.Usual(cracked.unverified(), cracked.explain(), cracked.marked());
             case Decision.Refuse refuse ->
                 new Reading.Refused(
                         refuse.why(),

@@ -11,6 +11,7 @@ import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
+import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
@@ -74,11 +75,13 @@ public final class AuthSettings {
             List<String> crackedDomains,
             UuidScheme uuidScheme,
             ConflictStrategy conflict,
-            String renameMark) {
+            String renameMark,
+            DomainMark crackedMark) {
         public Ownership {
             Objects.requireNonNull(uuidScheme, "uuidScheme");
             Objects.requireNonNull(conflict, "conflict");
             Objects.requireNonNull(renameMark, "renameMark");
+            Objects.requireNonNull(crackedMark, "crackedMark");
             Objects.requireNonNull(rule, "rule");
             Objects.requireNonNull(whenUnknown, "whenUnknown");
             Objects.requireNonNull(failedMemory, "failedMemory");

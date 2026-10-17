@@ -10,6 +10,7 @@ import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.testing.AuthFixture;
 import org.junit.jupiter.api.AfterEach;
@@ -75,5 +76,33 @@ final class ReadTheNameTest {
         assertThat(useCase.readBedrock(".St")).isEmpty();
         assertThat(useCase.readBedrock(".Steve Two")).isEmpty();
         assertThat(useCase.readBedrock(".TheAdmin")).contains(new NameVerdict.Blocked("admin"));
+    }
+
+    @Test
+    @DisplayName("a marked name is held to the rules as typed, and to the account and the case of the marked one")
+    void aMarkedNameIsReadUnderTheMark() {
+        DomainMark plus = new DomainMark("+", false);
+        fixture.accounts.seed(AuthFixture.account("Notch", fixture.hashing.hash(Password.of("hunter22"))));
+
+        assertThat(useCase.readMarked("Notch", plus))
+                .isEqualTo(new ReadTheName.Reading.Opens(new AuthState.Unregistered(new PlayerName("Notch+"))));
+        assertThat(useCase.readMarked("a".repeat(16), plus))
+                .isEqualTo(new ReadTheName.Reading.Refused(new NameVerdict.TooLong(15)));
+        assertThat(useCase.readMarked("xAdminx", plus))
+                .isEqualTo(new ReadTheName.Reading.Refused(new NameVerdict.Blocked("admin")));
+    }
+
+    @Test
+    @DisplayName("a marked account is found under its marked name, in the case it was registered in")
+    void aMarkedAccountIsFoundAndHeldToItsCase() {
+        DomainMark plus = new DomainMark("+", false);
+        fixture.accounts.seed(AuthFixture.account("Steve+", fixture.hashing.hash(Password.of("hunter22"))));
+
+        assertThat(useCase.readMarked("Steve", plus))
+                .isInstanceOfSatisfying(
+                        ReadTheName.Reading.Opens.class,
+                        opens -> assertThat(opens.state()).isInstanceOf(AuthState.Registered.class));
+        assertThat(useCase.readMarked("STEVE", plus))
+                .isEqualTo(new ReadTheName.Reading.Refused(new NameVerdict.WrongCase(new PlayerName("Steve+"))));
     }
 }
