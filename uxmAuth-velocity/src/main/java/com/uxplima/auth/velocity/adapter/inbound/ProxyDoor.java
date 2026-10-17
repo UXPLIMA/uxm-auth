@@ -25,6 +25,7 @@ import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.state.AuthState;
 import com.velocitypowered.api.util.GameProfile;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The identity decision on the proxy. It asks the door a lone server asks; Velocity's own online mode is the
@@ -61,8 +62,14 @@ public final class ProxyDoor {
         }
     }
 
-    /** What the proxy knows of a connection once it has a profile. */
+    /** What the proxy knows of a connection, from its pre-login to its login. */
     public sealed interface Arrival {
+
+        /** Put in online mode, and not proved yet: at the login it was never proved, and is turned away. */
+        record Asked() implements Arrival {}
+
+        /** Decided by another plugin before the door, as Floodgate decides a Bedrock player: left alone. */
+        record Untouched() implements Arrival {}
 
         /** Waiting for a password, unverified or told why its last try failed, under the mark when marked. */
         record Usual(boolean unverified, boolean explain, boolean marked) implements Arrival {}
@@ -83,7 +90,7 @@ public final class ProxyDoor {
     }
 
     /** What the door decided at the pre-login, kept until the profile. */
-    private record Kept(Arrival arrival, AuthState state, Instant at) {}
+    private record Kept(Arrival arrival, @Nullable AuthState state, Instant at) {}
 
     /** How long the proxy keeps what it decided for a connection that never logs in. */
     private static final Duration KEEP = Duration.ofMinutes(1);
@@ -128,6 +135,7 @@ public final class ProxyDoor {
         return switch (door.decide(name, ip, host)) {
             case Decision.Handshake handshake -> {
                 asked.put(key(ip, name), clock.instant());
+                kept.put(remote, new Kept(new Arrival.Asked(), null, clock.instant()));
                 yield new Gate.Online();
             }
             case Decision.Cracked cracked -> offline(name, remote, cracked);
@@ -146,11 +154,13 @@ public final class ProxyDoor {
             return proved(original, remote);
         }
         Kept mine = kept.get(remote);
-        if (mine == null) {
+        AuthState state = mine == null ? null : mine.state();
+        if (state == null) {
+            // Untouched, or lost: the login reads which, and turns a lost one away.
             return original;
         }
-        PlayerName name = nameOf(mine.state());
-        UUID id = idOf(mine.state(), original.getId(), original.getName());
+        PlayerName name = nameOf(state);
+        UUID id = idOf(state, original.getId(), original.getName());
         if (id.equals(original.getId()) && name.value().equals(original.getName())) {
             return original;
         }
@@ -161,6 +171,18 @@ public final class ProxyDoor {
     public Optional<Arrival> arrival(InetSocketAddress remote) {
         return Optional.ofNullable(kept.get(Objects.requireNonNull(remote, "remote")))
                 .map(Kept::arrival);
+    }
+
+    /** Another plugin decided this connection before the door: it is left as that plugin left it. */
+    public void untouched(InetSocketAddress remote) {
+        kept.put(Objects.requireNonNull(remote, "remote"), new Kept(new Arrival.Untouched(), null, clock.instant()));
+    }
+
+    /** The profile of this connection could not be made: it is turned away at its login. */
+    public void failed(InetSocketAddress remote) {
+        kept.put(
+                Objects.requireNonNull(remote, "remote"),
+                new Kept(new Arrival.Refused(Refusal.LOOKUP_FAILED), null, clock.instant()));
     }
 
     /** The connection at this address left. */
@@ -195,10 +217,7 @@ public final class ProxyDoor {
                 return new GameProfile(in.state().account().id(), original.getName(), original.getProperties());
             }
             case PremiumAdmission.Refused refused -> {
-                kept.put(
-                        remote,
-                        new Kept(
-                                new Arrival.Refused(refused.why()), new AuthState.Unregistered(name), clock.instant()));
+                kept.put(remote, new Kept(new Arrival.Refused(refused.why()), null, clock.instant()));
                 return original;
             }
         }

@@ -61,7 +61,11 @@ public final class DoorListener {
 
     void preLogin(PreLoginEvent event) {
         PreLoginEvent.PreLoginComponentResult before = event.getResult();
-        if (!before.isAllowed() || before.isForceOfflineMode()) {
+        if (!before.isAllowed()) {
+            return;
+        }
+        if (before.isForceOfflineMode()) {
+            door.untouched(event.getConnection().getRemoteAddress());
             return;
         }
         String host = event.getConnection()
@@ -83,29 +87,52 @@ public final class DoorListener {
         } catch (RuntimeException failure) {
             // Nobody is let through a door that cannot answer: the name might be a paid owner's.
             logger.warn(
-                    "Could not decide how " + event.getUsername() + " joins; the connection is turned away.", failure);
+                    "Could not decide how {} joins; the connection is turned away.",
+                    printable(event.getUsername()),
+                    failure);
             event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
                     words.refusal(Refusal.LOOKUP_FAILED, Optional.empty())));
         }
     }
 
     void profile(GameProfileRequestEvent event) {
-        event.setGameProfile(door.profile(
-                event.getGameProfile(),
-                event.isOnlineMode(),
-                event.getConnection().getRemoteAddress()));
+        InetSocketAddress remote = event.getConnection().getRemoteAddress();
+        try {
+            event.setGameProfile(door.profile(event.getGameProfile(), event.isOnlineMode(), remote));
+        } catch (RuntimeException failure) {
+            logger.warn(
+                    "Could not make the profile of {}; the connection is turned away.",
+                    printable(event.getUsername()),
+                    failure);
+            door.failed(remote);
+        }
     }
 
+    /**
+     * Only a connection the door saw through to its profile, or one another plugin decided, logs in. One the door
+     * put in online mode and never saw proved, one it lost track of, and one it refused are turned away.
+     */
     void login(LoginEvent event) {
-        door.arrival(event.getPlayer().getRemoteAddress())
-                .filter(ProxyDoor.Arrival.Refused.class::isInstance)
-                .map(ProxyDoor.Arrival.Refused.class::cast)
-                .ifPresent(refused -> event.setResult(
-                        ResultedEvent.ComponentResult.denied(words.refusal(refused.why(), Optional.empty()))));
+        Optional<Refusal> refusal =
+                switch (door.arrival(event.getPlayer().getRemoteAddress()).orElse(null)) {
+                    case ProxyDoor.Arrival.Usual usual -> Optional.empty();
+                    case ProxyDoor.Arrival.Premium premium -> Optional.empty();
+                    case ProxyDoor.Arrival.Untouched untouched -> Optional.empty();
+                    case ProxyDoor.Arrival.Refused refused -> Optional.of(refused.why());
+                    case ProxyDoor.Arrival.Asked asked -> Optional.of(Refusal.LOOKUP_FAILED);
+                    case null -> Optional.of(Refusal.LOOKUP_FAILED);
+                };
+        refusal.ifPresent(
+                why -> event.setResult(ResultedEvent.ComponentResult.denied(words.refusal(why, Optional.empty()))));
     }
 
     void left(DisconnectEvent event) {
         door.gone(event.getPlayer().getRemoteAddress());
+    }
+
+    /** A name as the console may print it: a control character could rewrite the line around it. */
+    static String printable(String name) {
+        return name.replaceAll("\\p{Cntrl}", "?");
     }
 
     ProxyDoor door() {

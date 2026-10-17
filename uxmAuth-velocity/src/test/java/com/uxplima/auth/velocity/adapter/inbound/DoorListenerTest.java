@@ -165,8 +165,103 @@ final class DoorListenerTest {
         assertThat(preLogin.getResult().isAllowed()).isFalse();
         org.mockito.Mockito.verify(logger)
                 .warn(
-                        org.mockito.ArgumentMatchers.contains("Notch"),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.eq("Notch"),
                         org.mockito.ArgumentMatchers.any(Throwable.class));
+    }
+
+    private LoginEvent loginFrom(DoorListener listener) {
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(FROM);
+        LoginEvent login = new LoginEvent(player, "");
+        listener.login(login);
+        return login;
+    }
+
+    @Test
+    @DisplayName("a connection the door put in online mode that reaches the login without a proved profile is refused")
+    void anUnfinishedConnectionIsRefusedAtTheLogin() {
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+
+        assertThat(loginFrom(listener).getResult().isAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a profile that cannot be made turns the connection away at the login, and says why in the console")
+    void aFailingProfileIsRefusedAtTheLogin() {
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+        world.close();
+
+        listener.profile(
+                new GameProfileRequestEvent(connection, new GameProfile(ProxyWorld.MOJANG, "Notch", List.of()), true));
+
+        assertThat(loginFrom(listener).getResult().isAllowed()).isFalse();
+        org.mockito.Mockito.verify(logger)
+                .warn(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.eq("Notch"),
+                        org.mockito.ArgumentMatchers.any(Throwable.class));
+    }
+
+    @Test
+    @DisplayName("an offline profile that cannot be made is turned away at the login too")
+    void aFailingOfflineProfileIsRefused() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        ProxyDoor door = org.mockito.Mockito.spy(world.door());
+        org.mockito.Mockito.doThrow(new IllegalStateException("broken"))
+                .when(door)
+                .profile(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(false),
+                        org.mockito.ArgumentMatchers.any());
+        DoorListener listener = new DoorListener(door, world.words, logger);
+        listener.preLogin(preLoginOf("Steve"));
+
+        listener.profile(new GameProfileRequestEvent(
+                connection, new GameProfile(UuidScheme.offline(new PlayerName("Steve")), "Steve", List.of()), false));
+
+        assertThat(loginFrom(listener).getResult().isAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a connection the door decided and then lost track of is refused at the login rather than let through")
+    void aForgottenConnectionIsRefusedAtTheLogin() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Steve"));
+        world.clock.pass(java.time.Duration.ofMinutes(2));
+        listener.door()
+                .preLogin("Alex", new InetSocketAddress(InetAddress.getLoopbackAddress(), 40009), ProxyWorld.PLAY);
+
+        listener.profile(new GameProfileRequestEvent(
+                connection, new GameProfile(UuidScheme.offline(new PlayerName("Steve")), "Steve", List.of()), false));
+
+        assertThat(loginFrom(listener).getResult().isAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a cracked connection the door let through, and one another plugin decided, log in")
+    void decidedConnectionsLogIn() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Steve"));
+        listener.profile(new GameProfileRequestEvent(
+                connection, new GameProfile(UuidScheme.offline(new PlayerName("Steve")), "Steve", List.of()), false));
+        assertThat(loginFrom(listener).getResult().isAllowed()).isTrue();
+
+        DoorListener fresh = listener();
+        PreLoginEvent bedrock = preLoginOf("Notch");
+        bedrock.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+        fresh.preLogin(bedrock);
+        assertThat(loginFrom(fresh).getResult().isAllowed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a name with a control character reaches the console without it")
+    void aNameIsCleanedForTheConsole() {
+        assertThat(DoorListener.printable("Not\nch\u001b[31m")).isEqualTo("Not?ch?[31m");
     }
 
     @Test
