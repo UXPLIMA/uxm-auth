@@ -20,6 +20,7 @@ import org.bukkit.plugin.Plugin;
 import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LogOut;
@@ -27,6 +28,9 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.premium.AtTheDoor;
+import com.uxplima.auth.application.premium.NameMemory;
+import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.Argon2idHasher;
@@ -36,6 +40,10 @@ import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
+import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.domain.premium.NameOwnership;
+import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -137,6 +145,23 @@ public final class AuthWorld implements AutoCloseable {
     /** The defaults the shipped file has. */
     public static AuthSettings.Passwords shippedPasswords() {
         return new AuthSettings.Passwords(6, 64, "\\S+", Set.of(), true, true, MAX_ATTEMPTS);
+    }
+
+    /** A door at the hello under the automatic rule, with no web source to ask. */
+    public AtTheDoor atTheDoor() {
+        return new AtTheDoor(
+                accounts,
+                AuthWorld::shippedNames,
+                new PremiumLookup(List::of, () -> Duration.ofMinutes(30), clock),
+                () -> new NameOwnership(
+                        NameRule.AUTOMATIC,
+                        WhenUnknown.CRACKED,
+                        new HostPatterns(List.of()),
+                        new HostPatterns(List.of())),
+                new NameMemory(() -> Duration.ofMinutes(5), clock),
+                new NameMemory(() -> Duration.ofMinutes(10), clock),
+                new NameMemory(() -> Duration.ofMinutes(10), clock),
+                new SqlDisputes(database));
     }
 
     /** The name rules the shipped file has. */

@@ -21,9 +21,11 @@ import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LanguageSuggestions;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.listener.LanguageListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConnectingLocales;
@@ -243,6 +245,8 @@ final class PluginModule {
         registerIfEnabled(
                 commands, ChangePasswordCommand.KEY, "changepassword", graph.changePassword, resolvers, scheduler);
         registerIfEnabled(commands, LogoutCommand.KEY, "logout", graph.logout, resolvers, scheduler);
+        registerIfEnabled(commands, ClaimCommand.KEY, "claim", graph.claim, resolvers, scheduler);
+        registerIfEnabled(commands, PremiumCommand.KEY, "premium", graph.premium, resolvers, scheduler);
 
         if (commands.isEnabled(AdminCommand.KEY, "uxmauth")) {
             AnnotatedCommands.register(

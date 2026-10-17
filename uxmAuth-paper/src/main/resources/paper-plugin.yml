@@ -52,6 +52,12 @@ permissions:
   uxmauth.logout:
     description: Log out and wait at the door again
     default: true
+  uxmauth.claim:
+    description: Say a name is yours, and prove it on the next connection
+    default: true
+  uxmauth.premium:
+    description: Prove your name on the next connection and log in without a password from then on
+    default: true
   uxmauth.changepassword:
     description: Change your own password
     default: true

@@ -11,8 +11,10 @@ import java.util.Objects;
 
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.annotations.Command;
@@ -67,7 +69,14 @@ final class LocalizedCommandWordsTest {
 
     @ParameterizedTest(name = "{0}")
     @ValueSource(
-            classes = {LoginCommand.class, RegisterCommand.class, ChangePasswordCommand.class, LogoutCommand.class})
+            classes = {
+                LoginCommand.class,
+                RegisterCommand.class,
+                ChangePasswordCommand.class,
+                LogoutCommand.class,
+                ClaimCommand.class,
+                PremiumCommand.class
+            })
     @DisplayName("a word for one language reaches every player command too")
     void everyPlayerCommandTakesAWordForOneLanguage(Class<?> handler, @TempDir Path folder) throws IOException {
         FromConfig declared = Objects.requireNonNull(handler.getAnnotation(FromConfig.class));

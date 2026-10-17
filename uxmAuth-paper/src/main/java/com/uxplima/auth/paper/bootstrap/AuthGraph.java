@@ -26,6 +26,7 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.premium.AtTheDoor;
+import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
@@ -33,9 +34,11 @@ import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PlayerCommandLabels;
+import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
@@ -97,6 +100,8 @@ final class AuthGraph implements AutoCloseable {
     final RegisterCommand register;
     final ChangePasswordCommand changePassword;
     final LogoutCommand logout;
+    final ClaimCommand claim;
+    final PremiumCommand premium;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
     private final LoginWorld loginWorld;
@@ -105,7 +110,7 @@ final class AuthGraph implements AutoCloseable {
     private final Plugin plugin;
     private final PasswordLogFilters filters;
     private final HttpClient web = HttpClient.newHttpClient();
-    private ServerHellos hellos = ServerHellos.none();
+    private final ServerHellos hellos;
 
     AuthGraph(
             Plugin plugin,
@@ -208,6 +213,9 @@ final class AuthGraph implements AutoCloseable {
                 welcomes,
                 notices);
 
+        SqlDisputes disputes = new SqlDisputes(database);
+        AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
+        this.hellos = ServerHellos.startOn(new PremiumHelloDoor(atTheDoor, scheduler), plugin.getLogger());
         this.connections = new ConnectionListener(
                 scheduler,
                 sessions,
@@ -223,7 +231,18 @@ final class AuthGraph implements AutoCloseable {
                                         () -> settings.current().passwords().maxAttempts(),
                                         clock),
                                 () -> settings.current().bedrock().autoLogin()),
-                        premiumDoor(settings, scheduler, accounts, database, clock),
+                        new HelloAtTheDoor(
+                                hellos,
+                                atTheDoor,
+                                new LetPremiumIn(
+                                        accounts,
+                                        disputes,
+                                        () -> settings.current().ownership().conflict(),
+                                        () -> settings.current().ownership().renameMark(),
+                                        // The scheme this start recorded: a reload cannot change it.
+                                        boot.ownership().uuidScheme(),
+                                        clock),
+                                new Moves(accounts)),
                         messages,
                         scheduler,
                         plugin.getServer()::createProfile),
@@ -251,6 +270,10 @@ final class AuthGraph implements AutoCloseable {
                 replies);
         this.logout = new LogoutCommand(
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
+        ClaimName claims = new ClaimName(
+                sessions, atTheDoor, () -> settings.current().ownership().rule());
+        this.claim = new ClaimCommand(claims, hellos::installed, messages);
+        this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         this.screenClicks = new ScreenClickListener(
                 answers, player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies), scheduler);
         formAnswers.set(screenClicks);
@@ -287,22 +310,14 @@ final class AuthGraph implements AutoCloseable {
         lane.close();
     }
 
-    /**
-     * The handshake and what its pre-login reads: the web sources, the decision at the hello, and the use case
-     * that lets a proved player in. The UUID scheme is the one this start recorded, so a reload cannot change it.
-     */
-    private HelloAtTheDoor premiumDoor(
-            PluginSettings settings,
-            Scheduler scheduler,
-            SqlAccountRepository accounts,
-            Database database,
-            Clock clock) {
-        SqlDisputes disputes = new SqlDisputes(database);
+    /** The decision at the hello: the web sources, the operator's rule, and the memories of claims and failures. */
+    private AtTheDoor atTheDoor(
+            PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
         PremiumLookup lookup = new PremiumLookup(
                 new PremiumSources(web, () -> settings.current().premium(), clock)::ordered,
                 () -> settings.current().premium().keepAnswers(),
                 clock);
-        AtTheDoor door = new AtTheDoor(
+        return new AtTheDoor(
                 accounts,
                 () -> settings.current().namePolicy(),
                 lookup,
@@ -311,14 +326,5 @@ final class AuthGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 disputes);
-        this.hellos = ServerHellos.startOn(new PremiumHelloDoor(door, scheduler), plugin.getLogger());
-        LetPremiumIn letIn = new LetPremiumIn(
-                accounts,
-                disputes,
-                () -> settings.current().ownership().conflict(),
-                () -> settings.current().ownership().renameMark(),
-                settings.current().ownership().uuidScheme(),
-                clock);
-        return new HelloAtTheDoor(hellos, door, letIn, new Moves(accounts));
     }
 }

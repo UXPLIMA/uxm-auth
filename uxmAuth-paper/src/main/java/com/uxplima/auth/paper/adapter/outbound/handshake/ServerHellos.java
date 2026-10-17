@@ -27,11 +27,6 @@ public final class ServerHellos implements Hellos, AutoCloseable {
         this.installed = installed;
     }
 
-    /** No handshake, as before one is started. */
-    public static ServerHellos none() {
-        return new ServerHellos(false);
-    }
-
     /** Installs the handshake if this server can run it, and says in the console why not if it cannot. */
     public static ServerHellos startOn(HelloDoor door, Logger logger) {
         Objects.requireNonNull(door, "door");

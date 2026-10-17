@@ -128,6 +128,10 @@ public enum Keys implements MessageKey {
     KICK_NAME_KEPT(
             "kick.name-kept",
             "<body>Another player took this name here first and keeps it. Change your name at Mojang to play here."),
+    KICK_CLAIMED(
+            "kick.claimed",
+            "<body>Join again from the official Minecraft launcher. Your next connection from here proves this"
+                    + " name is yours."),
     KICK_NAME_CASE(
             "kick.name-case",
             "<body>This name is registered as <value><name><body>. Join again with exactly that spelling."),
@@ -137,6 +141,17 @@ public enum Keys implements MessageKey {
             "login.not-registered",
             "<etag:'ERROR'> <body>You have no password here yet. Register with <value>/register<body>."),
     LOGIN_ALREADY("login.already", "<tag:'AUTH'> <body>You are already logged in."),
+    CLAIM_UNAVAILABLE(
+            "claim.unavailable",
+            "<etag:'ERROR'> <body>This server cannot ask Mojang who owns a name, so there is nothing to claim here."),
+    CLAIM_ALREADY_PREMIUM("claim.already-premium", "<tag:'AUTH'> <body>Your account has proved its name already."),
+    CLAIM_NOT_THIS_RULE(
+            "claim.not-this-rule",
+            "<etag:'ERROR'> <body>This server proves paid names on its own, so there is nothing to claim."),
+    PREMIUM_LOG_IN_FIRST(
+            "premium.log-in-first",
+            "<etag:'ERROR'> <body>Log in first, then use <value>/premium<body> to prove your name on your next"
+                    + " connection."),
     LOGIN_HANDSHAKE_FAILED(
             "login.handshake-failed",
             "<tag:'AUTH'> <body>Your last connection was refused because this name belongs to a paid Minecraft"

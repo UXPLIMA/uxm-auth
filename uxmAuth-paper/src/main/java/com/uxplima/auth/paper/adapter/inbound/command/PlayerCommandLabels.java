@@ -17,9 +17,13 @@ import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
  */
 public final class PlayerCommandLabels {
 
-    /** The commands a waiting player uses, and whose arguments are passwords. */
-    static final List<Class<?>> COMMANDS =
-            List.of(LoginCommand.class, RegisterCommand.class, ChangePasswordCommand.class, LogoutCommand.class);
+    /** The commands a waiting player uses: the password commands, and the claim on a name they cannot log in to. */
+    static final List<Class<?>> COMMANDS = List.of(
+            LoginCommand.class,
+            RegisterCommand.class,
+            ChangePasswordCommand.class,
+            LogoutCommand.class,
+            ClaimCommand.class);
 
     private PlayerCommandLabels() {}
 

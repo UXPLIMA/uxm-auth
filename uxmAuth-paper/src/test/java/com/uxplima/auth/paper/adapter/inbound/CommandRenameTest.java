@@ -12,11 +12,15 @@ import java.util.Map;
 import java.util.Set;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.application.premium.ClaimName;
+import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LanguageSuggestions;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.auth.paper.testing.DirectScheduler;
@@ -95,6 +99,8 @@ final class CommandRenameTest {
                   register       { name = "signup" }
                   changepassword { name = "newpass" }
                   logout         { name = "leave" }
+                  claim          { name = "mine" }
+                  premium        { name = "paid" }
                 }
                 """, StandardCharsets.UTF_8);
         ParamResolvers resolvers = ParamResolvers.withDefaults()
@@ -128,6 +134,11 @@ final class CommandRenameTest {
                     .isEqualTo("newpass");
             assertThat(label(new LogoutCommand(world.logOut, world.door, world.moments, world.messages), resolvers))
                     .isEqualTo("leave");
+            ClaimName claim = new ClaimName(world.sessions, world.atTheDoor(), () -> NameRule.AUTOMATIC);
+            assertThat(label(new ClaimCommand(claim, () -> true, world.messages), resolvers))
+                    .isEqualTo("mine");
+            assertThat(label(new PremiumCommand(claim, () -> true, world.sessions, world.messages), resolvers))
+                    .isEqualTo("paid");
         } finally {
             MockBukkit.unmock();
         }
