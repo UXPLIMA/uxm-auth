@@ -42,6 +42,16 @@ final class ArchitectureTest {
             .dependOnClassesThat()
             .resideInAnyPackage("com.google.inject..", "jakarta.inject..", "javax.inject..");
 
+    // LimboAPI is an optional link. A LimboAPI type anywhere else is a class the proxy links whether the plugin is
+    // there or not, and a proxy without it fails at start.
+    @ArchTest
+    static final ArchRule onlyTheWaitingWorldKnowsLimboApi = noClasses()
+            .that()
+            .resideOutsideOfPackage("..adapter.outbound.limbo..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("net.elytrium..");
+
     // Legacy colour codes cannot express a gradient, a hover or a click. Everything an operator writes is
     // MiniMessage.
     @ArchTest

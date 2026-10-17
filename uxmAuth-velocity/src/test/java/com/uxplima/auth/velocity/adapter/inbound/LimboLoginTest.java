@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.velocity.testing.ProxyWorld;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +25,7 @@ final class LimboLoginTest {
     private static final UUID STEVE = UUID.fromString("8667ba71-b85a-4004-af54-457a9734eed7");
     private static final PlayerName NAME = new PlayerName("Steve");
     private static final Audience READER = Audience.empty();
+    private static final Claim.Waiting NONE = new Claim.Waiting(false, false, false);
 
     private final ProxyWorld world;
 
@@ -54,7 +56,7 @@ final class LimboLoginTest {
     void aNewNameRegisters() throws Exception {
         LimboLogin login = world.limboLogin(true);
 
-        assertThat(plain(login.arrive(READER, STEVE, NAME))).contains("/register");
+        assertThat(plain(login.arrive(READER, STEVE, NAME, NONE).getLast())).contains("/register");
         assertThat(said(login, "/register hunter22 hunter22"))
                 .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.REGISTERED));
         assertThat(world.accounts.findByName(NAME)).isPresent();
@@ -64,7 +66,7 @@ final class LimboLoginTest {
     @DisplayName("a register that wants the password twice says so, and two that differ are told apart")
     void aRegisterIsChecked() throws Exception {
         LimboLogin login = world.limboLogin(true);
-        login.arrive(READER, STEVE, NAME);
+        login.arrive(READER, STEVE, NAME, NONE);
 
         assertThat(told(said(login, "/register hunter22"))).isNotBlank();
         assertThat(told(said(login, "/reg hunter22 hunter23"))).contains("not the same");
@@ -75,7 +77,7 @@ final class LimboLoginTest {
     @DisplayName("where the operator asks the password once, one is enough to register")
     void onePasswordIsEnoughWhenAskedOnce() throws Exception {
         LimboLogin login = world.limboLogin(false);
-        login.arrive(READER, STEVE, NAME);
+        login.arrive(READER, STEVE, NAME, NONE);
 
         assertThat(said(login, "/register hunter22")).isEqualTo(new LimboLogin.Outcome.In(AuthMethod.REGISTERED));
     }
@@ -84,12 +86,12 @@ final class LimboLoginTest {
     @DisplayName("a known name logs in with its password, in any of its words, and a wrong one says the tries left")
     void aKnownNameLogsIn() throws Exception {
         LimboLogin first = world.limboLogin(true);
-        first.arrive(READER, STEVE, NAME);
+        first.arrive(READER, STEVE, NAME, NONE);
         said(first, "/register hunter22 hunter22");
         first.leave(STEVE);
 
         LimboLogin login = world.limboLogin(true);
-        assertThat(plain(login.arrive(READER, STEVE, NAME))).contains("/login");
+        assertThat(plain(login.arrive(READER, STEVE, NAME, NONE).getLast())).contains("/login");
         assertThat(told(said(login, "/login wrongpass"))).contains("2");
         assertThat(said(login, "/giris hunter22")).isEqualTo(new LimboLogin.Outcome.In(AuthMethod.PASSWORD));
     }
@@ -98,11 +100,11 @@ final class LimboLoginTest {
     @DisplayName("too many wrong passwords send the player away with the reason")
     void tooManyWrongPasswordsSendAway() throws Exception {
         LimboLogin first = world.limboLogin(true);
-        first.arrive(READER, STEVE, NAME);
+        first.arrive(READER, STEVE, NAME, NONE);
         said(first, "/register hunter22 hunter22");
         first.leave(STEVE);
         LimboLogin login = world.limboLogin(true);
-        login.arrive(READER, STEVE, NAME);
+        login.arrive(READER, STEVE, NAME, NONE);
 
         said(login, "/login one111");
         said(login, "/login two222");
@@ -114,10 +116,29 @@ final class LimboLoginTest {
     @DisplayName("anything else said in the waiting world is answered with what to type")
     void anythingElseIsAnsweredWithWhatToType() throws Exception {
         LimboLogin login = world.limboLogin(true);
-        login.arrive(READER, STEVE, NAME);
+        login.arrive(READER, STEVE, NAME, NONE);
 
         assertThat(told(said(login, "hello"))).contains("/register");
         assertThat(told(said(login, "/spawn"))).contains("/register");
         assertThat(told(said(login, "/login"))).contains("/register");
+    }
+
+    @Test
+    @DisplayName(
+            "a player the door let in unverified makes an unverified account, and one whose handshake failed reads why")
+    void theDoorsFlagsReachTheWait() throws Exception {
+        LimboLogin login = world.limboLogin(true);
+
+        java.util.List<Component> explained = login.arrive(READER, STEVE, NAME, new Claim.Waiting(false, true, false));
+        assertThat(explained).hasSize(2);
+        assertThat(plain(explained.getFirst())).contains("paid");
+
+        java.util.List<Component> lines = login.arrive(READER, STEVE, NAME, new Claim.Waiting(true, false, false));
+
+        assertThat(lines).hasSize(1);
+        assertThat(said(login, "/register hunter22 hunter22"))
+                .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.REGISTERED));
+        assertThat(world.accounts.findByName(NAME))
+                .hasValueSatisfying(account -> assertThat(account.unverified()).isTrue());
     }
 }

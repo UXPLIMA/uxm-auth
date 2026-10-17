@@ -131,7 +131,7 @@ public final class DoorListener {
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Untouched untouched -> {
-                        sessions.waiting(player.getUniqueId(), new Claim.Waiting(false, false, false));
+                        sessions.untouched(player.getUniqueId());
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Refused refused -> Optional.of(refused.why());

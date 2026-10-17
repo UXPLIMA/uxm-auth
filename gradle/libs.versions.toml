@@ -24,8 +24,11 @@ bouncycastle   = "1.86"                    # org.bouncycastle:bcprov-jdk18on (Ma
 
 # soft dependencies, compileOnly, reached only past a plugin-present guard
 placeholderapi = "2.11.6"                  # me.clip:placeholderapi (extendedclip repo, not Maven Central)
+# LimboAPI publishes no release for Velocity 4 yet; this is the build its 2.0.0 snapshot pointed at.
+limboapi       = "2.0.0-20251118.093310-4" # net.elytrium.limboapi:api (maven.elytrium.net, verified 2026-10-18)
 
 # tests
+fastutil       = "8.5.18"                  # it.unimi.dsi:fastutil, which LimboAPI's types name and the proxy ships
 junit          = "5.12.1"
 assertj        = "3.27.3"
 mockito        = "5.23.0"
@@ -66,9 +69,12 @@ uxmlib-hud        = { module = "com.uxplima.uxmlib:uxmlib-hud",                 
 uxmlib-condition  = { module = "com.uxplima.uxmlib:uxmlib-condition",            version.ref = "uxmlib" }
 uxmlib-redis      = { module = "com.uxplima.uxmlib:uxmlib-redis",                version.ref = "uxmlib" }
 velocity-api      = { module = "com.velocitypowered:velocity-api",               version.ref = "velocity" }
+limboapi-api      = { module = "net.elytrium.limboapi:api",                      version.ref = "limboapi" }
 adventure-api     = { module = "net.kyori:adventure-api",                        version.ref = "adventure" }
 adventure-mini    = { module = "net.kyori:adventure-text-minimessage",           version.ref = "adventure" }
 adventure-plain   = { module = "net.kyori:adventure-text-serializer-plain",      version.ref = "adventure" }
+adventure-nbt     = { module = "net.kyori:adventure-nbt",                        version.ref = "adventure" }
+fastutil          = { module = "it.unimi.dsi:fastutil",                          version.ref = "fastutil" }
 adventure-legacy  = { module = "net.kyori:adventure-text-serializer-legacy",     version.ref = "adventure" }
 gson              = { module = "com.google.code.gson:gson",                      version.ref = "gson" }
 bouncycastle      = { module = "org.bouncycastle:bcprov-jdk18on",                version.ref = "bouncycastle" }

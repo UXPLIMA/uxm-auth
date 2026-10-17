@@ -399,6 +399,24 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("the waiting world's spawn is read as x, y, z and a facing, and a spawn short of a point is refused")
+    void theLimboSpawnIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").network().limboSpawn())
+                .isEqualTo(new AuthSettings.Spot(0.5, 100, 0.5, 0, 0));
+        assertThat(settingsFrom(folder, "network { limbo-spawn = [10, 70, -3.5, 90, 10] }\n")
+                        .network()
+                        .limboSpawn())
+                .isEqualTo(new AuthSettings.Spot(10, 70, -3.5, 90, 10));
+        assertThat(settingsFrom(folder, "network { limbo-spawn = [1, 2, 3] }\n")
+                        .network()
+                        .limboSpawn())
+                .isEqualTo(new AuthSettings.Spot(1, 2, 3, 0, 0));
+        assertThatThrownBy(() -> settingsFrom(folder, "network { limbo-spawn = [1, 2] }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("network.limbo-spawn");
+    }
+
+    @Test
     @DisplayName("the proxy commands allowed before login are read without their slash and in lower case")
     void theAllowedProxyCommandsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "network { allowed-commands = [\"/GList\", \" server \"] }\n")

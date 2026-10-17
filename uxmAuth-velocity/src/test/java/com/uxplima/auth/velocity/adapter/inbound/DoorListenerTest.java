@@ -261,6 +261,32 @@ final class DoorListenerTest {
     }
 
     @Test
+    @DisplayName("a cracked player waits at the proxy, and one another plugin decided waits on the server's door")
+    void onlyTheDoorsOwnPlayersWaitAtTheProxy() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Steve"));
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        listener.profile(new GameProfileRequestEvent(connection, new GameProfile(steve, "Steve", List.of()), false));
+        Player cracked = mock(Player.class);
+        when(cracked.getRemoteAddress()).thenReturn(FROM);
+        when(cracked.getUniqueId()).thenReturn(steve);
+        listener.login(new LoginEvent(cracked, ""));
+        assertThat(sessions.waitsAtTheProxy(steve)).isTrue();
+
+        DoorListener fresh = listener();
+        PreLoginEvent bedrock = preLoginOf("Notch");
+        bedrock.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+        fresh.preLogin(bedrock);
+        Player floodgate = mock(Player.class);
+        when(floodgate.getRemoteAddress()).thenReturn(FROM);
+        when(floodgate.getUniqueId()).thenReturn(ProxyWorld.MOJANG);
+        fresh.login(new LoginEvent(floodgate, ""));
+        assertThat(sessions.waitsAtTheProxy(ProxyWorld.MOJANG)).isFalse();
+        assertThat(sessions.loggedIn(ProxyWorld.MOJANG)).isFalse();
+    }
+
+    @Test
     @DisplayName("a name with a control character reaches the console without it")
     void aNameIsCleanedForTheConsole() {
         assertThat(DoorListener.printable("Not\nch\u001b[31m")).isEqualTo("Not?ch?[31m");

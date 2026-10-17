@@ -38,6 +38,7 @@ import org.spongepowered.configurate.ConfigurateException;
 final class ProxyModule {
 
     private static final String CONFIG = "config.conf";
+    private static final String COMMANDS = "commands.conf";
     private static final String MESSAGES = "messages";
     private static final String THEME_FOLDER = "uxmTheme";
     private static final String POOL = "uxmAuth";
@@ -48,6 +49,7 @@ final class ProxyModule {
     private final Path folder;
     private @Nullable Database database;
     private @Nullable Messages messages;
+    private @Nullable ProxyGraph graph;
 
     ProxyModule(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -78,7 +80,9 @@ final class ProxyModule {
         Messages words = new Messages(
                 catalog(settings), new ProxyLocales(() -> settings.current().language()));
         this.messages = words;
-        new ProxyGraph(plugin, proxy, logger, folder).open(settings, opened, words);
+        ProxyGraph network = new ProxyGraph(plugin, proxy, logger, folder);
+        this.graph = network;
+        network.open(settings, opened, words);
         proxy.getEventManager().register(plugin, ProxyShutdownEvent.class, this::onShutdown);
         return true;
     }
@@ -90,6 +94,11 @@ final class ProxyModule {
 
     /** Give back what the proxy does not take back by itself. */
     void shutdown() {
+        ProxyGraph network = graph;
+        if (network != null) {
+            network.close();
+            graph = null;
+        }
         Database open = database;
         if (open != null) {
             open.close();
@@ -141,6 +150,8 @@ final class ProxyModule {
     /** Write the shipped files on the first start, and give an older config.conf the keys this release adds. */
     private void extractDefaults() {
         copyIfAbsent(CONFIG, folder.resolve(CONFIG));
+        // The waiting world reads the words for /login and /register from the file a server reads them from.
+        copyIfAbsent(COMMANDS, folder.resolve(COMMANDS));
         try {
             if (PluginSettings.bringUpToDate(folder.resolve(CONFIG), getClass().getClassLoader())) {
                 logger.info("config.conf has the keys this release adds. Nothing you wrote changed, and the file as it"

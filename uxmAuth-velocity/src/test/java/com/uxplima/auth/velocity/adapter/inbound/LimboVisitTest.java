@@ -127,4 +127,49 @@ final class LimboVisitTest {
         done.timeUp(Component.text("too long"));
         assertThat(events).containsExactly("released");
     }
+
+    @Test
+    @DisplayName("a waiting player is reminded what to type, and the visit knows whether they have an account")
+    void aWaitingPlayerIsReminded() throws Exception {
+        LimboVisit first = visit();
+        first.arrive();
+        assertThat(first.registered()).isFalse();
+        told.clear();
+        first.remind();
+        assertThat(told).singleElement().satisfies(line -> assertThat(line).contains("/register"));
+        settle(first.said("/register hunter22 hunter22"));
+        first.left();
+
+        sessions.waiting(STEVE, new Claim.Waiting(false, false, false));
+        LimboVisit again = visit();
+        again.arrive();
+        told.clear();
+        again.remind();
+        assertThat(again.registered()).isTrue();
+        assertThat(told).singleElement().satisfies(line -> assertThat(line).contains("/login"));
+    }
+
+    @Test
+    @DisplayName("a player whose handshake failed reads why when they arrive")
+    void theDoorsWordReachesTheVisit() {
+        sessions.waiting(STEVE, new Claim.Waiting(false, true, false));
+
+        visit().arrive();
+
+        assertThat(told).hasSize(2);
+        assertThat(told.getFirst()).contains("paid");
+    }
+
+    @Test
+    @DisplayName("a player already let out is reminded of nothing")
+    void aPlayerLetOutIsNotReminded() throws Exception {
+        LimboVisit visit = visit();
+        visit.arrive();
+        settle(visit.said("/register hunter22 hunter22"));
+        told.clear();
+
+        visit.remind();
+
+        assertThat(told).isEmpty();
+    }
 }

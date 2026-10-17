@@ -151,7 +151,8 @@ public final class AuthSettings {
             List<String> allowedCommands,
             Routing routing,
             WaitIn waitIn,
-            String limboFile) {
+            String limboFile,
+            Spot limboSpawn) {
         public Network {
             Objects.requireNonNull(secret, "secret");
             Objects.requireNonNull(claimFor, "claimFor");
@@ -159,6 +160,7 @@ public final class AuthSettings {
             Objects.requireNonNull(routing, "routing");
             Objects.requireNonNull(waitIn, "waitIn");
             Objects.requireNonNull(limboFile, "limboFile");
+            Objects.requireNonNull(limboSpawn, "limboSpawn");
             if (enabled && secret.isBlank()) {
                 throw new IllegalArgumentException("network.enabled is true and network.secret is empty. The proxy"
                         + " writes the secret into its own data folder on its first start: copy it here.");
@@ -171,6 +173,9 @@ public final class AuthSettings {
             return "Network[enabled=" + enabled + ", claimFor=" + claimFor + "]";
         }
     }
+
+    /** A point a player stands on, and the way they face there. */
+    public record Spot(double x, double y, double z, float yaw, float pitch) {}
 
     /** What a password may be, which confirmations are asked, and how many wrong ones a player gets. */
     public record Passwords(

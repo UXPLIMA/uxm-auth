@@ -114,7 +114,26 @@ final class SettingsReader {
                         .toList(),
                 routing(config),
                 word(config, "network.wait-in", "server", AuthSettings.WaitIn.class),
-                config.getString("network.limbo-file", "limbo.schem").trim());
+                config.getString("network.limbo-file", "limbo.schem").trim(),
+                spot(list(config, "network", "limbo-spawn", List.of("0.5", "100", "0.5")), "network.limbo-spawn"));
+    }
+
+    /** A point written as x, y and z, with a yaw and a pitch after them when the operator gives a facing. */
+    private static AuthSettings.Spot spot(List<String> written, String path) {
+        if (written.size() != 3 && written.size() != 5) {
+            throw new IllegalArgumentException(
+                    path + " holds " + written.size() + " numbers: write x, y, z, and a yaw and a pitch if you like");
+        }
+        double[] numbers = new double[5];
+        for (int i = 0; i < written.size(); i++) {
+            try {
+                numbers[i] = Double.parseDouble(written.get(i).trim());
+            } catch (NumberFormatException notANumber) {
+                throw new IllegalArgumentException(
+                        path + " holds " + written.get(i) + ", which is not a number", notANumber);
+            }
+        }
+        return new AuthSettings.Spot(numbers[0], numbers[1], numbers[2], (float) numbers[3], (float) numbers[4]);
     }
 
     private static AuthSettings.Routing routing(HoconConfig config) {

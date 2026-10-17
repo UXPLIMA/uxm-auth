@@ -2,10 +2,14 @@ package com.uxplima.auth.velocity.bootstrap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Answers.RETURNS_SELF;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Optional;
 
 import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
@@ -27,14 +32,21 @@ import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.HoldListener;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
+import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboWait;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.velocitypowered.api.command.CommandManager;
+import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.EventHandler;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import com.velocitypowered.api.plugin.PluginContainer;
+import com.velocitypowered.api.plugin.PluginManager;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.config.ProxyConfig;
 import com.velocitypowered.api.proxy.messages.ChannelRegistrar;
+import net.elytrium.limboapi.api.Limbo;
+import net.elytrium.limboapi.api.LimboFactory;
+import net.elytrium.limboapi.api.world.VirtualWorld;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -181,5 +193,71 @@ final class ProxyModuleTest {
 
         assertThat(Objects.requireNonNull(open).ping()).isFalse();
         assertThat(module.database()).isNull();
+    }
+
+    /** A proxy whose config.conf asks for the waiting world. */
+    private ProxyModule askingForTheWorld(Path folder) throws IOException {
+        ProxyModule first = new ProxyModule(plugin, proxy, logger, folder);
+        first.wire();
+        first.shutdown();
+        Path config = folder.resolve("config.conf");
+        Files.writeString(
+                config,
+                Files.readString(config, StandardCharsets.UTF_8).replace("wait-in = server", "wait-in = limbo"),
+                StandardCharsets.UTF_8);
+        return new ProxyModule(plugin, proxy, logger, folder);
+    }
+
+    @Test
+    @DisplayName("a proxy asked for the waiting world without LimboAPI says so once, and players wait on a server")
+    void withoutLimboApiThePlayersWaitOnAServer(@TempDir Path folder) throws IOException {
+        PluginManager plugins = mock(PluginManager.class);
+        when(proxy.getPluginManager()).thenReturn(plugins);
+        when(plugins.getPlugin("limboapi")).thenReturn(Optional.empty());
+        ProxyModule module = askingForTheWorld(folder);
+
+        module.wire();
+        module.shutdown();
+
+        verify(logger).warn(contains("LimboAPI is not on this proxy"));
+        verify(events, never()).register(eq(plugin), any(LimboWait.class));
+        assertThat(folder.resolve("commands.conf")).isRegularFile();
+    }
+
+    @Test
+    @DisplayName("a proxy asked for the waiting world with LimboAPI builds it and holds the waiting players there")
+    void withLimboApiThePlayersWaitInTheWorld(@TempDir Path folder) throws IOException {
+        LimboFactory factory = mock(LimboFactory.class);
+        Limbo limbo = mock(Limbo.class, RETURNS_SELF);
+        when(factory.createLimbo(any())).thenReturn(limbo);
+        when(factory.createVirtualWorld(any(), anyDouble(), anyDouble(), anyDouble(), anyFloat(), anyFloat()))
+                .thenReturn(mock(VirtualWorld.class));
+        PluginContainer container = mock(PluginContainer.class);
+        doReturn(Optional.of(factory)).when(container).getInstance();
+        PluginManager plugins = mock(PluginManager.class);
+        when(proxy.getPluginManager()).thenReturn(plugins);
+        when(plugins.getPlugin("limboapi")).thenReturn(Optional.of(container));
+        CommandManager commands = mock(CommandManager.class);
+        when(proxy.getCommandManager()).thenReturn(commands);
+        when(commands.metaBuilder(anyString())).thenReturn(mock(CommandMeta.Builder.class, RETURNS_SELF));
+        ProxyModule module = askingForTheWorld(folder);
+
+        module.wire();
+        module.shutdown();
+
+        verify(events).register(eq(plugin), any(LimboWait.class));
+        verify(limbo, org.mockito.Mockito.times(2)).registerCommand(org.mockito.ArgumentMatchers.<CommandMeta>any());
+        verify(logger).info(contains("proxy's own world"));
+    }
+
+    @Test
+    @DisplayName("a proxy that keeps players on a server never asks for LimboAPI")
+    void aServerWaitNeverAsksForLimboApi(@TempDir Path folder) {
+        ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
+
+        module.wire();
+        module.shutdown();
+
+        verify(proxy, never()).getPluginManager();
     }
 }

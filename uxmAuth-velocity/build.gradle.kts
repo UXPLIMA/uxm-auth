@@ -13,11 +13,19 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.uxplima.com/repository/maven-public/") // uxmLib, served anonymously
+    maven("https://maven.elytrium.net/repo/") {
+        content { includeGroup("net.elytrium.limboapi") }
+    }
 }
 
 dependencies {
     // Velocity provides the proxy API, Adventure, MiniMessage and Brigadier at runtime.
     compileOnly(libs.velocity.api)
+    // LimboAPI is an optional link: its classes are touched only once the proxy says the plugin is there.
+    // Its own dependencies are the proxy's, so none of them is taken.
+    compileOnly(libs.limboapi.api) { isTransitive = false }
+    // A world file's signature names an NBT tag; the proxy ships adventure-nbt beside Adventure.
+    compileOnly(libs.adventure.nbt)
 
     implementation(project(":uxmAuth-common"))
 
@@ -27,6 +35,9 @@ dependencies {
     implementation(libs.configurate.hocon)
 
     testImplementation(libs.velocity.api)
+    testImplementation(libs.limboapi.api) { isTransitive = false }
+    testImplementation(libs.adventure.nbt)
+    testImplementation(libs.fastutil)
     testImplementation(libs.archunit.junit)
 }
 
@@ -87,6 +98,7 @@ val forbiddenJarEntries =
         "com/typesafe/" to "Typesafe Config must be relocated.",
         "io/leangen/" to "geantyref must be relocated.",
         "org/bouncycastle/" to "BouncyCastle must be relocated, or two plugins that bundle it clash.",
+        "net/elytrium/" to "LimboAPI is a plugin of its own. A copy inside this jar is a second, broken LimboAPI.",
     )
 
 // What a proxy jar must carry. Velocity ships no JDBC driver, so every database the brief names rides here.

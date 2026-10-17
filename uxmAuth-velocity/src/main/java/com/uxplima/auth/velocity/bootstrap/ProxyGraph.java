@@ -45,19 +45,21 @@ import org.slf4j.Logger;
  * routes, the claims written for the servers and the reports read from them. Built by {@link ProxyModule} once
  * the files, the database and the words are in place.
  */
-final class ProxyGraph {
+final class ProxyGraph implements AutoCloseable {
 
     private final Object plugin;
     private final ProxyServer proxy;
     private final Logger logger;
     private final Path folder;
     private final HttpClient web = HttpClient.newHttpClient();
+    private final WaitingWorld waiting;
 
     ProxyGraph(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.proxy = Objects.requireNonNull(proxy, "proxy");
         this.logger = Objects.requireNonNull(logger, "logger");
         this.folder = Objects.requireNonNull(folder, "folder");
+        this.waiting = new WaitingWorld(plugin, proxy, logger, folder);
     }
 
     /**
@@ -92,7 +94,8 @@ final class ProxyGraph {
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
                 clock);
-        listen(door, settings, words, clock, new SqlLastServers(database, clock));
+        ProxySessions sessions = listen(door, settings, words, clock, new SqlLastServers(database, clock));
+        waiting.open(settings, accounts, words, sessions);
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
@@ -100,7 +103,8 @@ final class ProxyGraph {
      * The door before every connection, the hold until login, the claim before every server, and the servers'
      * reports after.
      */
-    private void listen(ProxyDoor door, PluginSettings settings, Messages words, Clock clock, LastServers lastServers) {
+    private ProxySessions listen(
+            ProxyDoor door, PluginSettings settings, Messages words, Clock clock, LastServers lastServers) {
         ProxySessions sessions = new ProxySessions();
         Supplier<Optional<Claims>> claims = claims(settings);
         RouteListener routes = new RouteListener(
@@ -121,6 +125,12 @@ final class ProxyGraph {
         register(new ClaimWriter(sessions, claims, clock));
         proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
         register(new ReportListener(sessions, claims, clock, logger, routes::loggedIn));
+        return sessions;
+    }
+
+    @Override
+    public void close() {
+        waiting.close();
     }
 
     private void register(Object listener) {

@@ -18,8 +18,12 @@ import com.uxplima.auth.domain.state.AuthMethod;
  */
 public final class ProxySessions {
 
-    /** A player's standing, whether a server has greeted their login yet, and the door's flags. */
-    private record Session(Claim.Standing standing, boolean greeted, Claim.Waiting door) {}
+    /**
+     * A player's standing, whether a server has greeted their login yet, the door's flags, and whether this
+     * proxy's door decided the player at all: one another plugin decided, as Floodgate decides a Bedrock player,
+     * is greeted by the server's own door.
+     */
+    private record Session(Claim.Standing standing, boolean greeted, Claim.Waiting door, boolean ours) {}
 
     private static final Claim.Waiting NOTHING = new Claim.Waiting(false, false, false);
 
@@ -28,7 +32,12 @@ public final class ProxySessions {
     /** The player waits for a password, with the door's flags. */
     public void waiting(UUID id, Claim.Waiting flags) {
         Objects.requireNonNull(flags, "flags");
-        sessions.put(Objects.requireNonNull(id, "id"), new Session(flags, false, flags));
+        sessions.put(Objects.requireNonNull(id, "id"), new Session(flags, false, flags, true));
+    }
+
+    /** Another plugin decided the player before the door: they wait, and a server's door takes their login. */
+    public void untouched(UUID id) {
+        sessions.put(Objects.requireNonNull(id, "id"), new Session(NOTHING, false, NOTHING, false));
     }
 
     /** The player logged in, by this method. */
@@ -44,7 +53,8 @@ public final class ProxySessions {
     /** A server reported that the player waits again, after a logout: under the door's own flags. */
     public void loggedOut(UUID id) {
         Objects.requireNonNull(id, "id");
-        sessions.computeIfPresent(id, (key, session) -> new Session(session.door(), false, session.door()));
+        sessions.computeIfPresent(
+                id, (key, session) -> new Session(session.door(), false, session.door(), session.ours()));
     }
 
     private void login(UUID id, AuthMethod method, boolean greeted) {
@@ -52,8 +62,9 @@ public final class ProxySessions {
         Objects.requireNonNull(method, "method");
         sessions.compute(
                 id,
-                (key, session) ->
-                        new Session(new Claim.LoggedIn(method), greeted, session == null ? NOTHING : session.door()));
+                (key, session) -> session == null
+                        ? new Session(new Claim.LoggedIn(method), greeted, NOTHING, true)
+                        : new Session(new Claim.LoggedIn(method), greeted, session.door(), session.ours()));
     }
 
     /**
@@ -66,7 +77,7 @@ public final class ProxySessions {
         sessions.computeIfPresent(id, (key, session) -> {
             told[0] = session;
             return session.standing() instanceof Claim.LoggedIn
-                    ? new Session(session.standing(), true, session.door())
+                    ? new Session(session.standing(), true, session.door(), session.ours())
                     : session;
         });
         Session session = told[0];
@@ -74,6 +85,18 @@ public final class ProxySessions {
             return Optional.empty();
         }
         return Optional.of(session.greeted() ? new Claim.LoggedIn(AuthMethod.NETWORK) : session.standing());
+    }
+
+    /** What the door decided of the player, for as long as they are on the proxy. */
+    public Optional<Claim.Waiting> door(UUID id) {
+        return Optional.ofNullable(sessions.get(Objects.requireNonNull(id, "id")))
+                .map(Session::door);
+    }
+
+    /** Whether the player waits for a password the proxy itself takes. */
+    public boolean waitsAtTheProxy(UUID id) {
+        Session session = sessions.get(Objects.requireNonNull(id, "id"));
+        return session != null && session.ours() && session.standing() instanceof Claim.Waiting;
     }
 
     /** Whether the player is logged in. */

@@ -5,6 +5,6 @@
   "description": "Login and registration for offline-mode networks, with premium and Bedrock auto-login.",
   "url": "https://github.com/UXPLIMA/uxm-auth",
   "authors": ["UXPLIMA"],
-  "dependencies": [],
+  "dependencies": [{ "id": "limboapi", "optional": true }],
   "main": "com.uxplima.auth.velocity.bootstrap.AuthVelocityPlugin"
 }

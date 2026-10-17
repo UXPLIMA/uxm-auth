@@ -9,6 +9,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Claim;
 
 /**
  * One player's stay in the proxy's waiting world, from arrival to the moment they are let out logged in or sent
@@ -28,6 +29,8 @@ public final class LimboVisit {
         /** Send the player away from the network with this reason. */
         void sendAway(Component reason);
     }
+
+    private static final Claim.Waiting NOTHING = new Claim.Waiting(false, false, false);
 
     private final LimboLogin login;
     private final ProxySessions sessions;
@@ -57,7 +60,19 @@ public final class LimboVisit {
 
     /** The player arrived in the waiting world. */
     public void arrive() {
-        exit.tell(login.arrive(reader, id, name));
+        login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING)).forEach(exit::tell);
+    }
+
+    /** Tell the player again what to type. */
+    public void remind() {
+        if (!over.get()) {
+            exit.tell(login.reminder(reader, id));
+        }
+    }
+
+    /** Whether the player has an account, so the time to log in rather than to register applies. */
+    public boolean registered() {
+        return login.registered(id);
     }
 
     /** The player said this line; the answer comes once the use case has. */

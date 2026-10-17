@@ -22,6 +22,7 @@ import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
@@ -88,12 +89,23 @@ public final class LimboLogin {
         this.asksTwice = Objects.requireNonNull(asksTwice, "asksTwice");
     }
 
-    /** The player arrived in the waiting world: their wait opens, and the answer is what to type. */
-    public Component arrive(Audience reader, UUID id, PlayerName name) {
+    /**
+     * The player arrived in the waiting world: their wait opens under the door's flags, and the answer is what to
+     * type, after why their last try failed when the door says they should read it.
+     */
+    public List<Component> arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door) {
         Objects.requireNonNull(reader, "reader");
         sessions.close(Objects.requireNonNull(id, "id"));
-        sessions.open(id, names.waiting(Objects.requireNonNull(name, "name")));
-        return reminder(reader, id);
+        Objects.requireNonNull(door, "door");
+        AuthState state = names.waiting(Objects.requireNonNull(name, "name"));
+        if (door.unverified() && state instanceof AuthState.Unregistered unregistered) {
+            state = new AuthState.Unregistered(unregistered.name(), true);
+        }
+        sessions.open(id, state);
+        Component reminder = reminder(reader, id);
+        return door.explain()
+                ? List.of(messages.render(reader, Keys.LOGIN_HANDSHAKE_FAILED), reminder)
+                : List.of(reminder);
     }
 
     /** What a line the player typed comes to. It may wait on the hashing lane and the database. */
@@ -168,10 +180,15 @@ public final class LimboLogin {
     }
 
     /** What the player should type now: /register before an account, /login after. */
-    private Component reminder(Audience reader, UUID id) {
-        boolean registered = sessions.state(id)
+    public Component reminder(Audience reader, UUID id) {
+        Objects.requireNonNull(reader, "reader");
+        return messages.render(reader, registered(id) ? Keys.REMINDER_LOGIN : Keys.REMINDER_REGISTER);
+    }
+
+    /** Whether the waiting player has an account. */
+    public boolean registered(UUID id) {
+        return sessions.state(Objects.requireNonNull(id, "id"))
                 .filter(AuthState.Registered.class::isInstance)
                 .isPresent();
-        return messages.render(reader, registered ? Keys.REMINDER_LOGIN : Keys.REMINDER_REGISTER);
     }
 }
