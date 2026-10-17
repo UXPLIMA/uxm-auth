@@ -69,6 +69,7 @@ final class AuthSettingsTest {
                         NameRule.AUTOMATIC,
                         WhenUnknown.CRACKED,
                         Duration.ofMinutes(5),
+                        Duration.ofMinutes(10),
                         List.of(),
                         List.of(),
                         UuidScheme.KEEP_FIRST));

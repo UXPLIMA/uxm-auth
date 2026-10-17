@@ -10,11 +10,11 @@ import com.uxplima.auth.testing.TurnedClock;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** A failed handshake is remembered by address and name for a short time the operator sets. */
-final class FailedHandshakesTest {
+/** What a connection did lately is remembered by address and name for a short time the operator sets. */
+final class NameMemoryTest {
 
     private final TurnedClock clock = new TurnedClock(AuthFixture.NOW);
-    private final FailedHandshakes failed = new FailedHandshakes(() -> Duration.ofMinutes(5), clock);
+    private final NameMemory failed = new NameMemory(() -> Duration.ofMinutes(5), clock);
 
     @Test
     @DisplayName("a failure is remembered for the time the operator set, then forgotten")
@@ -22,9 +22,9 @@ final class FailedHandshakesTest {
         failed.remember("10.0.0.7", new PlayerName("Notch"));
 
         clock.turn(Duration.ofMinutes(5).minusSeconds(1));
-        assertThat(failed.failedBefore("10.0.0.7", new PlayerName("notch"))).isTrue();
+        assertThat(failed.holds("10.0.0.7", new PlayerName("notch"))).isTrue();
         clock.turn(Duration.ofSeconds(1));
-        assertThat(failed.failedBefore("10.0.0.7", new PlayerName("Notch"))).isFalse();
+        assertThat(failed.holds("10.0.0.7", new PlayerName("Notch"))).isFalse();
     }
 
     @Test
@@ -32,18 +32,18 @@ final class FailedHandshakesTest {
     void onlyThatAddressAndNameFailed() {
         failed.remember("10.0.0.7", new PlayerName("Notch"));
 
-        assertThat(failed.failedBefore("10.0.0.8", new PlayerName("Notch"))).isFalse();
-        assertThat(failed.failedBefore("10.0.0.7", new PlayerName("Jeb_"))).isFalse();
+        assertThat(failed.holds("10.0.0.8", new PlayerName("Notch"))).isFalse();
+        assertThat(failed.holds("10.0.0.7", new PlayerName("Jeb_"))).isFalse();
     }
 
     @Test
-    @DisplayName("a passed handshake forgets the failure before it")
+    @DisplayName("an entry can be forgotten before its time, as a passed handshake forgets a failure")
     void aPassForgetsTheFailure() {
         failed.remember("10.0.0.7", new PlayerName("Notch"));
 
         failed.forget("10.0.0.7", new PlayerName("Notch"));
 
-        assertThat(failed.failedBefore("10.0.0.7", new PlayerName("Notch"))).isFalse();
+        assertThat(failed.holds("10.0.0.7", new PlayerName("Notch"))).isFalse();
     }
 
     @Test

@@ -61,12 +61,14 @@ public final class AuthSettings {
 
     /**
      * Who owns a name: the rule, what a name nobody could look up is taken for, how long a failed handshake is
-     * remembered, the addresses of the domain rule, and the UUID a player plays under.
+     * remembered, how long a claim waits for its next connection, the addresses of the domain rule, and the UUID
+     * a player plays under.
      */
     public record Ownership(
             NameRule rule,
             WhenUnknown whenUnknown,
             Duration failedMemory,
+            Duration claimMemory,
             List<String> premiumDomains,
             List<String> crackedDomains,
             UuidScheme uuidScheme) {
@@ -75,6 +77,7 @@ public final class AuthSettings {
             Objects.requireNonNull(rule, "rule");
             Objects.requireNonNull(whenUnknown, "whenUnknown");
             Objects.requireNonNull(failedMemory, "failedMemory");
+            Objects.requireNonNull(claimMemory, "claimMemory");
             premiumDomains = List.copyOf(Objects.requireNonNull(premiumDomains, "premiumDomains"));
             crackedDomains = List.copyOf(Objects.requireNonNull(crackedDomains, "crackedDomains"));
         }

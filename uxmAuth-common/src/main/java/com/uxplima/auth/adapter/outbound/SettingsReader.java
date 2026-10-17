@@ -134,6 +134,7 @@ final class SettingsReader {
                 rule,
                 word(config, "ownership.when-every-source-fails", "cracked", WhenUnknown.class),
                 Duration.ofSeconds(positive(config, "ownership.failed-memory-seconds", 300)),
+                Duration.ofMinutes(positive(config, "ownership.claim-minutes", 10)),
                 premiumDomains,
                 list(config, "ownership.domains", "cracked", List.of()),
                 word(config, "ownership.uuid-scheme", "keep-first", UuidScheme.class));
