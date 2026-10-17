@@ -3,8 +3,8 @@ version: '${version}'
 main: com.uxplima.auth.paper.bootstrap.AuthPlugin
 api-version: '26.2'
 authors: ['UXPLIMA']
-description: 'The starting point for a UXPLIMA plugin.'
-website: 'https://github.com/UXPLIMA/uxm-plugin-template'
+description: 'Registration, login and premium identity, on one server or a whole network.'
+website: 'https://github.com/UXPLIMA/uxm-auth'
 
 # Every scheduler call goes through the uxmLib Scheduler port, which routes to the
 # right global, region, entity or async scheduler. Nothing calls BukkitScheduler.
@@ -15,6 +15,11 @@ folia-supported: true
 dependencies:
   server:
     PlaceholderAPI:
+      load: BEFORE
+      required: false
+    # The economy an operator's [take-money] and [give-money] lines read, through Vault when the server
+    # has it. Without Vault those lines are skipped and every other line runs.
+    Vault:
       load: BEFORE
       required: false
 

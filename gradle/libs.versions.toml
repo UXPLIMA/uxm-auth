@@ -81,9 +81,9 @@ nullaway          = { module = "com.uber.nullaway:nullaway",                    
 
 [bundles]
 testing = ["junit-jupiter", "assertj", "mockito-core", "mockito-jupiter"]
-# The foundation that every plugin takes. Add uxmlib-storage, -hud, -integration,
-# -condition or -update to the build file when the plugin actually needs them.
-uxmlib  = ["uxmlib-common", "uxmlib-command", "uxmlib-item", "uxmlib-gui"]
+# The foundation every plugin takes, and -condition and -integration with it: every effect list
+# an operator writes runs through them. Add -hud or -update when the plugin needs them.
+uxmlib  = ["uxmlib-common", "uxmlib-command", "uxmlib-item", "uxmlib-gui", "uxmlib-condition", "uxmlib-integration"]
 adventure = ["adventure-api", "adventure-mini", "adventure-plain", "adventure-legacy"]
 
 [plugins]

@@ -87,7 +87,9 @@ public enum Keys implements MessageKey {
     REMINDER_REGISTER("reminder.register", "<body>Register with <value>/register <password> <password>"),
     REMINDER_LOGIN("reminder.login", "<body>Log in with <value>/login <password>"),
     WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
-    WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in");
+    WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
+
+    KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more.");
     private final String path;
     private final String defaultTemplate;
 
