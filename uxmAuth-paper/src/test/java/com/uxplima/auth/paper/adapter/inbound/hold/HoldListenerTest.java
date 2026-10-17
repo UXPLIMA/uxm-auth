@@ -19,6 +19,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.metadata.FixedMetadataValue;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
 
@@ -150,9 +151,22 @@ final class HoldListenerTest {
     }
 
     @Test
-    @DisplayName("a player this plugin holds no session for, such as an NPC, is never held")
-    void noSessionIsNotHeld() {
+    @DisplayName("a real player this plugin holds no session for is held: a missing session fails closed")
+    void aPlayerWithoutASessionIsHeld() {
+        PlayerMock stranger = server.addPlayer("Stranger");
+        Location from = stranger.getLocation();
+
+        assertThat(fire(new PlayerMoveEvent(stranger, from, from.clone().add(1, 0, 0)))
+                        .isCancelled())
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("an NPC another plugin marks as one is never held")
+    @SuppressWarnings("deprecation") // Citizens marks an NPC with metadata, which Paper deprecated.
+    void anNpcIsNeverHeld() {
         PlayerMock npc = server.addPlayer("Guard");
+        npc.setMetadata("NPC", new FixedMetadataValue(plugin, true));
         Location from = npc.getLocation();
 
         assertThat(fire(new PlayerMoveEvent(npc, from, from.clone().add(1, 0, 0)))

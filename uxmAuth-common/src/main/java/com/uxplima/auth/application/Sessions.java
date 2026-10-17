@@ -53,6 +53,12 @@ public final class Sessions {
         states.remove(connection);
     }
 
+    /** Closes the connection only if it is still the opening this generation names. */
+    public void close(UUID connection, long generation) {
+        Objects.requireNonNull(connection, "connection");
+        states.computeIfPresent(connection, (key, current) -> current.generation() == generation ? null : current);
+    }
+
     public boolean isOpen(UUID connection) {
         Objects.requireNonNull(connection, "connection");
         return states.containsKey(connection);

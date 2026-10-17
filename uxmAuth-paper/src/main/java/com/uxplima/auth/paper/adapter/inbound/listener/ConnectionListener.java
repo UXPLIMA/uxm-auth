@@ -1,7 +1,10 @@
 package com.uxplima.auth.paper.adapter.inbound.listener;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -42,6 +45,16 @@ public final class ConnectionListener implements Listener {
     private final IntSupplier maxAttempts;
     private final Messages messages;
     private final Logger logger;
+
+    /**
+     * Which opening of a session each player object joined with. A quit closes that opening only: a second
+     * connection under the same UUID opens its own before the server kicks the first, and the first one's
+     * quit must not close the newcomer's session and leave them at no door at all.
+     */
+    private final Map<UUID, Joined> joined = new ConcurrentHashMap<>();
+
+    /** A player object and the session generation it joined with. */
+    private record Joined(Player player, long generation) {}
 
     public ConnectionListener(
             Scheduler scheduler,
@@ -102,6 +115,8 @@ public final class ConnectionListener implements Listener {
                 return;
             }
             sessions.open(player.getUniqueId(), state);
+            sessions.held(player.getUniqueId())
+                    .ifPresent(held -> joined.put(player.getUniqueId(), new Joined(player, held.generation())));
             scheduler.entity(player, () -> door.hold(player));
         });
     }
@@ -113,19 +128,35 @@ public final class ConnectionListener implements Listener {
                 .orElseGet(() -> new AuthState.Unregistered(name));
     }
 
+    /** A player with a session goes to the door; one without is read again and held meanwhile. */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
-        door.hold(event.getPlayer());
+        Player player = event.getPlayer();
+        Sessions.Held held = sessions.held(player.getUniqueId()).orElse(null);
+        if (held == null) {
+            admitOnline(player);
+            return;
+        }
+        joined.put(player.getUniqueId(), new Joined(player, held.generation()));
+        door.hold(player);
     }
 
     /** A player who leaves while held gets everything back before the server saves them. */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        AuthState state = sessions.state(player.getUniqueId()).orElse(null);
-        if (state != null && !(state instanceof AuthState.Authenticated)) {
+        UUID id = player.getUniqueId();
+        Joined mine = joined.get(id);
+        if (mine == null || mine.player() != player) {
+            return;
+        }
+        joined.remove(id, mine);
+        Sessions.Held held = sessions.held(id).orElse(null);
+        if (held != null
+                && held.generation() == mine.generation()
+                && !(held.state() instanceof AuthState.Authenticated)) {
             keeper.leave(player);
         }
-        sessions.close(player.getUniqueId());
+        sessions.close(id, mine.generation());
     }
 }

@@ -134,6 +134,39 @@ final class ConnectionListenerTest {
         assertThat(steve.hasPotionEffect(PotionEffectType.BLINDNESS)).isTrue();
     }
 
+    @Test
+    @DisplayName("the quit of a first connection does not close the session a second one under the same id opened")
+    void aSecondConnectionIsNotLetInByTheFirstOnesQuit() throws Exception {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        ConnectionListener listener = listener(world.accounts);
+        listener.onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+        world.sessions.update(
+                steve.getUniqueId(),
+                state -> new AuthState.Authenticated(
+                        ((AuthState.Registered) state).account(), com.uxplima.auth.domain.state.AuthMethod.PASSWORD));
+
+        listener.onPreLogin(preLogin("Steve", steve.getUniqueId()));
+        listener.onQuit(new PlayerQuitEvent(steve, Component.empty(), PlayerQuitEvent.QuitReason.KICKED));
+
+        assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Registered.class);
+    }
+
+    @Test
+    @DisplayName("a player who joins without a session is read again and held, never let in")
+    void aJoinWithoutASessionIsReadAndHeld() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+
+        listener(world.accounts).onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Registered.class);
+        assertThat(steve.hasPotionEffect(PotionEffectType.BLINDNESS)).isTrue();
+    }
+
     private ConnectionListener listener(AccountRepository accounts) {
         return new ConnectionListener(
                 world.scheduler,

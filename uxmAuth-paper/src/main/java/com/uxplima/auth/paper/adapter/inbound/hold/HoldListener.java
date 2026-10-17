@@ -42,9 +42,10 @@ import org.jspecify.annotations.Nullable;
 /**
  * Cancels what a waiting player tries to do, one switch of {@code hold} at a time.
  *
- * <p>A player is held while this plugin holds a session for them that is not logged in. A player with no
- * session at all is left alone: an NPC from another plugin is a {@link Player} too, and freezing it would
- * break that plugin.
+ * <p>A player is held unless this plugin holds a logged-in session for them. A player with no session at all
+ * is held too: a missing session fails closed, because the way to one is a race this plugin must never lose
+ * in the player's favour. The one exception is an NPC another plugin marks as one, which is a {@link Player}
+ * to the server but never a person at the door.
  *
  * <p>Every handler runs on the event's own thread and reads only the concurrent session map, so it is safe on
  * Folia and on the chat thread.
@@ -72,7 +73,16 @@ public final class HoldListener implements Listener {
     /** Whether this player waits to log in. */
     public boolean isHeld(Player player) {
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
-        return state != null && !(state instanceof AuthState.Authenticated);
+        if (state == null) {
+            return !isNpc(player);
+        }
+        return !(state instanceof AuthState.Authenticated);
+    }
+
+    /** Citizens, the NPC plugin servers run most, marks every NPC it spawns with this metadata. */
+    @SuppressWarnings("deprecation") // Paper deprecated metadata; Citizens still writes it.
+    private static boolean isNpc(Player player) {
+        return player.hasMetadata("NPC");
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
