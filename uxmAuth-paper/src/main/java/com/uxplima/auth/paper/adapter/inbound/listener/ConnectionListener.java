@@ -15,6 +15,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLocaleChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import net.kyori.adventure.audience.Audience;
@@ -139,6 +140,16 @@ public final class ConnectionListener implements Listener {
         }
         joined.put(player.getUniqueId(), new Joined(player, held.generation()));
         door.hold(player);
+    }
+
+    /**
+     * The client said its language. The greeting runs on the next turn of the player's own thread, after the
+     * listener that writes the language down has run on this event.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onLocale(PlayerLocaleChangeEvent event) {
+        Player player = event.getPlayer();
+        scheduler.entity(player, () -> door.languageKnown(player));
     }
 
     /** A player who leaves while held gets everything back before the server saves them. */

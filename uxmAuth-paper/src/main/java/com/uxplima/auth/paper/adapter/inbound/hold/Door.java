@@ -19,12 +19,14 @@ public final class Door {
     private final HoldKeeper keeper;
     private final WaitingClock clock;
     private final MomentRunner moments;
+    private final Greeter greeter;
 
-    public Door(Sessions sessions, HoldKeeper keeper, WaitingClock clock, MomentRunner moments) {
+    public Door(Sessions sessions, HoldKeeper keeper, WaitingClock clock, MomentRunner moments, Greeter greeter) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.moments = Objects.requireNonNull(moments, "moments");
+        this.greeter = Objects.requireNonNull(greeter, "greeter");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -36,11 +38,16 @@ public final class Door {
             return;
         }
         clock.start(player);
-        moments.fire(
+        greeter.greet(
                 player,
                 state instanceof AuthState.Unregistered
                         ? AuthSettings.Moment.JOIN_UNREGISTERED
                         : AuthSettings.Moment.JOIN_REGISTERED);
+    }
+
+    /** The client said what language it reads, so a greeting that waited for it can run. */
+    public void languageKnown(Player player) {
+        greeter.languageKnown(player);
     }
 
     /** A player got in: everything the hold took comes back, and the moment of their way in runs. */

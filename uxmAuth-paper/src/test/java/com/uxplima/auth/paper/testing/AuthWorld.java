@@ -39,6 +39,7 @@ import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
+import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
@@ -101,7 +102,7 @@ public final class AuthWorld implements AutoCloseable {
                 clock,
                 moments,
                 messages);
-        this.door = new Door(sessions, keeper, waiting, moments);
+        this.door = new Door(sessions, keeper, waiting, moments, new Greeter(moments, (player, task) -> task.run()));
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy);
