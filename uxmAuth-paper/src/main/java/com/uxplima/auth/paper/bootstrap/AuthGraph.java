@@ -121,6 +121,7 @@ final class AuthGraph implements AutoCloseable {
     private final PasswordLogFilters filters;
     private final HttpClient web = HttpClient.newHttpClient();
     private final NetworkEvents events;
+    private final ChannelReports channelReports;
     private final ServerHellos hellos;
 
     AuthGraph(
@@ -136,6 +137,7 @@ final class AuthGraph implements AutoCloseable {
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         this.lane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
+        this.channelReports = new ChannelReports(plugin, () -> claims(settings), Clock.systemUTC());
         Hashing hashing = boot.hashers();
         SqlAccountRepository accounts = new SqlAccountRepository(database);
         Clock clock = Clock.systemUTC();
@@ -233,7 +235,7 @@ final class AuthGraph implements AutoCloseable {
                         shower),
                 welcomes,
                 notices,
-                new ChannelReports(plugin, () -> claims(settings), clock));
+                channelReports);
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -318,6 +320,7 @@ final class AuthGraph implements AutoCloseable {
         // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
+        plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         plugin.getServer().getPluginManager().registerEvents(gate, plugin);

@@ -13,7 +13,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.bukkit.entity.Player;
@@ -36,10 +38,12 @@ final class ChannelReportsTest {
     private final Claims claims = new Claims(NetworkSecret.parse("q".repeat(43)), Duration.ofSeconds(30));
     private final Plugin plugin = mock(Plugin.class);
     private final Player player = mock(Player.class);
+    private final Set<String> listening = new HashSet<>(Set.of(Claims.CHANNEL));
 
     ChannelReportsTest() {
         when(player.getUniqueId()).thenReturn(STEVE);
         when(player.getName()).thenReturn("Steve");
+        when(player.getListeningPluginChannels()).thenAnswer(ignored -> Set.copyOf(listening));
     }
 
     private Claim.Standing sent() {
@@ -71,6 +75,38 @@ final class ChannelReportsTest {
     @DisplayName("a server that stands alone sends nothing")
     void aLoneServerSendsNothing() {
         new ChannelReports(plugin, Optional::empty, clock).loggedIn(player, AuthMethod.PASSWORD);
+
+        verify(player, never()).sendPluginMessage(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("a report made before the proxy opened the channel waits for it, and the latest one is sent")
+    void aReportWaitsForTheChannel() {
+        listening.clear();
+        ChannelReports reports = new ChannelReports(plugin, () -> Optional.of(claims), clock);
+
+        reports.loggedIn(player, AuthMethod.REGISTERED);
+        reports.opened(player);
+        verify(player, never()).sendPluginMessage(any(), any(), any());
+
+        listening.add(Claims.CHANNEL);
+        reports.opened(player);
+        assertThat(sent()).isEqualTo(new Claim.LoggedIn(AuthMethod.REGISTERED));
+
+        reports.opened(player);
+        verify(player).sendPluginMessage(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("a player who leaves before the channel opens takes their report with them")
+    void aReportLeavesWithThePlayer() {
+        listening.clear();
+        ChannelReports reports = new ChannelReports(plugin, () -> Optional.of(claims), clock);
+        reports.waiting(player);
+
+        reports.left(player);
+        listening.add(Claims.CHANNEL);
+        reports.opened(player);
 
         verify(player, never()).sendPluginMessage(any(), any(), any());
     }
