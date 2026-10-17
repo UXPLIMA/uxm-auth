@@ -31,13 +31,14 @@ public final class NameOwnership {
         if (arrival.holder() == Holder.BEDROCK) {
             return new Decision.Cracked(false, false);
         }
-        if (rule == NameRule.DOMAIN && !throughThePremiumAddress(arrival)) {
+        if (rule == NameRule.DOMAIN) {
             // Through the cracked address the player is the marked name, an account of its own: the holder of the
-            // name they typed is somebody else's business.
-            return new Decision.Cracked(false, false, true);
+            // name they typed is somebody else's business. The premium address asks every name for the handshake,
+            // and a failure there is told of the other address.
+            return throughThePremiumAddress(arrival) ? domain(arrival) : new Decision.Cracked(false, false, true);
         }
         if (arrival.holder() == Holder.PREMIUM) {
-            // An account that proved itself has no password to fall back on, under any rule and any address. A
+            // An account that proved itself has no password to fall back on, under every other rule. A
             // try that failed lately is told why once, rather than shown "Invalid session" again.
             return arrival.failedBefore() ? new Decision.Refuse(Refusal.PAID_NAME) : new Decision.Handshake();
         }
@@ -45,7 +46,7 @@ public final class NameOwnership {
             case AUTOMATIC -> automatic(arrival, lookup);
             case OPT_IN -> optIn(arrival);
             case STRICT -> strict(arrival, lookup);
-            case DOMAIN -> domain(arrival);
+            case DOMAIN -> throw new IllegalStateException("the domain rule was decided above");
         };
     }
 
