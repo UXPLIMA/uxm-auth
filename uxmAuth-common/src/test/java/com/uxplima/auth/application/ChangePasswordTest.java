@@ -93,6 +93,20 @@ final class ChangePasswordTest {
     }
 
     @Test
+    @DisplayName("a session whose visit cannot be named keeps nothing: every session of the account ends")
+    void anUnnamableVisitEndsEverySession() {
+        UUID connection = loggedIn("Steve", "hunter22");
+        fixture.sessions.open(connection, fixture.sessions.state(connection).orElseThrow(), "not a visit");
+        UUID account = fixture.accounts
+                .findByName(new PlayerName("Steve"))
+                .orElseThrow()
+                .id();
+
+        assertThat(change(connection, "hunter22", "fresh777")).isEqualTo(new ChangeResult.Changed());
+        assertThat(heard).containsExactly(new Bulletin.SessionsEnded(account, java.util.Optional.empty()));
+    }
+
+    @Test
     @DisplayName("a player who has not logged in cannot change a password")
     void changeNeedsALogin() {
         UUID connection = fixture.registered("Steve", "hunter22");

@@ -1,6 +1,7 @@
 package com.uxplima.auth.application;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -109,7 +110,11 @@ public final class ChangePassword {
                         ? new AuthState.Authenticated(updated, authenticated.method())
                         : state);
         // The password ends every session of the account on every server, but the one that changed it.
-        events.publish(new Bulletin.SessionsEnded(id, sessions.held(connection).map(Sessions.Held::visit)));
+        // A visit that cannot be named keeps nothing: every session ends, this one too.
+        Optional<String> keep = sessions.held(connection)
+                .map(Sessions.Held::visit)
+                .filter(visit -> Bulletin.VISIT.matcher(visit).matches());
+        events.publish(new Bulletin.SessionsEnded(id, keep));
         return new ChangeResult.Changed();
     }
 
