@@ -27,4 +27,11 @@ public sealed interface NameVerdict {
             Objects.requireNonNull(word, "word");
         }
     }
+
+    /** The name is registered in another case, which is named so the player can join with it. */
+    record WrongCase(PlayerName registered) implements NameVerdict {
+        public WrongCase {
+            Objects.requireNonNull(registered, "registered");
+        }
+    }
 }

@@ -18,6 +18,7 @@ import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LetBedrockIn;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LogOut;
+import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
@@ -193,10 +194,12 @@ final class AuthGraph implements AutoCloseable {
         this.connections = new ConnectionListener(
                 scheduler,
                 sessions,
-                accounts,
+                new ReadTheName(
+                        accounts,
+                        () -> settings.current().namePolicy(),
+                        () -> settings.current().passwords().maxAttempts()),
                 door,
                 keeper,
-                () -> settings.current().passwords().maxAttempts(),
                 new BedrockAdmission(
                         bedrock,
                         new LetBedrockIn(

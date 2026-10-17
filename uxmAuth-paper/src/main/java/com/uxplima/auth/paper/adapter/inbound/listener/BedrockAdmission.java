@@ -33,6 +33,11 @@ public final class BedrockAdmission {
         this.autoLogin = Objects.requireNonNull(autoLogin, "autoLogin");
     }
 
+    /** Whether Floodgate vouches for this connection, whether or not it may come in without a password. */
+    public boolean vouches(UUID connection) {
+        return link.player(Objects.requireNonNull(connection, "connection")).isPresent();
+    }
+
     /** The state a Bedrock connection opens with, or empty when the door asks as it does for anyone. */
     public Optional<AuthState> admit(UUID connection, PlayerName name, String address) {
         LetBedrockIn door = letIn;

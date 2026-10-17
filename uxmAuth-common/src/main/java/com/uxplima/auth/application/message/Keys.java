@@ -97,6 +97,18 @@ public enum Keys implements MessageKey {
     KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
     KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),
+    KICK_NAME_TOO_SHORT(
+            "kick.name-too-short",
+            "<body>Your name is too short here. Use a name of at least <value><min><body> characters."),
+    KICK_NAME_TOO_LONG(
+            "kick.name-too-long",
+            "<body>Your name is too long here. Use a name of at most <value><max><body> characters."),
+    KICK_NAME_CHARACTERS(
+            "kick.name-characters", "<body>Your name holds a character this server does not allow. Use another name."),
+    KICK_NAME_BLOCKED("kick.name-blocked", "<body>Your name holds a word this server does not allow: <value><word>"),
+    KICK_NAME_CASE(
+            "kick.name-case",
+            "<body>This name is registered as <value><name><body>. Join again with exactly that spelling."),
 
     LOGIN_WRONG("login.wrong", "<etag:'ERROR'> <body>That password is wrong. Tries left: <value><left><body>."),
     LOGIN_NOT_REGISTERED(

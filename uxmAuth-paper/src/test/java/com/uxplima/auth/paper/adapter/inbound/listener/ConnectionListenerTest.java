@@ -22,11 +22,13 @@ import org.bukkit.potion.PotionEffectType;
 import io.papermc.paper.connection.PlayerLoginConnection;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.LetBedrockIn;
+import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -72,18 +74,79 @@ final class ConnectionListenerTest {
     }
 
     @Test
-    @DisplayName("a name with an account waits for its password, in any case")
+    @DisplayName("a name with an account waits for its password, in the case it was registered in")
     void aKnownNameWaitsForItsPassword() throws Exception {
         // Not yet joined: a pre-login comes before the player exists.
         PlayerMock steve = new PlayerMock(server, "Steve");
         world.registered(steve, "hunter22");
         world.sessions.close(steve.getUniqueId());
 
-        AsyncPlayerPreLoginEvent event = preLogin("STEVE", steve.getUniqueId());
+        AsyncPlayerPreLoginEvent event = preLogin("Steve", steve.getUniqueId());
         listener(world.accounts).onPreLogin(event);
 
         assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
         assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Registered.class);
+    }
+
+    @Test
+    @DisplayName("a registered name in another case is refused at the door, and the reason names the right case")
+    void anotherCaseIsRefusedNamingTheRightOne() throws Exception {
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+        UUID other = UUID.randomUUID();
+
+        AsyncPlayerPreLoginEvent event = preLogin("STEVE", other);
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(plain(event.kickMessage())).contains("Steve").doesNotContain("STEVE");
+        assertThat(world.sessions.isOpen(other)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a name the operator's rules refuse is turned away at the door with the reason, holding no session")
+    void aNameTheRulesRefuseIsTurnedAway() throws Exception {
+        UUID shortName = UUID.randomUUID();
+        UUID oddName = UUID.randomUUID();
+        ConnectionListener listener = listener(world.accounts);
+
+        AsyncPlayerPreLoginEvent tooShort = preLogin("ab", shortName);
+        listener.onPreLogin(tooShort);
+        AsyncPlayerPreLoginEvent odd = preLogin("Ste-ve", oddName);
+        listener.onPreLogin(odd);
+
+        assertThat(tooShort.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(plain(tooShort.kickMessage())).contains("3");
+        assertThat(odd.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(plain(odd.kickMessage())).isNotEqualTo(plain(tooShort.kickMessage()));
+        assertThat(world.sessions.isOpen(shortName)).isFalse();
+        assertThat(world.sessions.isOpen(oddName)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a Bedrock name passes the pattern through the Bedrock door, even while auto-login is off")
+    void aBedrockNamePassesThePatternThroughTheBedrockDoor() throws Exception {
+        UUID id = UUID.randomUUID();
+        bedrock = new BedrockAdmission(
+                floodgate(), new LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock), () -> false);
+
+        AsyncPlayerPreLoginEvent event = preLogin(".Steve", id);
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
+        assertThat(world.sessions.state(id)).contains(new AuthState.Unregistered(new PlayerName(".Steve")));
+    }
+
+    @Test
+    @DisplayName("a Java connection under a Bedrock-looking name is still held to the pattern")
+    void aJavaConnectionUnderABedrockNameIsHeldToThePattern() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        AsyncPlayerPreLoginEvent event = preLogin(".Steve", id);
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
     }
 
     @Test
@@ -230,19 +293,7 @@ final class ConnectionListenerTest {
     void aBedrockPlayerIsLetInAtTheDoor() throws Exception {
         UUID id = UUID.randomUUID();
         bedrock = new BedrockAdmission(
-                new BedrockLink() {
-                    @Override
-                    public Optional<BedrockLink.Player> player(UUID connection) {
-                        return Optional.of(new BedrockLink.Player(false));
-                    }
-
-                    @Override
-                    public Optional<String> prefix() {
-                        return Optional.of(".");
-                    }
-                },
-                new LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock),
-                () -> true);
+                floodgate(), new LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock), () -> true);
 
         listener(world.accounts).onPreLogin(preLogin(".Steve", id));
 
@@ -411,15 +462,33 @@ final class ConnectionListenerTest {
         return new ConnectionListener(
                 world.scheduler,
                 world.sessions,
-                accounts,
+                new ReadTheName(accounts, AuthWorld::shippedNames, () -> AuthWorld.MAX_ATTEMPTS),
                 world.door,
                 world.keeper,
-                () -> AuthWorld.MAX_ATTEMPTS,
                 bedrock,
                 new NameHolders(server, id -> Optional.ofNullable(waitingAtTheDialog.get(id))),
                 () -> sameAddress,
                 world.messages,
                 Logger.getLogger("uxmauth-test"));
+    }
+
+    /** Floodgate vouching for every connection, none of them linked. */
+    private static BedrockLink floodgate() {
+        return new BedrockLink() {
+            @Override
+            public Optional<BedrockLink.Player> player(UUID connection) {
+                return Optional.of(new BedrockLink.Player(false));
+            }
+
+            @Override
+            public Optional<String> prefix() {
+                return Optional.of(".");
+            }
+        };
+    }
+
+    private static String plain(@org.jspecify.annotations.Nullable Component text) {
+        return PlainTextComponentSerializer.plainText().serialize(Objects.requireNonNull(text));
     }
 
     /** The event as the server hands it over. The newest constructor needs a live connection, which a test has not. */

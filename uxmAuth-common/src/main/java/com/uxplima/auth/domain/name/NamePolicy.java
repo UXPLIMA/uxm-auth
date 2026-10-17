@@ -3,6 +3,7 @@ package com.uxplima.auth.domain.name;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
@@ -37,12 +38,15 @@ public record NamePolicy(Pattern pattern, int minLength, int maxLength, List<Str
         if (!pattern.matcher(raw).matches()) {
             return new NameVerdict.BadCharacters();
         }
+        return blockedIn(raw)
+                .<NameVerdict>map(NameVerdict.Blocked::new)
+                .orElseGet(() -> new NameVerdict.Accepted(new PlayerName(raw)));
+    }
+
+    /** The first blocked word the name holds, in any case. */
+    public Optional<String> blockedIn(String raw) {
+        Objects.requireNonNull(raw, "raw");
         String folded = raw.toLowerCase(Locale.ROOT);
-        for (String word : blockedWords) {
-            if (folded.contains(word)) {
-                return new NameVerdict.Blocked(word);
-            }
-        }
-        return new NameVerdict.Accepted(new PlayerName(raw));
+        return blockedWords.stream().filter(folded::contains).findFirst();
     }
 }

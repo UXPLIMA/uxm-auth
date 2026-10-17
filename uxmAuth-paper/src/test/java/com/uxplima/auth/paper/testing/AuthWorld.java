@@ -32,6 +32,7 @@ import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.Argon2idHasher;
 import com.uxplima.auth.domain.hash.BcryptHasher;
 import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
@@ -132,6 +133,11 @@ public final class AuthWorld implements AutoCloseable {
     /** The defaults the shipped file has. */
     public static AuthSettings.Passwords shippedPasswords() {
         return new AuthSettings.Passwords(6, 64, "\\S+", Set.of(), true, true, MAX_ATTEMPTS);
+    }
+
+    /** The name rules the shipped file has. */
+    public static NamePolicy shippedNames() {
+        return new NamePolicy(Pattern.compile("[A-Za-z0-9_]+"), 3, 16, List.of());
     }
 
     /** A player with an account and this password, waiting to log in. */
