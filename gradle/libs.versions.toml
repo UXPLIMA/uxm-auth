@@ -2,6 +2,8 @@
 # Pin an exact version. Record the date on which the coordinate was verified.
 
 [versions]
+# The Log4j the server ships, for the filter that keeps a password out of the log. compileOnly.
+log4j = "2.26.0"
 # language and platform
 java           = "25"
 paper          = "26.2.build.112-stable"   # io.papermc.paper:paper-api (verified 2026-08-28)
@@ -78,6 +80,8 @@ archunit-junit    = { module = "com.tngtech.archunit:archunit-junit5",          
 errorprone-core   = { module = "com.google.errorprone:error_prone_core",         version.ref = "errorprone" }
 errorprone-annos  = { module = "com.google.errorprone:error_prone_annotations",  version.ref = "errorprone" }
 nullaway          = { module = "com.uber.nullaway:nullaway",                     version.ref = "nullaway" }
+
+log4j-core        = { module = "org.apache.logging.log4j:log4j-core",            version.ref = "log4j" }
 
 [bundles]
 testing = ["junit-jupiter", "assertj", "mockito-core", "mockito-jupiter"]

@@ -38,6 +38,8 @@ dependencies {
     // Soft dependencies. Touched only past a plugin-present guard, so the plugin loads
     // on a server that does not have them.
     compileOnly(libs.placeholderapi)
+    // The server's own Log4j, which the password filter attaches to. Paper ships it, so it is never shaded.
+    compileOnly(libs.log4j.core)
 
     // Paper is compileOnly for the jar, because the server provides it. A test still has to
     // link against it: a fake that implements a uxmLib port sees Location and Entity in the
@@ -51,6 +53,7 @@ dependencies {
     testImplementation(libs.uxmlib.integration)
     // The guard that every shipped effect line parses asks the action engine itself.
     testImplementation(libs.uxmlib.condition)
+    testImplementation(libs.log4j.core)
 }
 
 tasks.processResources {
