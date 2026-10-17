@@ -30,6 +30,7 @@ final class HelloInterceptorTest {
     private static final class FakeLogin implements Login {
         final List<String> done = new ArrayList<>();
         boolean proved;
+        boolean atHello = true;
 
         @Override
         public InetSocketAddress address() {
@@ -42,8 +43,12 @@ final class HelloInterceptorTest {
         }
 
         @Override
-        public void askForKey(ServerboundHelloPacket hello) {
+        public boolean askForKey(ServerboundHelloPacket hello) {
+            if (!atHello) {
+                return false;
+            }
             done.add("key:" + hello.name());
+            return true;
         }
 
         @Override
@@ -194,14 +199,49 @@ final class HelloInterceptorTest {
     }
 
     @Test
-    @DisplayName("a door that fails lets the hello through as the server would have taken it, with nothing kept")
-    void aFailingDoorLetsTheHelloThrough() {
+    @DisplayName("a door that fails turns the connection away at its pre-login, never through unchecked")
+    void aFailingDoorRefusesAtThePreLogin() {
         channel.writeInbound(HELLO);
         door.answer.completeExceptionally(new IllegalStateException("database down"));
         channel.runPendingTasks();
 
         assertThat(server.read).containsExactly(HELLO);
-        assertThat(results.take(FROM)).isEmpty();
+        assertThat(results.take(FROM)).contains(new HelloOutcome.Decided(new Decision.Refuse(Refusal.LOOKUP_FAILED)));
+    }
+
+    @Test
+    @DisplayName("a second hello while the first one waits closes the connection, and the server sees neither")
+    void aSecondHelloWhileWaitingCloses() {
+        channel.writeInbound(HELLO);
+
+        channel.writeInbound(new ServerboundHelloPacket("Notch", UUID.randomUUID()));
+
+        assertThat(channel.isActive()).isFalse();
+        assertThat(server.read).isEmpty();
+    }
+
+    @Test
+    @DisplayName("anything at all while the hello waits closes the connection, since a client sends nothing then")
+    void anythingWhileWaitingCloses() {
+        channel.writeInbound(HELLO);
+
+        channel.writeInbound(new Object());
+
+        assertThat(channel.isActive()).isFalse();
+        assertThat(server.read).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a login no longer at its hello is closed rather than switched to the key")
+    void aLoginPastItsHelloIsClosed() {
+        channel.writeInbound(HELLO);
+        login.atHello = false;
+        door.answer.complete(new Decision.Handshake());
+        channel.runPendingTasks();
+
+        assertThat(channel.isActive()).isFalse();
+        assertThat(server.read).isEmpty();
+        assertThat(results.size()).isZero();
     }
 
     @Test

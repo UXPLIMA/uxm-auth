@@ -63,12 +63,16 @@ final class ServerLogin implements Login {
     }
 
     @Override
-    public void askForKey(ServerboundHelloPacket hello) {
+    public boolean askForKey(ServerboundHelloPacket hello) {
+        if (listener.state != ServerLoginPacketListenerImpl.State.HELLO) {
+            return false;
+        }
         listener.requestedUsername = hello.name();
         listener.requestedUuid = hello.profileId();
         listener.state = ServerLoginPacketListenerImpl.State.KEY;
         byte[] key = MinecraftServer.getServer().getKeyPair().getPublic().getEncoded();
         connection.send(new ClientboundHelloPacket("", key, challenge(), true));
+        return true;
     }
 
     /** The server sets this state only after it checked the key, and holds it while Mojang's answer is read. */

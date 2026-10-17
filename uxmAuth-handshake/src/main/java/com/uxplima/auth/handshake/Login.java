@@ -15,9 +15,12 @@ interface Login {
 
     /**
      * Asks the client for its key, as an online server does: the listener takes the hello's name and waits for
-     * the key, and the server's own code checks it, switches to AES and asks Mojang.
+     * the key, and the server's own code checks it, switches to AES and asks Mojang. A listener no longer at its
+     * hello is left as it is.
+     *
+     * @return whether the listener was at its hello and now waits for the key
      */
-    void askForKey(ServerboundHelloPacket hello);
+    boolean askForKey(ServerboundHelloPacket hello);
 
     /** Whether the server's own check of the key and Mojang's answer passed. */
     boolean proved();
