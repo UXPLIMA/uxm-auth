@@ -18,6 +18,7 @@ import net.kyori.adventure.text.Component;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.storage.StorageException;
@@ -100,6 +101,25 @@ final class ConnectionListenerTest {
         world.scheduler.drain();
 
         assertThat(steve.hasPotionEffect(PotionEffectType.BLINDNESS)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a joining player who waits is offered the screen for their case, a player let in is offered none")
+    void aJoinOffersTheScreen() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.unregistered(steve);
+        PlayerMock alex = server.addPlayer("Alex");
+        world.registered(alex, "hunter22");
+        world.sessions.update(
+                alex.getUniqueId(),
+                state -> new AuthState.Authenticated(((AuthState.Registered) state).account(), AuthMethod.PASSWORD));
+        ConnectionListener listener = listener(world.accounts);
+
+        listener.onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        listener.onJoin(new PlayerJoinEvent(alex, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(world.offered).singleElement().isInstanceOf(AuthState.Unregistered.class);
     }
 
     @Test

@@ -217,6 +217,7 @@ final class PluginModule {
                 plugin,
                 scheduler,
                 settings,
+                screens,
                 Objects.requireNonNull(database, "database"),
                 messages,
                 styler(),

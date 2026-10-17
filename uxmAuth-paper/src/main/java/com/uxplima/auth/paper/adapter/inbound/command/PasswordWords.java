@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.bukkit.entity.Player;
 
+import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.application.message.Keys;
@@ -14,29 +15,41 @@ import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 
 /** Tells a player why the policy refused a password, in their language. */
-final class PasswordWords {
+public final class PasswordWords {
 
     private PasswordWords() {}
 
     static void say(Messages messages, Player player, PasswordVerdict verdict) {
-        switch (verdict) {
-            case PasswordVerdict.Accepted accepted -> {}
-            case PasswordVerdict.TooShort tooShort ->
-                messages.send(
-                        player, Keys.PASSWORD_TOO_SHORT, Text.placeholder("min", String.valueOf(tooShort.minimum())));
-            case PasswordVerdict.TooLong tooLong ->
-                messages.send(
-                        player, Keys.PASSWORD_TOO_LONG, Text.placeholder("max", String.valueOf(tooLong.maximum())));
-            case PasswordVerdict.TooLongForTheHash forTheHash ->
-                messages.send(player, Keys.PASSWORD_TOO_LONG_FOR_THE_HASH);
-            case PasswordVerdict.BadCharacters bad -> messages.send(player, Keys.PASSWORD_BAD_CHARACTERS);
-            case PasswordVerdict.Missing missing ->
-                messages.send(
-                        player, Keys.PASSWORD_MISSING, Text.component("classes", classes(messages, player, missing)));
-        }
+        reason(messages, player, verdict).ifPresent(player::sendMessage);
     }
 
-    private static Component classes(Messages messages, Player player, PasswordVerdict.Missing missing) {
+    /** The line that says why, or nothing for a password that was accepted. */
+    public static java.util.Optional<Component> reason(Messages messages, Audience reader, PasswordVerdict verdict) {
+        return java.util.Optional.ofNullable(
+                switch (verdict) {
+                    case PasswordVerdict.Accepted accepted -> null;
+                    case PasswordVerdict.TooShort tooShort ->
+                        messages.render(
+                                reader,
+                                Keys.PASSWORD_TOO_SHORT,
+                                Text.placeholder("min", String.valueOf(tooShort.minimum())));
+                    case PasswordVerdict.TooLong tooLong ->
+                        messages.render(
+                                reader,
+                                Keys.PASSWORD_TOO_LONG,
+                                Text.placeholder("max", String.valueOf(tooLong.maximum())));
+                    case PasswordVerdict.TooLongForTheHash forTheHash ->
+                        messages.render(reader, Keys.PASSWORD_TOO_LONG_FOR_THE_HASH);
+                    case PasswordVerdict.BadCharacters bad -> messages.render(reader, Keys.PASSWORD_BAD_CHARACTERS);
+                    case PasswordVerdict.Missing missing ->
+                        messages.render(
+                                reader,
+                                Keys.PASSWORD_MISSING,
+                                Text.component("classes", classes(messages, reader, missing)));
+                });
+    }
+
+    private static Component classes(Messages messages, Audience player, PasswordVerdict.Missing missing) {
         List<Component> names = new ArrayList<>();
         for (CharClass needed : missing.classes().stream().sorted().toList()) {
             names.add(messages.render(player, keyOf(needed)));

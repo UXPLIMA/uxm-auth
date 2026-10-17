@@ -20,13 +20,21 @@ public final class Door {
     private final WaitingClock clock;
     private final MomentRunner moments;
     private final Greeter greeter;
+    private final ScreenOffer screens;
 
-    public Door(Sessions sessions, HoldKeeper keeper, WaitingClock clock, MomentRunner moments, Greeter greeter) {
+    public Door(
+            Sessions sessions,
+            HoldKeeper keeper,
+            WaitingClock clock,
+            MomentRunner moments,
+            Greeter greeter,
+            ScreenOffer screens) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.greeter = Objects.requireNonNull(greeter, "greeter");
+        this.screens = Objects.requireNonNull(screens, "screens");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -38,6 +46,7 @@ public final class Door {
             return;
         }
         clock.start(player);
+        screens.offer(player, state);
         greeter.greet(
                 player,
                 state instanceof AuthState.Unregistered

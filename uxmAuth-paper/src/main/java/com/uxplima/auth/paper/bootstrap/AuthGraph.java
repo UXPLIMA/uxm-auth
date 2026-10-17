@@ -11,6 +11,7 @@ import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
@@ -30,6 +31,11 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
+import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.InWorldScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.PaperScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.ScreenAnswers;
+import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
@@ -59,6 +65,7 @@ final class AuthGraph implements AutoCloseable {
     final RegisterCommand register;
     final ChangePasswordCommand changePassword;
     final LogoutCommand logout;
+    final ScreenClickListener screenClicks;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -67,6 +74,7 @@ final class AuthGraph implements AutoCloseable {
             Plugin plugin,
             Scheduler scheduler,
             PluginSettings settings,
+            ScreenFile screenFile,
             Database database,
             Messages messages,
             Styler styler,
@@ -102,8 +110,15 @@ final class AuthGraph implements AutoCloseable {
         // A second is enough for a client to report its language; an English one may never report it.
         Greeter greeter = new Greeter(
                 moments, (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task), hold::isHeld);
-        Door door = new Door(sessions, keeper, waiting, moments, greeter);
+        AuthScreens screens =
+                new AuthScreens(screenFile::current, () -> settings.current().passwords(), messages, styler);
+        PaperScreens shower = new PaperScreens();
+        Door door = new Door(
+                sessions, keeper, waiting, moments, greeter, new InWorldScreens(screenFile::current, screens, shower));
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
+        LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock);
+        RegisterAccount registering = new RegisterAccount(
+                accounts, hashing, lane, sessions, () -> settings.current().passwordPolicy(), clock);
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -114,20 +129,9 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwords().maxAttempts(),
                 messages,
                 plugin.getLogger());
-        this.login =
-                new LoginCommand(new LogIn(accounts, hashing, lane, sessions, clock), door, moments, messages, replies);
-        this.register = new RegisterCommand(
-                new RegisterAccount(
-                        accounts,
-                        hashing,
-                        lane,
-                        sessions,
-                        () -> settings.current().passwordPolicy(),
-                        clock),
-                door,
-                () -> settings.current().passwords(),
-                messages,
-                replies);
+        this.login = new LoginCommand(logIn, door, moments, messages, replies);
+        this.register =
+                new RegisterCommand(registering, door, () -> settings.current().passwords(), messages, replies);
         this.changePassword = new ChangePasswordCommand(
                 new ChangePassword(
                         accounts,
@@ -141,6 +145,19 @@ final class AuthGraph implements AutoCloseable {
                 replies);
         this.logout = new LogoutCommand(
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
+        this.screenClicks = new ScreenClickListener(
+                new ScreenAnswers(
+                        screens,
+                        registering,
+                        logIn,
+                        door,
+                        moments,
+                        screenFile::current,
+                        () -> settings.current().passwords(),
+                        messages,
+                        replies,
+                        shower),
+                scheduler);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }
 
@@ -148,6 +165,7 @@ final class AuthGraph implements AutoCloseable {
     void start() {
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
+        plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         filters.install();
         for (Player online : plugin.getServer().getOnlinePlayers()) {
             // A player who was online before this enable has no session yet. They are asked again, which is

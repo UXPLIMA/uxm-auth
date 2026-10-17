@@ -90,6 +90,7 @@ public enum Keys implements MessageKey {
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
     KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more."),
+    KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
     KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),
 
@@ -105,6 +106,7 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Write the password twice: <value>/register <password> <password>"),
     REGISTER_NAME_TAKEN(
             "register.name-taken", "<etag:'ERROR'> <body>The name <value><name><body> already has an account."),
+    REGISTER_RULES_NEEDED("register.rules-needed", "<etag:'ERROR'> <body>Tick the box to accept the rules first."),
     REGISTER_ALREADY(
             "register.already", "<etag:'ERROR'> <body>You already have an account. Log in with <value>/login<body>."),
 
