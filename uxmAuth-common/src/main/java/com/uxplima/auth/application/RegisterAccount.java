@@ -85,7 +85,7 @@ public final class RegisterAccount {
         if (held == null) {
             return CompletableFuture.completedFuture(new RegisterResult.Gone());
         }
-        if (!(held.state() instanceof AuthState.Unregistered)) {
+        if (!(held.state() instanceof AuthState.Unregistered unregistered)) {
             return CompletableFuture.completedFuture(new RegisterResult.AlreadyRegistered());
         }
         if (!password.sameAs(confirm)) {
@@ -96,17 +96,21 @@ public final class RegisterAccount {
             return CompletableFuture.completedFuture(new RegisterResult.Rejected(verdict));
         }
         long generation = held.generation();
-        return lane.submit(() -> store(connection, generation, name, hashing.hash(password), address));
+        boolean unverified = unregistered.unverified();
+        return lane.submit(() -> store(connection, generation, name, hashing.hash(password), address, unverified));
     }
 
-    private RegisterResult store(UUID connection, long generation, PlayerName name, PasswordHash hash, String address) {
+    private RegisterResult store(
+            UUID connection, long generation, PlayerName name, PasswordHash hash, String address, boolean unverified) {
         if (!sessions.isOpen(connection, generation)) {
             return new RegisterResult.Gone();
         }
         Instant now = clock.instant();
         // The connection's UUID is the account's: the one the server gave this player. The schemes that
         // choose another come with the name rules, through a port of their own.
-        Account account = new Account(connection, name, AccountKind.CRACKED, null, hash, now, address, now, address);
+        Account made = new Account(connection, name, AccountKind.CRACKED, null, hash, now, address, now, address);
+        // Taken while no premium source could say who owns the name: the next connection asks again.
+        Account account = unverified ? made.asUnverified() : made;
         return switch (accounts.insert(account)) {
             case AccountRepository.NameTaken taken -> new RegisterResult.NameTaken(taken.stored());
             case AccountRepository.Inserted inserted ->

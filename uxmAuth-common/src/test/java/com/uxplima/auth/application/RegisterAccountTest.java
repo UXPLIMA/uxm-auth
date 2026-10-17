@@ -78,6 +78,29 @@ final class RegisterAccountTest {
     }
 
     @Test
+    @DisplayName("a registration while no premium source could say who owns the name makes an unverified account")
+    void aRegistrationNobodyCouldLookUpIsUnverified() {
+        UUID connection = UUID.randomUUID();
+        fixture.sessions.open(connection, new AuthState.Unregistered(new PlayerName("Steve"), true));
+
+        register(connection, "Steve", "hunter22", "hunter22");
+
+        assertThat(fixture.accounts.findByName(new PlayerName("Steve")))
+                .hasValueSatisfying(account -> assertThat(account.unverified()).isTrue());
+    }
+
+    @Test
+    @DisplayName("an ordinary registration makes an account nobody doubts")
+    void anOrdinaryRegistrationIsVerified() {
+        UUID connection = fixture.unregistered("Steve");
+
+        register(connection, "Steve", "hunter22", "hunter22");
+
+        assertThat(fixture.accounts.findByName(new PlayerName("Steve")))
+                .hasValueSatisfying(account -> assertThat(account.unverified()).isFalse());
+    }
+
+    @Test
     @DisplayName("a player who already has an account cannot register again")
     void registerRefusesAnAccountHolder() {
         UUID connection = fixture.registered("Steve", "hunter22");

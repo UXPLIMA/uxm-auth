@@ -25,19 +25,17 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import io.papermc.paper.connection.PlayerConnection;
 
 import net.kyori.adventure.audience.Audience;
-import net.kyori.adventure.text.Component;
 
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
-import com.uxplima.auth.application.ReadTheName;
+import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.message.Keys;
-import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
+import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 import com.uxplima.uxmlib.scheduler.Scheduler;
-import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 import org.jspecify.annotations.Nullable;
 
@@ -49,10 +47,10 @@ public final class ConnectionListener implements Listener {
 
     private final Scheduler scheduler;
     private final Sessions sessions;
-    private final ReadTheName names;
+    private final Arrivals arrivals;
+    private final Notices notices;
     private final Door door;
     private final HoldKeeper keeper;
-    private final BedrockAdmission bedrock;
     private final Function<UUID, Optional<InetAddress>> holders;
     private final BooleanSupplier sameAddress;
     private final Messages messages;
@@ -80,20 +78,20 @@ public final class ConnectionListener implements Listener {
     public ConnectionListener(
             Scheduler scheduler,
             Sessions sessions,
-            ReadTheName names,
+            Arrivals arrivals,
+            Notices notices,
             Door door,
             HoldKeeper keeper,
-            BedrockAdmission bedrock,
             Function<UUID, Optional<InetAddress>> holders,
             BooleanSupplier sameAddress,
             Messages messages,
             Logger logger) {
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
-        this.names = Objects.requireNonNull(names, "names");
+        this.arrivals = Objects.requireNonNull(arrivals, "arrivals");
+        this.notices = Objects.requireNonNull(notices, "notices");
         this.door = Objects.requireNonNull(door, "door");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
-        this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.holders = Objects.requireNonNull(holders, "holders");
         this.sameAddress = Objects.requireNonNull(sameAddress, "sameAddress");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -117,13 +115,11 @@ public final class ConnectionListener implements Listener {
             return;
         }
         try {
-            ReadTheName.Reading reading = read(event);
-            if (reading instanceof ReadTheName.Reading.Refused refused) {
-                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, refusal(refused.verdict()));
-                return;
+            switch (arrivals.arrive(event)) {
+                case Arrivals.Arrival.Refused refused ->
+                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, refused.reason());
+                case Arrivals.Arrival.Opens opens -> open(event, opens);
             }
-            sessions.open(event.getUniqueId(), ((ReadTheName.Reading.Opens) reading).state());
-            remember(event);
         } catch (RuntimeException unreachable) {
             logger.log(
                     Level.WARNING,
@@ -135,43 +131,30 @@ public final class ConnectionListener implements Listener {
     }
 
     /**
-     * What the door makes of this connection's name. A connection Floodgate vouches for is held only to the
-     * blocked words, since its prefix and spelling are Floodgate's, and may be let in without a password.
+     * Opens the session the arrival came to. A player who plays under another id than the one the server read is
+     * held to one connection per name under that id too, and gets the profile that carries it.
      */
-    private ReadTheName.Reading read(AsyncPlayerPreLoginEvent event) {
-        UUID id = event.getUniqueId();
-        if (!bedrock.vouches(id)) {
-            return names.read(event.getName());
+    private void open(AsyncPlayerPreLoginEvent event, Arrivals.Arrival.Opens opens) {
+        UUID id = opens.id();
+        if (!id.equals(event.getUniqueId()) && isHeldElsewhere(id, event.getAddress())) {
+            event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    messages.render(Audience.empty(), Keys.KICK_ALREADY_ONLINE));
+            return;
         }
-        Optional<NameVerdict> blocked = names.readBedrock(event.getName());
-        if (blocked.isPresent()) {
-            return new ReadTheName.Reading.Refused(blocked.get());
+        PlayerProfile profile = opens.profile();
+        if (profile != null) {
+            event.setPlayerProfile(profile);
         }
-        PlayerName name = new PlayerName(event.getName());
-        return new ReadTheName.Reading.Opens(
-                bedrock.admit(id, name, event.getAddress().getHostAddress()).orElseGet(() -> names.waiting(name)));
-    }
-
-    /** The reason a refused name reads on the screen it is kicked to. */
-    private Component refusal(NameVerdict verdict) {
-        Audience nobody = Audience.empty();
-        return switch (verdict) {
-            case NameVerdict.TooShort tooShort ->
-                messages.render(
-                        nobody, Keys.KICK_NAME_TOO_SHORT, Text.placeholder("min", String.valueOf(tooShort.minimum())));
-            case NameVerdict.TooLong tooLong ->
-                messages.render(
-                        nobody, Keys.KICK_NAME_TOO_LONG, Text.placeholder("max", String.valueOf(tooLong.maximum())));
-            case NameVerdict.BadCharacters bad -> messages.render(nobody, Keys.KICK_NAME_CHARACTERS);
-            case NameVerdict.Blocked blocked ->
-                messages.render(nobody, Keys.KICK_NAME_BLOCKED, Text.placeholder("word", blocked.word()));
-            case NameVerdict.WrongCase wrongCase ->
-                messages.render(
-                        nobody,
-                        Keys.KICK_NAME_CASE,
-                        Text.placeholder("name", wrongCase.registered().value()));
-            case NameVerdict.Accepted accepted -> throw new IllegalArgumentException("an accepted name is no refusal");
-        };
+        sessions.open(id, opens.state());
+        for (Arrivals.Notice notice : opens.notices()) {
+            if (notice.afterLogin()) {
+                notices.onceIn(id, notice.notice());
+            } else {
+                notices.whileWaiting(id, notice.notice());
+            }
+        }
+        remember(event, id);
     }
 
     /**
@@ -185,9 +168,8 @@ public final class ConnectionListener implements Listener {
                 && !(sameAddress.getAsBoolean() && holder.get().equals(from));
     }
 
-    private void remember(AsyncPlayerPreLoginEvent event) {
+    private void remember(AsyncPlayerPreLoginEvent event, UUID id) {
         PlayerConnection connection = event.getConnection();
-        UUID id = event.getUniqueId();
         sessions.held(id).ifPresent(held -> {
             if (connection != null) {
                 openings.put(id, new Opening(connection, connection.getClientAddress(), held.generation()));
@@ -226,7 +208,7 @@ public final class ConnectionListener implements Listener {
         scheduler.async(() -> {
             AuthState state;
             try {
-                state = names.waiting(name);
+                state = arrivals.waiting(name);
             } catch (RuntimeException unreachable) {
                 logger.log(Level.WARNING, "Cannot read the account of " + player.getName(), unreachable);
                 scheduler.entity(player, () -> player.kick(messages.render(player, Keys.KICK_STORAGE)));

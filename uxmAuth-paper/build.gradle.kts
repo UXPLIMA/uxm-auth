@@ -29,6 +29,8 @@ dependencies {
     // The common module is shaded in, not depended on at runtime: an operator installs one
     // jar, and the two platform jars must not have to agree on a third file.
     implementation(project(":uxmAuth-common"))
+    // The login handshake, compiled against the server and touched only on a server that runs it.
+    implementation(project(":uxmAuth-handshake"))
     implementation(libs.bundles.uxmlib)
     // The native forms a Bedrock player reads every screen in. Floodgate itself is never a dependency: the
     // library names it only past its own plugin-present guard.
@@ -72,6 +74,12 @@ tasks.processResources {
 
 tasks.shadowJar {
     archiveClassifier.set("")
+
+    // The handshake module is compiled against the server in Mojang's names, which is what Paper runs, so the
+    // jar asks Paper not to remap it.
+    manifest {
+        attributes("paperweight-mappings-namespace" to "mojang")
+    }
 
     // Configurate finds its type serializers through the ServiceLoader, and a JDBC driver
     // registers itself the same way. Without this, the several META-INF/services files of

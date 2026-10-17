@@ -1,0 +1,204 @@
+package com.uxplima.auth.paper.adapter.inbound.listener;
+
+import java.net.InetSocketAddress;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.BiFunction;
+
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+
+import io.papermc.paper.connection.PlayerConnection;
+
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.Component;
+
+import com.destroystokyo.paper.profile.PlayerProfile;
+import com.uxplima.auth.application.ReadTheName;
+import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.domain.name.NameVerdict;
+import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
+import com.uxplima.uxmlib.scheduler.Scheduler;
+import com.uxplima.uxmlib.text.Text;
+import com.uxplima.uxmlib.text.message.Messages;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * What the pre-login of a connection comes to: the state it opens with and the id it plays under, or the reason
+ * it is turned away.
+ *
+ * <p>A connection Floodgate vouches for takes the Bedrock door. Every other one reads its hello first: proved by
+ * Mojang, it is in its premium account; let through, it goes to the name check and the password; refused, it
+ * reads why. This runs on the thread the server gives the pre-login, which may wait on the database.
+ */
+public final class Arrivals {
+
+    /** What the connection comes to. */
+    public sealed interface Arrival {
+
+        /**
+         * In the door, with this state under this id. {@code profile} replaces the one the server made, when the
+         * player plays under another id than Mojang's.
+         */
+        record Opens(UUID id, AuthState state, @Nullable PlayerProfile profile, List<Notice> notices)
+                implements Arrival {
+            public Opens {
+                Objects.requireNonNull(id, "id");
+                Objects.requireNonNull(state, "state");
+                notices = List.copyOf(Objects.requireNonNull(notices, "notices"));
+            }
+        }
+
+        /** Turned away, with the reason. */
+        record Refused(Component reason) implements Arrival {
+            public Refused {
+                Objects.requireNonNull(reason, "reason");
+            }
+        }
+    }
+
+    /** Something the player is told once they stand in the world, before or after their login. */
+    public record Notice(Notices.Notice notice, boolean afterLogin) {
+        public Notice {
+            Objects.requireNonNull(notice, "notice");
+        }
+    }
+
+    private final ReadTheName names;
+    private final BedrockAdmission bedrock;
+    private final HelloAtTheDoor hellos;
+    private final Messages messages;
+    private final Scheduler scheduler;
+    private final BiFunction<UUID, String, PlayerProfile> profiles;
+
+    public Arrivals(
+            ReadTheName names,
+            BedrockAdmission bedrock,
+            HelloAtTheDoor hellos,
+            Messages messages,
+            Scheduler scheduler,
+            BiFunction<UUID, String, PlayerProfile> profiles) {
+        this.names = Objects.requireNonNull(names, "names");
+        this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
+        this.hellos = Objects.requireNonNull(hellos, "hellos");
+        this.messages = Objects.requireNonNull(messages, "messages");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        this.profiles = Objects.requireNonNull(profiles, "profiles");
+    }
+
+    /** What this pre-login comes to. */
+    public Arrival arrive(AsyncPlayerPreLoginEvent event) {
+        Objects.requireNonNull(event, "event");
+        UUID id = event.getUniqueId();
+        if (bedrock.vouches(id)) {
+            return bedrockArrival(event);
+        }
+        return switch (hellos.read(event.getName(), id, clientAddress(event))) {
+            case HelloAtTheDoor.Reading.Refused refused -> new Arrival.Refused(refusal(refused));
+            case HelloAtTheDoor.Reading.Premium premium -> premiumArrival(event, premium.state());
+            case HelloAtTheDoor.Reading.Usual usual -> usualArrival(event, usual);
+        };
+    }
+
+    /** What a connection under a name the door already let through waits for, for a player online at enable. */
+    public AuthState waiting(PlayerName name) {
+        return names.waiting(name);
+    }
+
+    private Arrival bedrockArrival(AsyncPlayerPreLoginEvent event) {
+        Optional<NameVerdict> blocked = names.readBedrock(event.getName());
+        if (blocked.isPresent()) {
+            return new Arrival.Refused(refusal(blocked.get()));
+        }
+        PlayerName name = new PlayerName(event.getName());
+        AuthState state = bedrock.admit(
+                        event.getUniqueId(), name, event.getAddress().getHostAddress())
+                .orElseGet(() -> names.waiting(name));
+        return new Arrival.Opens(event.getUniqueId(), state, null, List.of());
+    }
+
+    /** Mojang's profile, under the account's own id when that is not Mojang's, skin and all. */
+    private Arrival premiumArrival(AsyncPlayerPreLoginEvent event, AuthState.Authenticated state) {
+        UUID playAs = state.account().id();
+        PlayerProfile profile = null;
+        if (!playAs.equals(event.getUniqueId())) {
+            profile = profiles.apply(playAs, event.getName());
+            profile.setProperties(event.getPlayerProfile().getProperties());
+        }
+        return new Arrival.Opens(playAs, state, profile, List.of());
+    }
+
+    private Arrival usualArrival(AsyncPlayerPreLoginEvent event, HelloAtTheDoor.Reading.Usual usual) {
+        ReadTheName.Reading reading = names.read(event.getName());
+        if (reading instanceof ReadTheName.Reading.Refused refused) {
+            return new Arrival.Refused(refusal(refused.verdict()));
+        }
+        AuthState state = ((ReadTheName.Reading.Opens) reading).state();
+        if (usual.unverified() && state instanceof AuthState.Unregistered unregistered) {
+            state = new AuthState.Unregistered(unregistered.name(), true);
+        }
+        List<Notice> notices = new java.util.ArrayList<>();
+        if (usual.explain()) {
+            notices.add(new Notice(new Notices.Notice(Keys.LOGIN_HANDSHAKE_FAILED, List.of(), () -> {}), false));
+        }
+        if (state instanceof AuthState.Registered registered) {
+            UUID account = registered.account().id();
+            hellos.untoldMove(account)
+                    .ifPresent(move -> notices.add(new Notice(
+                            new Notices.Notice(
+                                    Keys.LOGIN_RENAMED,
+                                    List.of(
+                                            Text.placeholder("old", move.from().value()),
+                                            Text.placeholder("new", move.to().value())),
+                                    () -> scheduler.async(() -> hellos.toldMove(account))),
+                            true)));
+        }
+        return new Arrival.Opens(event.getUniqueId(), state, null, notices);
+    }
+
+    private static InetSocketAddress clientAddress(AsyncPlayerPreLoginEvent event) {
+        PlayerConnection connection = event.getConnection();
+        InetSocketAddress address = connection == null ? null : connection.getClientAddress();
+        return address == null ? new InetSocketAddress(event.getAddress(), 0) : address;
+    }
+
+    private Component refusal(HelloAtTheDoor.Reading.Refused refused) {
+        Audience nobody = Audience.empty();
+        return switch (refused.why()) {
+            case LOOKUP_FAILED -> messages.render(nobody, Keys.KICK_LOOKUP_FAILED);
+            case PAID_NAME ->
+                refused.movedTo()
+                        .map(to -> messages.render(
+                                nobody, Keys.KICK_PAID_NAME_MOVED, Text.placeholder("name", to.value())))
+                        .orElseGet(() -> messages.render(nobody, Keys.KICK_PAID_NAME));
+            case PREMIUM_ADDRESS -> messages.render(nobody, Keys.KICK_PREMIUM_ADDRESS);
+            case NAME_DISPUTED -> messages.render(nobody, Keys.KICK_NAME_DISPUTED);
+            case NAME_KEPT -> messages.render(nobody, Keys.KICK_NAME_KEPT);
+        };
+    }
+
+    /** The reason a refused name reads on the screen it is kicked to. */
+    private Component refusal(NameVerdict verdict) {
+        Audience nobody = Audience.empty();
+        return switch (verdict) {
+            case NameVerdict.TooShort tooShort ->
+                messages.render(
+                        nobody, Keys.KICK_NAME_TOO_SHORT, Text.placeholder("min", String.valueOf(tooShort.minimum())));
+            case NameVerdict.TooLong tooLong ->
+                messages.render(
+                        nobody, Keys.KICK_NAME_TOO_LONG, Text.placeholder("max", String.valueOf(tooLong.maximum())));
+            case NameVerdict.BadCharacters bad -> messages.render(nobody, Keys.KICK_NAME_CHARACTERS);
+            case NameVerdict.Blocked blocked ->
+                messages.render(nobody, Keys.KICK_NAME_BLOCKED, Text.placeholder("word", blocked.word()));
+            case NameVerdict.WrongCase wrongCase ->
+                messages.render(
+                        nobody,
+                        Keys.KICK_NAME_CASE,
+                        Text.placeholder("name", wrongCase.registered().value()));
+            case NameVerdict.Accepted accepted -> throw new IllegalArgumentException("an accepted name is no refusal");
+        };
+    }
+}

@@ -1,5 +1,6 @@
 package com.uxplima.auth.paper.bootstrap;
 
+import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Locale;
@@ -14,6 +15,8 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LetBedrockIn;
 import com.uxplima.auth.application.LogIn;
@@ -22,6 +25,11 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.premium.AtTheDoor;
+import com.uxplima.auth.application.premium.LetPremiumIn;
+import com.uxplima.auth.application.premium.Moves;
+import com.uxplima.auth.application.premium.NameMemory;
+import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
@@ -33,10 +41,13 @@ import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
+import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
+import com.uxplima.auth.paper.adapter.inbound.listener.Arrivals;
 import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
+import com.uxplima.auth.paper.adapter.inbound.listener.HelloAtTheDoor;
 import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.BedrockForms;
@@ -53,6 +64,8 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
+import com.uxplima.auth.paper.adapter.outbound.handshake.PremiumHelloDoor;
+import com.uxplima.auth.paper.adapter.outbound.handshake.ServerHellos;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
@@ -91,6 +104,8 @@ final class AuthGraph implements AutoCloseable {
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
+    private final HttpClient web = HttpClient.newHttpClient();
+    private ServerHellos hellos = ServerHellos.none();
 
     AuthGraph(
             Plugin plugin,
@@ -150,6 +165,7 @@ final class AuthGraph implements AutoCloseable {
                                 .answer(player, action, answer)),
                 id -> bedrock.player(id).isPresent());
         Welcomes welcomes = new Welcomes();
+        Notices notices = new Notices(messages);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         RegisterAccount registering = new RegisterAccount(
@@ -189,22 +205,31 @@ final class AuthGraph implements AutoCloseable {
                         (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task),
                         hold::isHeld,
                         shower),
-                welcomes);
+                welcomes,
+                notices);
 
         this.connections = new ConnectionListener(
                 scheduler,
                 sessions,
-                new ReadTheName(
-                        accounts,
-                        () -> settings.current().namePolicy(),
-                        () -> settings.current().passwords().maxAttempts()),
+                new Arrivals(
+                        new ReadTheName(
+                                accounts,
+                                () -> settings.current().namePolicy(),
+                                () -> settings.current().passwords().maxAttempts()),
+                        new BedrockAdmission(
+                                bedrock,
+                                new LetBedrockIn(
+                                        accounts,
+                                        () -> settings.current().passwords().maxAttempts(),
+                                        clock),
+                                () -> settings.current().bedrock().autoLogin()),
+                        premiumDoor(settings, scheduler, accounts, database, clock),
+                        messages,
+                        scheduler,
+                        plugin.getServer()::createProfile),
+                notices,
                 door,
                 keeper,
-                new BedrockAdmission(
-                        bedrock,
-                        new LetBedrockIn(
-                                accounts, () -> settings.current().passwords().maxAttempts(), clock),
-                        () -> settings.current().bedrock().autoLogin()),
                 new NameHolders(plugin.getServer(), gate::waitingFrom),
                 () -> settings.current().names().reconnectFromSameAddress(),
                 messages,
@@ -257,6 +282,43 @@ final class AuthGraph implements AutoCloseable {
     @Override
     public void close() {
         filters.uninstall();
+        hellos.close();
+        web.close();
         lane.close();
+    }
+
+    /**
+     * The handshake and what its pre-login reads: the web sources, the decision at the hello, and the use case
+     * that lets a proved player in. The UUID scheme is the one this start recorded, so a reload cannot change it.
+     */
+    private HelloAtTheDoor premiumDoor(
+            PluginSettings settings,
+            Scheduler scheduler,
+            SqlAccountRepository accounts,
+            Database database,
+            Clock clock) {
+        SqlDisputes disputes = new SqlDisputes(database);
+        PremiumLookup lookup = new PremiumLookup(
+                new PremiumSources(web, () -> settings.current().premium(), clock)::ordered,
+                () -> settings.current().premium().keepAnswers(),
+                clock);
+        AtTheDoor door = new AtTheDoor(
+                accounts,
+                () -> settings.current().namePolicy(),
+                lookup,
+                () -> settings.current().ownership().decision(),
+                new NameMemory(() -> settings.current().ownership().failedMemory(), clock),
+                new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
+                new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
+                disputes);
+        this.hellos = ServerHellos.startOn(new PremiumHelloDoor(door, scheduler), plugin.getLogger());
+        LetPremiumIn letIn = new LetPremiumIn(
+                accounts,
+                disputes,
+                () -> settings.current().ownership().conflict(),
+                () -> settings.current().ownership().renameMark(),
+                settings.current().ownership().uuidScheme(),
+                clock);
+        return new HelloAtTheDoor(hellos, door, letIn, new Moves(accounts));
     }
 }

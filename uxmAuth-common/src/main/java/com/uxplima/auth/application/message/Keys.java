@@ -106,6 +106,28 @@ public enum Keys implements MessageKey {
     KICK_NAME_CHARACTERS(
             "kick.name-characters", "<body>Your name holds a character this server does not allow. Use another name."),
     KICK_NAME_BLOCKED("kick.name-blocked", "<body>Your name holds a word this server does not allow: <value><word>"),
+    KICK_LOOKUP_FAILED(
+            "kick.lookup-failed",
+            "<body>This server cannot check right now whether your name belongs to a paid Minecraft account."
+                    + " Try again in a minute."),
+    KICK_PAID_NAME(
+            "kick.paid-name",
+            "<body>This name belongs to a paid Minecraft account, and your last try did not pass Mojang's check."
+                    + " If the name is yours, join from the official launcher. If it is not, join under another name."),
+    KICK_PAID_NAME_MOVED(
+            "kick.paid-name-moved",
+            "<body>This name now belongs to its paid owner. Your account here is now <value><name><body>:"
+                    + " change your name to it and join again. Your password and everything you had are as they were."),
+    KICK_PREMIUM_ADDRESS(
+            "kick.premium-address",
+            "<body>This address is for paid Minecraft accounts, and your last try did not pass Mojang's check."
+                    + " Join through the server's other address to play with a password."),
+    KICK_NAME_DISPUTED(
+            "kick.name-disputed",
+            "<body>Two players want this name, and staff will settle it. Join again once they have."),
+    KICK_NAME_KEPT(
+            "kick.name-kept",
+            "<body>Another player took this name here first and keeps it. Change your name at Mojang to play here."),
     KICK_NAME_CASE(
             "kick.name-case",
             "<body>This name is registered as <value><name><body>. Join again with exactly that spelling."),
@@ -115,6 +137,15 @@ public enum Keys implements MessageKey {
             "login.not-registered",
             "<etag:'ERROR'> <body>You have no password here yet. Register with <value>/register<body>."),
     LOGIN_ALREADY("login.already", "<tag:'AUTH'> <body>You are already logged in."),
+    LOGIN_HANDSHAKE_FAILED(
+            "login.handshake-failed",
+            "<tag:'AUTH'> <body>Your last connection was refused because this name belongs to a paid Minecraft"
+                    + " account and Mojang did not confirm it was you. This time you came in with a password instead."
+                    + " If the name is yours, use <value>/claim<body>."),
+    LOGIN_RENAMED(
+            "login.renamed",
+            "<tag:'AUTH'> <body>The paid owner of <value><old><body> proved the name, so your account moved to"
+                    + " <value><new><body> with everything it had. Join as <value><new><body> from now on."),
 
     REGISTER_MISMATCH("register.mismatch", "<etag:'ERROR'> <body>The two passwords are not the same."),
     REGISTER_CONFIRM_NEEDED(

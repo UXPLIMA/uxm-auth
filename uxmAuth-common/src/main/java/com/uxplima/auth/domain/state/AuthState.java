@@ -9,9 +9,14 @@ import com.uxplima.auth.domain.name.PlayerName;
 public sealed interface AuthState {
 
     /** Nobody has an account under this name yet. */
-    record Unregistered(PlayerName name) implements AuthState {
+    record Unregistered(PlayerName name, boolean unverified) implements AuthState {
         public Unregistered {
             Objects.requireNonNull(name, "name");
+        }
+
+        /** A name nobody doubts: a source said who owns it, or nobody had to be asked. */
+        public Unregistered(PlayerName name) {
+            this(name, false);
         }
     }
 

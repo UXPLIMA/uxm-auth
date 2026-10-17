@@ -42,6 +42,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
+import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.inbound.hold.ScreenOffer;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
@@ -77,6 +78,7 @@ public final class AuthWorld implements AutoCloseable {
     public final List<AuthState> offered = new ArrayList<>();
 
     public final Welcomes welcomes = new Welcomes();
+    public final Notices notices;
     private final Map<UUID, Long> openings = new java.util.concurrent.ConcurrentHashMap<>();
 
     public final MomentRunner moments = (Player player, AuthSettings.Moment moment) -> fired.add(moment);
@@ -111,6 +113,7 @@ public final class AuthWorld implements AutoCloseable {
                 clock,
                 moments,
                 messages);
+        this.notices = new Notices(messages);
         this.door = new Door(
                 sessions,
                 keeper,
@@ -123,7 +126,8 @@ public final class AuthWorld implements AutoCloseable {
                                 .filter(state -> !(state instanceof AuthState.Authenticated))
                                 .isPresent()),
                 (ScreenOffer) (player, state) -> offered.add(state),
-                welcomes);
+                welcomes,
+                notices);
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy);

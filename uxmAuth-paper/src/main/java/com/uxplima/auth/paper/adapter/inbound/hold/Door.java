@@ -24,6 +24,7 @@ public final class Door {
     private final Greeter greeter;
     private final ScreenOffer screens;
     private final Welcomes welcomes;
+    private final Notices notices;
 
     public Door(
             Sessions sessions,
@@ -32,7 +33,8 @@ public final class Door {
             MomentRunner moments,
             Greeter greeter,
             ScreenOffer screens,
-            Welcomes welcomes) {
+            Welcomes welcomes,
+            Notices notices) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -40,6 +42,7 @@ public final class Door {
         this.greeter = Objects.requireNonNull(greeter, "greeter");
         this.screens = Objects.requireNonNull(screens, "screens");
         this.welcomes = Objects.requireNonNull(welcomes, "welcomes");
+        this.notices = Objects.requireNonNull(notices, "notices");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -48,17 +51,20 @@ public final class Door {
         keeper.arrive(player);
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
         if (state instanceof AuthState.Authenticated in) {
-            // Let in before the world, by the dialog or by Floodgate: the way-in moment waited for a world.
+            // Let in before the world, by the dialog, by Floodgate or by Mojang: the way-in moment waited for a
+            // world.
             welcomes.take(player.getUniqueId())
-                    .or(() -> in.method() == AuthMethod.BEDROCK
+                    .or(() -> in.method() == AuthMethod.BEDROCK || in.method() == AuthMethod.PREMIUM
                             ? Optional.of(AuthSettings.Moment.LOGGED_IN)
                             : Optional.empty())
                     .ifPresent(moment -> greeter.welcome(player, moment));
+            notices.deliver(player, true);
             return;
         }
         if (state == null) {
             return;
         }
+        notices.deliver(player, false);
         clock.start(player);
         screens.offer(player, state);
         greeter.greet(
@@ -68,9 +74,10 @@ public final class Door {
                         : AuthSettings.Moment.JOIN_REGISTERED);
     }
 
-    /** The player left: a greeting that waited for them is dropped. */
+    /** The player left: a greeting and the notices that waited for them are dropped. */
     public void leave(Player player) {
         greeter.forget(player);
+        notices.forget(player.getUniqueId());
     }
 
     /** The client said what language it reads, so a greeting that waited for it can run. */
@@ -85,5 +92,6 @@ public final class Door {
         greeter.forget(player);
         keeper.giveBack(player);
         moments.fire(player, moment);
+        notices.deliver(player, true);
     }
 }

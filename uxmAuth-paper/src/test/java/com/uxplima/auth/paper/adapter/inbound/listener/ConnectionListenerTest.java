@@ -7,7 +7,9 @@ import static org.mockito.Mockito.when;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,14 +28,30 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.destroystokyo.paper.profile.PlayerProfile;
+import com.destroystokyo.paper.profile.ProfileProperty;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.application.LetBedrockIn;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.premium.AtTheDoor;
+import com.uxplima.auth.application.premium.LetPremiumIn;
+import com.uxplima.auth.application.premium.Moves;
+import com.uxplima.auth.application.premium.NameMemory;
+import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.ConflictStrategy;
+import com.uxplima.auth.domain.premium.Decision;
+import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.domain.premium.NameOwnership;
+import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.Refusal;
+import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.handshake.HelloOutcome;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.storage.StorageException;
@@ -59,6 +77,8 @@ final class ConnectionListenerTest {
     private AuthWorld world;
     private boolean sameAddress;
     private BedrockAdmission bedrock = BedrockAdmission.NONE;
+    private final FakeHellos hellos = new FakeHellos();
+    private @org.jspecify.annotations.Nullable AtTheDoor door;
     private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
 
     @BeforeEach
@@ -316,6 +336,162 @@ final class ConnectionListenerTest {
     }
 
     @Test
+    @DisplayName("a connection Mojang proved is let in to its premium account at the door, under Mojang's UUID")
+    void aProvedConnectionIsLetIn() throws Exception {
+        hellos.installed = true;
+        UUID mojang = UUID.randomUUID();
+        PlayerLoginConnection connection = loginConnection(MINE, true);
+        hellos.outcomes.put(MINE, new HelloOutcome.Proved());
+
+        AsyncPlayerPreLoginEvent event = preLogin(server.createProfile(mojang, "Notch"), connection);
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
+        assertThat(world.sessions.state(mojang))
+                .hasValueSatisfying(state -> assertThat(state)
+                        .isInstanceOfSatisfying(
+                                AuthState.Authenticated.class,
+                                in -> assertThat(in.method()).isEqualTo(AuthMethod.PREMIUM)));
+        assertThat(event.getPlayerProfile().getId()).isEqualTo(mojang);
+    }
+
+    @Test
+    @DisplayName("an owner who turned their cracked account premium plays under its own UUID, with Mojang's skin")
+    void anOwnerPlaysUnderTheirOwnUuid() throws Exception {
+        hellos.installed = true;
+        PlayerMock steve = new PlayerMock(server, "Notch");
+        world.registered(steve, "hunter22");
+        world.sessions.close(steve.getUniqueId());
+        ConnectionListener listener = listener(world.accounts);
+        atTheDoor(world.accounts, new SqlDisputes(world.database))
+                .ownerAsks(MINE.getAddress().getHostAddress(), new PlayerName("Notch"));
+        hellos.outcomes.put(MINE, new HelloOutcome.Proved());
+        PlayerProfile mojang = server.createProfile(UUID.randomUUID(), "Notch");
+        mojang.setProperty(new ProfileProperty("textures", "skin", "signature"));
+
+        AsyncPlayerPreLoginEvent event = preLogin(mojang, loginConnection(MINE, true));
+        listener.onPreLogin(event);
+
+        assertThat(event.getPlayerProfile().getId()).isEqualTo(steve.getUniqueId());
+        assertThat(event.getPlayerProfile().getProperties())
+                .extracting(ProfileProperty::getName)
+                .containsExactly("textures");
+        assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Authenticated.class);
+    }
+
+    @Test
+    @DisplayName("a hello the door turned away is refused at the pre-login with the reason")
+    void aRefusedHelloIsTurnedAway() throws Exception {
+        hellos.installed = true;
+        UUID id = UUID.randomUUID();
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Refuse(Refusal.NAME_KEPT)));
+
+        AsyncPlayerPreLoginEvent event = preLogin("Notch", id, loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(plain(event.kickMessage())).contains("Change your name");
+        assertThat(world.sessions.isOpen(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a paid name refused after a failed try is told where the cracked account that held it went")
+    void aRefusedPaidNameIsToldWhereItsAccountWent() throws Exception {
+        hellos.installed = true;
+        PlayerMock old = new PlayerMock(server, "Notch");
+        world.registered(old, "hunter22");
+        world.sessions.close(old.getUniqueId());
+        world.accounts.rename(old.getUniqueId(), new PlayerName("Notch_"), world.clock.instant());
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Refuse(Refusal.PAID_NAME)));
+
+        AsyncPlayerPreLoginEvent event = preLogin("Notch", UUID.randomUUID(), loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(plain(event.kickMessage())).contains("Notch_");
+    }
+
+    @Test
+    @DisplayName("where the handshake runs, a pre-login with no hello behind it is turned away, never let in unchecked")
+    void aPreLoginWithNoHelloIsTurnedAway() throws Exception {
+        hellos.installed = true;
+        UUID id = UUID.randomUUID();
+
+        AsyncPlayerPreLoginEvent event = preLogin("Steve", id, loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(world.sessions.isOpen(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a hello let through while no source could answer registers an unverified account")
+    void anUnverifiedHelloRegistersUnverified() throws Exception {
+        hellos.installed = true;
+        UUID id = UUID.randomUUID();
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(true, false)));
+
+        listener(world.accounts).onPreLogin(preLogin("Steve", id, loginConnection(MINE, true)));
+
+        assertThat(world.sessions.state(id)).contains(new AuthState.Unregistered(new PlayerName("Steve"), true));
+    }
+
+    @Test
+    @DisplayName(
+            "a player who failed the handshake and came in with a password is told why once they stand in the world")
+    void aFailedPlayerIsToldWhy() throws Exception {
+        hellos.installed = true;
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(false, true)));
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Steve", steve.getUniqueId(), loginConnection(MINE, true)));
+        server.addPlayer(steve);
+        steve.setAddress(MINE);
+
+        listener.onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(said(steve)).contains("/claim");
+    }
+
+    @Test
+    @DisplayName("a premium player let in at the door is welcomed in once they stand in the world")
+    void aPremiumPlayerIsWelcomedAtJoin() throws Exception {
+        hellos.installed = true;
+        PlayerMock notch = new PlayerMock(server, "Notch");
+        hellos.outcomes.put(MINE, new HelloOutcome.Proved());
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin(server.createProfile(notch.getUniqueId(), "Notch"), loginConnection(MINE, true)));
+        server.addPlayer(notch);
+        notch.setAddress(MINE);
+
+        listener.onJoin(new PlayerJoinEvent(notch, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(world.fired).containsExactly(AuthSettings.Moment.LOGGED_IN);
+    }
+
+    @Test
+    @DisplayName("a player whose account moved is told at their next login, once, and the move is marked read")
+    void aMovedPlayerIsToldAtTheirLogin() throws Exception {
+        hellos.installed = true;
+        PlayerMock steve = new PlayerMock(server, "Notch_");
+        PlayerMock was = new PlayerMock(server, "Notch");
+        world.registered(was, "hunter22");
+        world.sessions.close(was.getUniqueId());
+        world.accounts.rename(was.getUniqueId(), new PlayerName("Notch_"), world.clock.instant());
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(false, false)));
+        ConnectionListener listener = listener(world.accounts);
+        listener.onPreLogin(preLogin("Notch_", steve.getUniqueId(), loginConnection(MINE, true)));
+        server.addPlayer(steve);
+
+        world.door.open(steve, AuthSettings.Moment.LOGGED_IN);
+        world.scheduler.drain();
+
+        assertThat(said(steve)).contains("Notch_");
+        assertThat(world.accounts.untoldRename(was.getUniqueId())).isEmpty();
+    }
+
+    @Test
     @DisplayName("a name with no account is asked to register")
     void anUnknownNameRegisters() throws Exception {
         UUID id = UUID.randomUUID();
@@ -462,14 +638,83 @@ final class ConnectionListenerTest {
         return new ConnectionListener(
                 world.scheduler,
                 world.sessions,
-                new ReadTheName(accounts, AuthWorld::shippedNames, () -> AuthWorld.MAX_ATTEMPTS),
+                new Arrivals(
+                        new ReadTheName(accounts, AuthWorld::shippedNames, () -> AuthWorld.MAX_ATTEMPTS),
+                        bedrock,
+                        hellos.installed ? helloDoor(accounts) : new HelloAtTheDoor(),
+                        world.messages,
+                        world.scheduler,
+                        server::createProfile),
+                world.notices,
                 world.door,
                 world.keeper,
-                bedrock,
                 new NameHolders(server, id -> Optional.ofNullable(waitingAtTheDialog.get(id))),
                 () -> sameAddress,
                 world.messages,
                 Logger.getLogger("uxmauth-test"));
+    }
+
+    /** The hello outcomes a test hands the pre-login, by the connection's address. */
+    private static final class FakeHellos implements Hellos {
+        boolean installed;
+        final Map<InetSocketAddress, HelloOutcome> outcomes = new HashMap<>();
+
+        @Override
+        public boolean installed() {
+            return installed;
+        }
+
+        @Override
+        public Optional<HelloOutcome> take(InetSocketAddress address) {
+            return Optional.ofNullable(outcomes.remove(address));
+        }
+    }
+
+    private HelloAtTheDoor helloDoor(AccountRepository accounts) {
+        SqlDisputes disputes = new SqlDisputes(world.database);
+        return new HelloAtTheDoor(
+                hellos,
+                atTheDoor(accounts, disputes),
+                new LetPremiumIn(
+                        accounts,
+                        disputes,
+                        () -> ConflictStrategy.RENAME,
+                        () -> "_",
+                        UuidScheme.KEEP_FIRST,
+                        world.clock),
+                new Moves(accounts));
+    }
+
+    private AtTheDoor atTheDoor(AccountRepository accounts, SqlDisputes disputes) {
+        if (door == null) {
+            door = new AtTheDoor(
+                    accounts,
+                    AuthWorld::shippedNames,
+                    new PremiumLookup(List::of, () -> Duration.ofMinutes(30), world.clock),
+                    () -> new NameOwnership(
+                            NameRule.AUTOMATIC,
+                            WhenUnknown.CRACKED,
+                            new HostPatterns(List.of()),
+                            new HostPatterns(List.of())),
+                    new NameMemory(() -> Duration.ofMinutes(5), world.clock),
+                    new NameMemory(() -> Duration.ofMinutes(10), world.clock),
+                    new NameMemory(() -> Duration.ofMinutes(10), world.clock),
+                    disputes);
+        }
+        return door;
+    }
+
+    private static AsyncPlayerPreLoginEvent preLogin(PlayerProfile profile, PlayerLoginConnection connection) {
+        InetSocketAddress from = Objects.requireNonNull(connection.getClientAddress());
+        return new AsyncPlayerPreLoginEvent(
+                Objects.requireNonNull(profile.getName()),
+                from.getAddress(),
+                from.getAddress(),
+                Objects.requireNonNull(profile.getId()),
+                false,
+                profile,
+                "localhost",
+                connection);
     }
 
     /** Floodgate vouching for every connection, none of them linked. */
@@ -485,6 +730,15 @@ final class ConnectionListenerTest {
                 return Optional.of(".");
             }
         };
+    }
+
+    private static String said(PlayerMock player) {
+        StringBuilder all = new StringBuilder();
+        Component next;
+        while ((next = player.nextComponentMessage()) != null) {
+            all.append(PlainTextComponentSerializer.plainText().serialize(next)).append('\n');
+        }
+        return all.toString();
     }
 
     private static String plain(@org.jspecify.annotations.Nullable Component text) {

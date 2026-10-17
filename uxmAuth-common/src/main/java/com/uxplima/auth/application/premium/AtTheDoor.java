@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.Disputes;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.NameVerdict;
@@ -34,6 +35,7 @@ public final class AtTheDoor {
     private final NameMemory failed;
     private final NameMemory claims;
     private final NameMemory ownerClaims;
+    private final Disputes disputes;
 
     public AtTheDoor(
             AccountRepository accounts,
@@ -42,7 +44,8 @@ public final class AtTheDoor {
             Supplier<NameOwnership> ownership,
             NameMemory failed,
             NameMemory claims,
-            NameMemory ownerClaims) {
+            NameMemory ownerClaims,
+            Disputes disputes) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.names = Objects.requireNonNull(names, "names");
         this.lookup = Objects.requireNonNull(lookup, "lookup");
@@ -50,6 +53,7 @@ public final class AtTheDoor {
         this.failed = Objects.requireNonNull(failed, "failed");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.ownerClaims = Objects.requireNonNull(ownerClaims, "ownerClaims");
+        this.disputes = Objects.requireNonNull(disputes, "disputes");
     }
 
     /** What the door does with a connection under this name, from this address, through this host. */
@@ -61,6 +65,10 @@ public final class AtTheDoor {
             return new Decision.Cracked(false, false);
         }
         PlayerName name = accepted.name();
+        if (disputes.of(name).isPresent()) {
+            // Both sides wait for staff: the paid owner and the cracked holder alike.
+            return new Decision.Refuse(Refusal.NAME_DISPUTED);
+        }
         Optional<Account> account = accounts.findByName(name);
         if (account.isPresent() && !account.get().name().value().equals(raw)) {
             return new Decision.Cracked(false, false);

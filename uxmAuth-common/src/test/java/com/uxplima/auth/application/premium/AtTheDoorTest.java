@@ -21,6 +21,7 @@ import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.auth.testing.AuthFixture;
+import com.uxplima.auth.testing.InMemoryDisputes;
 import com.uxplima.auth.testing.TurnedClock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ final class AtTheDoorTest {
     private final TurnedClock clock = new TurnedClock(AuthFixture.NOW);
     private final AtomicInteger asked = new AtomicInteger();
     private PremiumAnswer web = new PremiumAnswer.Premium(NOTCH, "Notch");
+    private final InMemoryDisputes disputes = new InMemoryDisputes();
     private final NameMemory failed = new NameMemory(() -> Duration.ofMinutes(5), clock);
     private final NameMemory claims = new NameMemory(() -> Duration.ofMinutes(10), clock);
     private final AtTheDoor door = new AtTheDoor(
@@ -53,7 +55,8 @@ final class AtTheDoorTest {
                     NameRule.AUTOMATIC, WhenUnknown.CRACKED, new HostPatterns(List.of()), new HostPatterns(List.of())),
             failed,
             claims,
-            new NameMemory(() -> Duration.ofMinutes(10), clock));
+            new NameMemory(() -> Duration.ofMinutes(10), clock),
+            disputes);
 
     @AfterEach
     void close() {
@@ -173,6 +176,16 @@ final class AtTheDoorTest {
         assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Handshake());
         assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isTrue();
         assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("a name in dispute stops every connection under it, the cracked holder's too, until staff settle it")
+    void aDisputedNameStopsEveryone() {
+        held("Notch", AccountKind.CRACKED);
+        disputes.raise(new PlayerName("Notch"), NOTCH, AuthFixture.NOW);
+
+        assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Refuse(Refusal.NAME_DISPUTED));
+        assertThat(asked).hasValue(0);
     }
 
     @Test
