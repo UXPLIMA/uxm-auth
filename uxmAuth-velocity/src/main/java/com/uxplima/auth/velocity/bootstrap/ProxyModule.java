@@ -32,6 +32,7 @@ import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
+import com.uxplima.auth.velocity.adapter.inbound.HoldListener;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
@@ -139,14 +140,27 @@ final class ProxyModule {
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
                 clock);
-        listen(door, new DoorWords(words), claims(settings), clock);
+        listen(door, settings, words, clock);
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
-    /** The door before every connection, the claim before every server, and the servers' reports after. */
-    private void listen(ProxyDoor door, DoorWords words, Supplier<Optional<Claims>> claims, Clock clock) {
+    /**
+     * The door before every connection, the hold until login, the claim before every server, and the servers'
+     * reports after.
+     */
+    private void listen(ProxyDoor door, PluginSettings settings, Messages words, Clock clock) {
         ProxySessions sessions = new ProxySessions();
-        proxy.getEventManager().register(plugin, new DoorListener(door, sessions, words, logger));
+        Supplier<Optional<Claims>> claims = claims(settings);
+        proxy.getEventManager().register(plugin, new DoorListener(door, sessions, new DoorWords(words), logger));
+        proxy.getEventManager()
+                .register(
+                        plugin,
+                        new HoldListener(
+                                sessions,
+                                proxy.getCommandManager(),
+                                () -> settings.current().network().allowedCommands(),
+                                name -> false,
+                                words));
         proxy.getEventManager().register(plugin, new ClaimWriter(sessions, claims, clock));
         proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
         proxy.getEventManager().register(plugin, new ReportListener(sessions, claims, clock, logger));

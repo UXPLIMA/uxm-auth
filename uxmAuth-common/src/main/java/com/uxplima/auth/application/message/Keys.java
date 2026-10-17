@@ -154,6 +154,10 @@ public enum Keys implements MessageKey {
             "premium.log-in-first",
             "<etag:'ERROR'> <body>Log in first, then use <value>/premium<body> to prove your name on your next"
                     + " connection."),
+    NETWORK_LOG_IN_FIRST(
+            "network.log-in-first",
+            "<etag:'ERROR'> <body>Log in first. Until then you stay on this server, and the network's own commands"
+                    + " wait."),
     LOGIN_HANDSHAKE_FAILED(
             "login.handshake-failed",
             "<tag:'AUTH'> <body>Your last connection was refused because this name belongs to a paid Minecraft"

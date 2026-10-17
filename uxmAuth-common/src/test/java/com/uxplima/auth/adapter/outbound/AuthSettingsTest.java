@@ -343,6 +343,16 @@ final class AuthSettingsTest {
         assertThat(network.enabled()).isFalse();
         assertThat(network.secret()).isEmpty();
         assertThat(network.claimFor()).isEqualTo(Duration.ofSeconds(30));
+        assertThat(network.allowedCommands()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the proxy commands allowed before login are read without their slash and in lower case")
+    void theAllowedProxyCommandsAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "network { allowed-commands = [\"/GList\", \" server \"] }\n")
+                        .network()
+                        .allowedCommands())
+                .containsExactly("glist", "server");
     }
 
     @Test

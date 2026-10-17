@@ -105,11 +105,13 @@ public final class AuthSettings {
      *
      * @param secret the key the proxy signs its claims with, copied from the proxy's data folder
      * @param claimFor how long a signed claim stays fresh after the proxy wrote it
+     * @param allowedCommands the proxy's own commands a player may run before logging in
      */
-    public record Network(boolean enabled, String secret, Duration claimFor) {
+    public record Network(boolean enabled, String secret, Duration claimFor, List<String> allowedCommands) {
         public Network {
             Objects.requireNonNull(secret, "secret");
             Objects.requireNonNull(claimFor, "claimFor");
+            allowedCommands = List.copyOf(Objects.requireNonNull(allowedCommands, "allowedCommands"));
             if (enabled && secret.isBlank()) {
                 throw new IllegalArgumentException("network.enabled is true and network.secret is empty. The proxy"
                         + " writes the secret into its own data folder on its first start: copy it here.");

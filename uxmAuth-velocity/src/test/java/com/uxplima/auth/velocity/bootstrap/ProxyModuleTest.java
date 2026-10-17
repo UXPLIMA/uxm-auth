@@ -24,8 +24,10 @@ import com.uxplima.auth.adapter.outbound.SchemeChanged;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
+import com.uxplima.auth.velocity.adapter.inbound.HoldListener;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.uxmlib.storage.sql.Database;
+import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.event.EventHandler;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
@@ -53,6 +55,7 @@ final class ProxyModuleTest {
         when(proxy.getEventManager()).thenReturn(events);
         when(proxy.getConfiguration()).thenReturn(config);
         when(proxy.getChannelRegistrar()).thenReturn(channels);
+        when(proxy.getCommandManager()).thenReturn(mock(CommandManager.class));
     }
 
     @Test
@@ -66,6 +69,7 @@ final class ProxyModuleTest {
         verify(events).register(eq(plugin), any(DoorListener.class));
         verify(events).register(eq(plugin), any(ClaimWriter.class));
         verify(events).register(eq(plugin), any(ReportListener.class));
+        verify(events).register(eq(plugin), any(HoldListener.class));
         verify(channels).register(ReportListener.CHANNEL);
         verify(logger).info(contains("Premium auto-login is on"));
     }

@@ -104,7 +104,10 @@ final class SettingsReader {
         return new AuthSettings.Network(
                 config.getBoolean("network.enabled", false),
                 config.getString("network.secret", "").trim(),
-                Duration.ofSeconds(positive(config, "network.claim-seconds", 30)));
+                Duration.ofSeconds(positive(config, "network.claim-seconds", 30)),
+                list(config, "network", "allowed-commands", List.of()).stream()
+                        .map(command -> command.trim().toLowerCase(Locale.ROOT).replaceFirst("^/", ""))
+                        .toList());
     }
 
     /** Mojang refuses past this many requests in ten minutes. */
