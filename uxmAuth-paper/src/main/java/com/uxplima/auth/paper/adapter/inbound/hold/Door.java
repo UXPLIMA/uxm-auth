@@ -1,11 +1,13 @@
 package com.uxplima.auth.paper.adapter.inbound.hold;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 
@@ -45,9 +47,13 @@ public final class Door {
         Objects.requireNonNull(player, "player");
         keeper.arrive(player);
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
-        if (state instanceof AuthState.Authenticated) {
-            // Let in by the dialog before the world: the way-in moment waited for a world to play in.
-            welcomes.take(player.getUniqueId()).ifPresent(moment -> greeter.welcome(player, moment));
+        if (state instanceof AuthState.Authenticated in) {
+            // Let in before the world, by the dialog or by Floodgate: the way-in moment waited for a world.
+            welcomes.take(player.getUniqueId())
+                    .or(() -> in.method() == AuthMethod.BEDROCK
+                            ? Optional.of(AuthSettings.Moment.LOGGED_IN)
+                            : Optional.empty())
+                    .ifPresent(moment -> greeter.welcome(player, moment));
             return;
         }
         if (state == null) {

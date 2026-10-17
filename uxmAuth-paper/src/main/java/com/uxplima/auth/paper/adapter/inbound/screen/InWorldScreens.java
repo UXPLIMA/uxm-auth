@@ -2,6 +2,7 @@ package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -23,6 +24,8 @@ public final class InWorldScreens implements ScreenOffer {
     private final Supplier<ScreenSettings> settings;
     private final AuthScreens screens;
     private final Predicate<UUID> sentToTheWorld;
+    private final BiConsumer<Player, Runnable> later;
+    private final Predicate<Player> stillWaiting;
     private final ScreenShower shower;
 
     public InWorldScreens(
@@ -30,9 +33,26 @@ public final class InWorldScreens implements ScreenOffer {
             AuthScreens screens,
             Predicate<UUID> sentToTheWorld,
             ScreenShower shower) {
+        this(settings, screens, sentToTheWorld, (player, task) -> task.run(), player -> true, shower);
+    }
+
+    /**
+     * @param later runs the showing a moment after the join, when the client can draw a screen: a Bedrock client
+     *     that is sent a form while it is still spawning never shows it
+     * @param stillWaiting whether the player still waits when that moment comes
+     */
+    public InWorldScreens(
+            Supplier<ScreenSettings> settings,
+            AuthScreens screens,
+            Predicate<UUID> sentToTheWorld,
+            BiConsumer<Player, Runnable> later,
+            Predicate<Player> stillWaiting,
+            ScreenShower shower) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.screens = Objects.requireNonNull(screens, "screens");
         this.sentToTheWorld = Objects.requireNonNull(sentToTheWorld, "sentToTheWorld");
+        this.later = Objects.requireNonNull(later, "later");
+        this.stillWaiting = Objects.requireNonNull(stillWaiting, "stillWaiting");
         this.shower = Objects.requireNonNull(shower, "shower");
     }
 
@@ -46,10 +66,15 @@ public final class InWorldScreens implements ScreenOffer {
                 && sentToTheWorld.test(player.getUniqueId())) {
             return;
         }
-        switch (state) {
-            case AuthState.Unregistered unregistered -> shower.show(player, screens.register(player, null));
-            case AuthState.Registered registered -> shower.show(player, screens.login(player, null));
-            case AuthState.Authenticated authenticated -> {}
-        }
+        later.accept(player, () -> {
+            if (!player.isOnline() || !stillWaiting.test(player)) {
+                return;
+            }
+            switch (state) {
+                case AuthState.Unregistered unregistered -> shower.show(player, screens.register(player, null));
+                case AuthState.Registered registered -> shower.show(player, screens.login(player, null));
+                case AuthState.Authenticated authenticated -> {}
+            }
+        });
     }
 }

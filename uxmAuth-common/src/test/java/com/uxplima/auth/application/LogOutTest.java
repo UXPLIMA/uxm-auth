@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.UUID;
 
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.testing.AuthFixture;
@@ -30,7 +31,7 @@ final class LogOutTest {
                 .run(connection, Password.of("hunter22"), "10.0.0.7")
                 .join();
 
-        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isTrue();
+        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isEqualTo(LogOut.Result.LOGGED_OUT);
 
         assertThat(fixture.sessions.state(connection))
                 .hasValueSatisfying(state -> assertThat(state)
@@ -44,6 +45,18 @@ final class LogOutTest {
     void nothingToLogOutOf() {
         UUID connection = fixture.registered("Steve", "hunter22");
 
-        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isFalse();
+        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isEqualTo(LogOut.Result.NOT_LOGGED_IN);
+    }
+
+    @Test
+    @DisplayName("an account with no password is not sent back to a door it has no key to")
+    void anAccountWithNoPasswordStaysIn() {
+        UUID connection = UUID.randomUUID();
+        AuthState state = new LetBedrockIn(fixture.accounts, () -> 5, fixture.clock)
+                .admit(connection, new PlayerName(".Steve"), false, "10.0.0.7");
+        fixture.sessions.open(connection, state);
+
+        assertThat(new LogOut(fixture.sessions, () -> 5).run(connection)).isEqualTo(LogOut.Result.NO_PASSWORD);
+        assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Authenticated.class);
     }
 }

@@ -250,6 +250,21 @@ final class ConnectionListenerTest {
     }
 
     @Test
+    @DisplayName("a Bedrock player let in at the door is welcomed in once they stand in the world")
+    void aBedrockPlayerIsWelcomedAtJoin() {
+        PlayerMock steve = server.addPlayer(".Steve");
+        world.sessions.open(
+                steve.getUniqueId(),
+                new LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock)
+                        .admit(steve.getUniqueId(), new PlayerName(".Steve"), false, "10.0.0.7"));
+
+        listener(world.accounts).onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(world.fired).containsExactly(AuthSettings.Moment.LOGGED_IN);
+    }
+
+    @Test
     @DisplayName("a name with no account is asked to register")
     void anUnknownNameRegisters() throws Exception {
         UUID id = UUID.randomUUID();

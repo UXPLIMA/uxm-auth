@@ -60,6 +60,7 @@ final class ConfigurationGateTest {
     private AuthSettings.Timeouts timeouts =
             new AuthSettings.Timeouts(Duration.ofSeconds(90), Duration.ofSeconds(60), Duration.ofSeconds(5));
     private final Set<UUID> oldClients = new HashSet<>();
+    private final Set<UUID> bedrockClients = new HashSet<>();
     private final List<DialogSpec> shown = new ArrayList<>();
     private final Welcomes welcomes = new Welcomes();
     private PlayerMock steve;
@@ -240,6 +241,18 @@ final class ConfigurationGateTest {
     }
 
     @Test
+    @DisplayName("a Bedrock client is not held here, and is still shown its screens in the world as forms")
+    void aBedrockClientWaitsInTheWorldWithForms() {
+        world.registered(steve, "hunter22");
+        bedrockClients.add(steve.getUniqueId());
+        ConfigurationGate gate = gate();
+
+        assertThat(gate.open(connection(steve.getUniqueId()))).isEmpty();
+        assertThat(shown).isEmpty();
+        assertThat(gate.sentToTheWorld(steve.getUniqueId())).isFalse();
+    }
+
+    @Test
     @DisplayName("outside dialog mode, and for a client already in, nothing waits here")
     void nothingWaitsOutsideDialogMode() {
         world.registered(steve, "hunter22");
@@ -315,6 +328,7 @@ final class ConfigurationGateTest {
                 shower,
                 world.messages,
                 id -> !oldClients.contains(id),
+                bedrockClients::contains,
                 permission -> true,
                 welcomes,
                 java.util.logging.Logger.getLogger("uxmauth-test"));

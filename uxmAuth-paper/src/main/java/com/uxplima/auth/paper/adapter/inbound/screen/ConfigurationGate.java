@@ -75,6 +75,7 @@ public final class ConfigurationGate implements Listener {
     private final ScreenShower shower;
     private final Messages messages;
     private final Predicate<UUID> showsDialogs;
+    private final Predicate<UUID> readsForms;
     private final Predicate<String> everyoneHolds;
     private final Welcomes welcomes;
     private final Logger logger;
@@ -83,6 +84,7 @@ public final class ConfigurationGate implements Listener {
 
     /**
      * @param showsDialogs whether the client under this id can draw a dialog
+     * @param readsForms whether the client under this id is a Bedrock one, shown native forms in the world
      * @param everyoneHolds whether a permission is held by everyone, the only answer a client with no player has
      */
     public ConfigurationGate(
@@ -94,6 +96,7 @@ public final class ConfigurationGate implements Listener {
             ScreenShower shower,
             Messages messages,
             Predicate<UUID> showsDialogs,
+            Predicate<UUID> readsForms,
             Predicate<String> everyoneHolds,
             Welcomes welcomes,
             Logger logger) {
@@ -105,6 +108,7 @@ public final class ConfigurationGate implements Listener {
         this.shower = Objects.requireNonNull(shower, "shower");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.showsDialogs = Objects.requireNonNull(showsDialogs, "showsDialogs");
+        this.readsForms = Objects.requireNonNull(readsForms, "readsForms");
         this.everyoneHolds = Objects.requireNonNull(everyoneHolds, "everyoneHolds");
         this.welcomes = Objects.requireNonNull(welcomes, "welcomes");
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -174,6 +178,10 @@ public final class ConfigurationGate implements Listener {
             return Optional.empty();
         }
         AuthState state = held.state();
+        if (readsForms.test(id)) {
+            // A Bedrock client reads its screens as forms, in the world; it is not one the world sent away.
+            return Optional.empty();
+        }
         if (!showsDialogs.test(id)) {
             toTheWorld.add(id);
             return Optional.empty();

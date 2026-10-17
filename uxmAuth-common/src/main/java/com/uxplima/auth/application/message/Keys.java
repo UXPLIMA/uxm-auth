@@ -92,6 +92,7 @@ public enum Keys implements MessageKey {
     KICK_ALREADY_ONLINE(
             "kick.already-online",
             "<body>Someone is already connected under this name. If that was you, wait a moment and join again."),
+    KICK_LOGGED_OUT("kick.logged-out", "<body>You have logged out. Join again to come back in."),
     KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more."),
     KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),

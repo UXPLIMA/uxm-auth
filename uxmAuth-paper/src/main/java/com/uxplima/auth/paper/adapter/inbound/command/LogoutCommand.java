@@ -43,11 +43,14 @@ public final class LogoutCommand {
     }
 
     void attempt(Player player) {
-        if (!logOut.run(player.getUniqueId())) {
-            messages.send(player, Keys.LOGOUT_NOT_LOGGED_IN);
-            return;
+        switch (logOut.run(player.getUniqueId())) {
+            case NOT_LOGGED_IN -> messages.send(player, Keys.LOGOUT_NOT_LOGGED_IN);
+            // No password to come back with: the way back in is the one they came by, a new join.
+            case NO_PASSWORD -> player.kick(messages.render(player, Keys.KICK_LOGGED_OUT));
+            case LOGGED_OUT -> {
+                moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
+                door.hold(player);
+            }
         }
-        moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
-        door.hold(player);
     }
 }

@@ -120,7 +120,37 @@ final class InWorldScreensTest {
         assertThat(steve.nextComponentMessage()).isNull();
     }
 
+    @Test
+    @DisplayName("the screen is shown a moment after the join, and not at all to a player who got in meanwhile")
+    void theScreenWaitsForTheClientToBeReady() {
+        PlayerMock steve = server.addPlayer("Steve");
+        List<Runnable> later = new ArrayList<>();
+        java.util.Set<java.util.UUID> waiting = new java.util.HashSet<>(java.util.Set.of(steve.getUniqueId()));
+        InWorldScreens offer = offer(
+                ScreenSettings.WaitingRoom.FROZEN,
+                (player, task) -> later.add(task),
+                player -> waiting.contains(player.getUniqueId()));
+
+        offer.offer(steve, new AuthState.Unregistered(new PlayerName("Steve")));
+        assertThat(shown).isEmpty();
+        later.forEach(Runnable::run);
+        assertThat(shown).hasSize(1);
+
+        later.clear();
+        offer.offer(steve, new AuthState.Unregistered(new PlayerName("Steve")));
+        waiting.clear();
+        later.forEach(Runnable::run);
+        assertThat(shown).hasSize(1);
+    }
+
     private InWorldScreens offer(ScreenSettings.WaitingRoom room) {
+        return offer(room, (player, task) -> task.run(), player -> true);
+    }
+
+    private InWorldScreens offer(
+            ScreenSettings.WaitingRoom room,
+            java.util.function.BiConsumer<org.bukkit.entity.Player, Runnable> later,
+            java.util.function.Predicate<org.bukkit.entity.Player> stillWaiting) {
         ScreenSettings shipped = new ScreenFile(folder.resolve("screens.conf")).current();
         ScreenSettings settings = new ScreenSettings(
                 room,
@@ -133,14 +163,15 @@ final class InWorldScreensTest {
                 shipped.pin());
         AuthScreens screens =
                 new AuthScreens(() -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
-        return new InWorldScreens(() -> settings, screens, sentToTheWorld::contains, new ScreenShower() {
-            @Override
-            public void show(Audience who, DialogSpec spec) {
-                shown.add(spec);
-            }
+        return new InWorldScreens(
+                () -> settings, screens, sentToTheWorld::contains, later, stillWaiting, new ScreenShower() {
+                    @Override
+                    public void show(Audience who, DialogSpec spec) {
+                        shown.add(spec);
+                    }
 
-            @Override
-            public void close(Audience who) {}
-        });
+                    @Override
+                    public void close(Audience who) {}
+                });
     }
 }

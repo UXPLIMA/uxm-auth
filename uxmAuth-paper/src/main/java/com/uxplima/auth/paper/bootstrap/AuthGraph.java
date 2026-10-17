@@ -171,6 +171,7 @@ final class AuthGraph implements AutoCloseable {
                 shower,
                 messages,
                 BedrockLink.javaOnly(bedrock, DialogClients.on(plugin.getServer(), plugin.getLogger())),
+                id -> bedrock.player(id).isPresent(),
                 new PermissionDefaults(plugin.getServer().getPluginManager()),
                 welcomes,
                 plugin.getLogger());
@@ -180,7 +181,13 @@ final class AuthGraph implements AutoCloseable {
                 waiting,
                 moments,
                 greeter,
-                new InWorldScreens(screenFile::current, screens, gate::sentToTheWorld, shower),
+                new InWorldScreens(
+                        screenFile::current,
+                        screens,
+                        gate::sentToTheWorld,
+                        (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task),
+                        hold::isHeld,
+                        shower),
                 welcomes);
 
         this.connections = new ConnectionListener(

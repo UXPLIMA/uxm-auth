@@ -184,6 +184,24 @@ final class PlayerCommandsTest {
         assertThat(world.isAuthenticated(steve)).isFalse();
     }
 
+    @Test
+    @DisplayName("a player whose account has no password is sent away to join again, not held at a door")
+    void aLogoutWithNoPasswordSendsThePlayerAway() {
+        world.sessions.open(
+                steve.getUniqueId(),
+                new com.uxplima.auth.application.LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock)
+                        .admit(
+                                steve.getUniqueId(),
+                                new com.uxplima.auth.domain.name.PlayerName("Steve"),
+                                false,
+                                "10.0.0.7"));
+
+        logout().attempt(steve);
+        drain();
+
+        assertThat(steve.isOnline()).isFalse();
+    }
+
     private void loggedIn(String password) {
         world.registered(steve, password);
         world.scheduler.settle(login().attempt(steve, password));
