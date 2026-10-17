@@ -25,6 +25,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.listener.LanguageListener;
+import com.uxplima.auth.paper.adapter.inbound.screen.ConnectingLocales;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
 import com.uxplima.uxmlib.command.annotation.CommandMessages;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
@@ -114,7 +115,11 @@ final class PluginModule {
         LanguageResolver resolver =
                 new LanguageResolver(() -> settings.current().language(), chosen, LanguageServices::registered);
 
-        Messages messages = new Messages(styledCatalog(), resolver);
+        // A client in the configuration phase has no player yet; its screens are read in its language too.
+        Messages messages = new Messages(
+                styledCatalog(),
+                new ConnectingLocales(
+                        resolver, () -> settings.current().language(), chosen, LanguageServices::registered));
         this.messages = messages;
         settings.afterReload(this::reload);
 

@@ -15,6 +15,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import net.kyori.adventure.text.Component;
 
+import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -120,6 +121,23 @@ final class ConnectionListenerTest {
         world.scheduler.drain();
 
         assertThat(world.offered).singleElement().isInstanceOf(AuthState.Unregistered.class);
+    }
+
+    @Test
+    @DisplayName("a player let in by the dialog before the world is welcomed once they stand in it")
+    void aPlayerLetInByTheDialogIsWelcomedAtJoin() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        world.sessions.update(
+                steve.getUniqueId(),
+                state -> new AuthState.Authenticated(((AuthState.Registered) state).account(), AuthMethod.PASSWORD));
+        world.welcomes.keep(steve.getUniqueId(), AuthSettings.Moment.LOGGED_IN);
+
+        listener(world.accounts).onJoin(new PlayerJoinEvent(steve, Component.empty()));
+        world.scheduler.drain();
+
+        assertThat(world.fired).containsExactly(AuthSettings.Moment.LOGGED_IN);
+        assertThat(world.welcomes.take(steve.getUniqueId())).isEmpty();
     }
 
     @Test

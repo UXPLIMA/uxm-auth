@@ -23,7 +23,10 @@ public final class Greeter {
     private final MomentRunner moments;
     private final BiConsumer<Player, Runnable> later;
     private final Predicate<Player> stillWaiting;
-    private final Map<UUID, AuthSettings.Moment> waiting = new ConcurrentHashMap<>();
+    private final Map<UUID, Pending> waiting = new ConcurrentHashMap<>();
+
+    /** A moment that waits for the client's language; a welcome runs for a player in, a greeting for one out. */
+    private record Pending(AuthSettings.Moment moment, boolean welcome) {}
 
     /**
      * @param later runs the fallback a moment later on the player's own thread
@@ -38,7 +41,15 @@ public final class Greeter {
     public void greet(Player player, AuthSettings.Moment moment) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(moment, "moment");
-        waiting.put(player.getUniqueId(), moment);
+        waiting.put(player.getUniqueId(), new Pending(moment, false));
+        later.accept(player, () -> flush(player));
+    }
+
+    /** The way-in moment of a player who got in before they stood in the world, drawn in their language. */
+    public void welcome(Player player, AuthSettings.Moment moment) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(moment, "moment");
+        waiting.put(player.getUniqueId(), new Pending(moment, true));
         later.accept(player, () -> flush(player));
     }
 
@@ -54,9 +65,9 @@ public final class Greeter {
 
     /** Runs a waiting greeting, if the player is still the one at the door it was meant for. */
     private void flush(Player player) {
-        AuthSettings.Moment moment = waiting.remove(player.getUniqueId());
-        if (moment != null && player.isOnline() && stillWaiting.test(player)) {
-            moments.fire(player, moment);
+        Pending pending = waiting.remove(player.getUniqueId());
+        if (pending != null && player.isOnline() && stillWaiting.test(player) != pending.welcome()) {
+            moments.fire(player, pending.moment());
         }
     }
 }

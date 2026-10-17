@@ -21,6 +21,7 @@ public final class Door {
     private final MomentRunner moments;
     private final Greeter greeter;
     private final ScreenOffer screens;
+    private final Welcomes welcomes;
 
     public Door(
             Sessions sessions,
@@ -28,13 +29,15 @@ public final class Door {
             WaitingClock clock,
             MomentRunner moments,
             Greeter greeter,
-            ScreenOffer screens) {
+            ScreenOffer screens,
+            Welcomes welcomes) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.greeter = Objects.requireNonNull(greeter, "greeter");
         this.screens = Objects.requireNonNull(screens, "screens");
+        this.welcomes = Objects.requireNonNull(welcomes, "welcomes");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -42,7 +45,12 @@ public final class Door {
         Objects.requireNonNull(player, "player");
         keeper.arrive(player);
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
-        if (state == null || state instanceof AuthState.Authenticated) {
+        if (state instanceof AuthState.Authenticated) {
+            // Let in by the dialog before the world: the way-in moment waited for a world to play in.
+            welcomes.take(player.getUniqueId()).ifPresent(moment -> greeter.welcome(player, moment));
+            return;
+        }
+        if (state == null) {
             return;
         }
         clock.start(player);

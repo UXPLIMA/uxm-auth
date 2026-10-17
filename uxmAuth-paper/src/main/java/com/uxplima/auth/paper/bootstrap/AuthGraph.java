@@ -30,12 +30,17 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
+import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.ConfigurationGate;
 import com.uxplima.auth.paper.adapter.inbound.screen.InWorldScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.PaperScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.PermissionDefaults;
+import com.uxplima.auth.paper.adapter.inbound.screen.PlayerGuest;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenAnswers;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
+import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
@@ -66,6 +71,7 @@ final class AuthGraph implements AutoCloseable {
     final ChangePasswordCommand changePassword;
     final LogoutCommand logout;
     final ScreenClickListener screenClicks;
+    final ConfigurationGate gate;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -113,12 +119,39 @@ final class AuthGraph implements AutoCloseable {
         AuthScreens screens =
                 new AuthScreens(screenFile::current, () -> settings.current().passwords(), messages, styler);
         PaperScreens shower = new PaperScreens();
-        Door door = new Door(
-                sessions, keeper, waiting, moments, greeter, new InWorldScreens(screenFile::current, screens, shower));
+        Welcomes welcomes = new Welcomes();
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         RegisterAccount registering = new RegisterAccount(
                 accounts, hashing, lane, sessions, () -> settings.current().passwordPolicy(), clock);
+        ScreenAnswers answers = new ScreenAnswers(
+                screens,
+                registering,
+                logIn,
+                screenFile::current,
+                () -> settings.current().passwords(),
+                messages,
+                shower);
+        this.gate = new ConfigurationGate(
+                sessions,
+                screenFile::current,
+                () -> settings.current().timeouts(),
+                screens,
+                answers,
+                shower,
+                messages,
+                DialogClients.on(plugin.getServer(), plugin.getLogger()),
+                new PermissionDefaults(plugin.getServer().getPluginManager()),
+                welcomes,
+                plugin.getLogger());
+        Door door = new Door(
+                sessions,
+                keeper,
+                waiting,
+                moments,
+                greeter,
+                new InWorldScreens(screenFile::current, screens, gate::sentToTheWorld, shower),
+                welcomes);
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -145,19 +178,8 @@ final class AuthGraph implements AutoCloseable {
                 replies);
         this.logout = new LogoutCommand(
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
-        this.screenClicks = new ScreenClickListener(
-                new ScreenAnswers(
-                        screens,
-                        registering,
-                        logIn,
-                        door,
-                        moments,
-                        screenFile::current,
-                        () -> settings.current().passwords(),
-                        messages,
-                        replies,
-                        shower),
-                scheduler);
+        this.screenClicks =
+                new ScreenClickListener(answers, player -> new PlayerGuest(player, door, moments, replies), scheduler);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }
 
@@ -166,6 +188,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
+        plugin.getServer().getPluginManager().registerEvents(gate, plugin);
         filters.install();
         for (Player online : plugin.getServer().getOnlinePlayers()) {
             // A player who was online before this enable has no session yet. They are asked again, which is

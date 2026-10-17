@@ -33,6 +33,7 @@ final class InWorldScreensTest {
     private ServerMock server;
     private AuthWorld world;
     private final List<DialogSpec> shown = new ArrayList<>();
+    private final java.util.Set<java.util.UUID> sentToTheWorld = new java.util.HashSet<>();
 
     @BeforeEach
     void setUp() {
@@ -63,14 +64,30 @@ final class InWorldScreensTest {
     }
 
     @Test
-    @DisplayName(
-            "dialog mode: whoever reaches the world unchecked could not or would not use the dialog, so none is shown")
-    void dialogModeShowsNothingInTheWorld() {
+    @DisplayName("dialog mode: a player the dialog sent to the world, too old for it or leaving it, is shown none")
+    void dialogModeShowsNothingToThoseItSentToTheWorld() {
         PlayerMock steve = server.addPlayer("Steve");
+        sentToTheWorld.add(steve.getUniqueId());
 
         offer(ScreenSettings.WaitingRoom.DIALOG).offer(steve, new AuthState.Unregistered(new PlayerName("Steve")));
 
         assertThat(shown).isEmpty();
+    }
+
+    @Test
+    @DisplayName("dialog mode: a player who logs out in the world is shown the screen there")
+    void dialogModeShowsTheScreenAfterALogout() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+
+        offer(ScreenSettings.WaitingRoom.DIALOG)
+                .offer(steve, world.sessions.state(steve.getUniqueId()).orElseThrow());
+
+        assertThat(shown)
+                .singleElement()
+                .satisfies(spec -> assertThat(spec.buttons())
+                        .extracting(DialogSpec.Button::action)
+                        .contains(AuthScreens.LOGIN));
     }
 
     private InWorldScreens offer(ScreenSettings.WaitingRoom room) {
@@ -86,7 +103,7 @@ final class InWorldScreensTest {
                 shipped.pin());
         AuthScreens screens =
                 new AuthScreens(() -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
-        return new InWorldScreens(() -> settings, screens, new ScreenShower() {
+        return new InWorldScreens(() -> settings, screens, sentToTheWorld::contains, new ScreenShower() {
             @Override
             public void show(Audience who, DialogSpec spec) {
                 shown.add(spec);

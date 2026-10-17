@@ -64,7 +64,7 @@ final class ScreenAnswersTest {
     void aLoginAnswerLetsThePlayerIn() {
         world.registered(steve, "hunter22");
 
-        world.scheduler.settle(answers().answer(steve, AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
 
         assertThat(world.isAuthenticated(steve)).isTrue();
         assertThat(world.fired).contains(AuthSettings.Moment.LOGGED_IN);
@@ -76,7 +76,7 @@ final class ScreenAnswersTest {
     void aWrongPasswordShowsTheScreenAgain() {
         world.registered(steve, "hunter22");
 
-        world.scheduler.settle(answers().answer(steve, AuthScreens.LOGIN, answer(Map.of("password", "nope1234"))));
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "nope1234"))));
 
         assertThat(shown).hasSize(1);
         assertThat(plain(shown.get(0).body().get(0)))
@@ -90,7 +90,7 @@ final class ScreenAnswersTest {
         world.unregistered(steve);
 
         world.scheduler.settle(answers()
-                .answer(steve, AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
 
         assertThat(world.isAuthenticated(steve)).isTrue();
         assertThat(world.fired).contains(AuthSettings.Moment.REGISTERED);
@@ -111,7 +111,7 @@ final class ScreenAnswersTest {
                 settings.pin());
 
         world.scheduler.settle(answers()
-                .answer(steve, AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
 
         assertThat(world.isAuthenticated(steve)).isFalse();
         assertThat(plain(shown.get(0).body().get(0)))
@@ -124,12 +124,12 @@ final class ScreenAnswersTest {
         world.registered(steve, "hunter22");
         settings = withCancel(ScreenSettings.Cancel.WORLD);
 
-        world.scheduler.settle(answers().answer(steve, AuthScreens.CANCEL, answer(Map.of())));
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.CANCEL, answer(Map.of())));
         assertThat(steve.isOnline()).isTrue();
         assertThat(closed).isEqualTo(1);
 
         settings = withCancel(ScreenSettings.Cancel.KICK);
-        world.scheduler.settle(answers().answer(steve, AuthScreens.CANCEL, answer(Map.of())));
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.CANCEL, answer(Map.of())));
         assertThat(steve.isOnline()).isFalse();
     }
 
@@ -139,7 +139,7 @@ final class ScreenAnswersTest {
         world.registered(steve, "hunter22");
         steve.addAttachment(MockBukkit.createMockPlugin("Perms"), "uxmauth.login", false);
 
-        world.scheduler.settle(answers().answer(steve, AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
 
         assertThat(world.isAuthenticated(steve)).isFalse();
     }
@@ -151,7 +151,7 @@ final class ScreenAnswersTest {
         steve.addAttachment(MockBukkit.createMockPlugin("Perms"), "uxmauth.register", false);
 
         world.scheduler.settle(answers()
-                .answer(steve, AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
 
         assertThat(world.isAuthenticated(steve)).isFalse();
     }
@@ -183,16 +183,11 @@ final class ScreenAnswersTest {
             }
         };
         return new ScreenAnswers(
-                screens,
-                world.register,
-                world.logIn,
-                world.door,
-                world.moments,
-                () -> settings,
-                () -> world.passwords,
-                world.messages,
-                world.replies,
-                shower);
+                screens, world.register, world.logIn, () -> settings, () -> world.passwords, world.messages, shower);
+    }
+
+    private Guest guest() {
+        return new PlayerGuest(steve, world.door, world.moments, world.replies);
     }
 
     private static ScreenAnswers.Answer answer(Map<String, String> texts) {

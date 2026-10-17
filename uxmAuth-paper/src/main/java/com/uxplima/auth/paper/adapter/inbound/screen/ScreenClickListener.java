@@ -2,6 +2,7 @@ package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -18,10 +19,12 @@ import org.jspecify.annotations.Nullable;
 public final class ScreenClickListener implements Listener {
 
     private final ScreenAnswers answers;
+    private final Function<Player, Guest> guests;
     private final Scheduler scheduler;
 
-    public ScreenClickListener(ScreenAnswers answers, Scheduler scheduler) {
+    public ScreenClickListener(ScreenAnswers answers, Function<Player, Guest> guests, Scheduler scheduler) {
         this.answers = Objects.requireNonNull(answers, "answers");
+        this.guests = Objects.requireNonNull(guests, "guests");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     }
 
@@ -36,7 +39,7 @@ public final class ScreenClickListener implements Listener {
         ScreenAnswers.Answer answer = answerOf(event.getDialogResponseView());
         // The press may arrive off the player's thread; everything it does to the player happens on it.
         scheduler.entity(player, () -> {
-            CompletableFuture<Void> unused = answers.answer(player, action, answer);
+            CompletableFuture<Void> unused = answers.answer(guests.apply(player), action, answer);
         });
     }
 

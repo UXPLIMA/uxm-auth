@@ -43,6 +43,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.auth.paper.adapter.inbound.hold.ScreenOffer;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
+import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 import com.uxplima.uxmlib.storage.sql.Database;
@@ -73,6 +74,8 @@ public final class AuthWorld implements AutoCloseable {
     public final List<AuthSettings.Moment> fired = new ArrayList<>();
     /** The state each screen offer was made for, in order. */
     public final List<AuthState> offered = new ArrayList<>();
+
+    public final Welcomes welcomes = new Welcomes();
 
     public final MomentRunner moments = (Player player, AuthSettings.Moment moment) -> fired.add(moment);
     public final AuthSettings.Passwords passwords;
@@ -117,7 +120,8 @@ public final class AuthWorld implements AutoCloseable {
                         player -> sessions.state(player.getUniqueId())
                                 .filter(state -> !(state instanceof AuthState.Authenticated))
                                 .isPresent()),
-                (ScreenOffer) (player, state) -> offered.add(state));
+                (ScreenOffer) (player, state) -> offered.add(state),
+                welcomes);
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy);

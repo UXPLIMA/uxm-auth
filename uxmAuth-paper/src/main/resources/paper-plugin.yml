@@ -22,6 +22,11 @@ dependencies:
     Vault:
       load: BEFORE
       required: false
+    # Tells a client older than 1.21.6, which cannot draw the dialog before the world, so it waits in
+    # the world with the commands instead. Without ViaVersion only this server's own version joins.
+    ViaVersion:
+      load: BEFORE
+      required: false
 
 permissions:
   # What a player has by default.
