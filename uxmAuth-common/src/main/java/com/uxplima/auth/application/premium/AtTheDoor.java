@@ -2,6 +2,7 @@ package com.uxplima.auth.application.premium;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.AccountRepository;
@@ -13,6 +14,8 @@ import com.uxplima.auth.domain.premium.Arrival;
 import com.uxplima.auth.domain.premium.Decision;
 import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameOwnership;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
+import com.uxplima.auth.domain.premium.Refusal;
 
 /**
  * A connection at the hello, before the server makes a profile for it: is it asked for the handshake?
@@ -30,6 +33,7 @@ public final class AtTheDoor {
     private final Supplier<NameOwnership> ownership;
     private final NameMemory failed;
     private final NameMemory claims;
+    private final NameMemory ownerClaims;
 
     public AtTheDoor(
             AccountRepository accounts,
@@ -37,13 +41,15 @@ public final class AtTheDoor {
             PremiumLookup lookup,
             Supplier<NameOwnership> ownership,
             NameMemory failed,
-            NameMemory claims) {
+            NameMemory claims,
+            NameMemory ownerClaims) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.names = Objects.requireNonNull(names, "names");
         this.lookup = Objects.requireNonNull(lookup, "lookup");
         this.ownership = Objects.requireNonNull(ownership, "ownership");
         this.failed = Objects.requireNonNull(failed, "failed");
         this.claims = Objects.requireNonNull(claims, "claims");
+        this.ownerClaims = Objects.requireNonNull(ownerClaims, "ownerClaims");
     }
 
     /** What the door does with a connection under this name, from this address, through this host. */
@@ -60,11 +66,25 @@ public final class AtTheDoor {
             return new Decision.Cracked(false, false);
         }
         boolean claimed = claims.holds(address, name);
-        Arrival arrival = new Arrival(holder(account), claimed, failed.holds(address, name), host);
-        Decision decision = ownership.get().decide(arrival, () -> lookup.lookup(name));
+        boolean asked = claimed || ownerClaims.holds(address, name);
+        Holder holder = holder(account);
+        AtomicReference<PremiumAnswer> answered = new AtomicReference<>();
+        Arrival arrival = new Arrival(holder, asked, failed.holds(address, name), host);
+        Decision decision = ownership.get().decide(arrival, () -> {
+            PremiumAnswer answer = lookup.lookup(name);
+            answered.set(answer);
+            return answer;
+        });
         if (claimed && decision instanceof Decision.Handshake) {
             // A claim buys one try. Passed, the name changes hands; failed, the cracked owner keeps it.
             claims.forget(address, name);
+        }
+        if (decision instanceof Decision.Refuse refuse && refuse.why() != Refusal.LOOKUP_FAILED) {
+            // The failure is explained now, and the next connection is asked again rather than refused again.
+            failed.forget(address, name);
+        }
+        if (holder == Holder.CRACKED_UNVERIFIED && answered.get() instanceof PremiumAnswer.Cracked) {
+            account.ifPresent(found -> accounts.update(found.asVerified()));
         }
         return decision;
     }
@@ -74,9 +94,28 @@ public final class AtTheDoor {
         claims.remember(address, name);
     }
 
-    /** A connection from this address under this name failed the handshake. */
+    /**
+     * The owner of the account, logged in, asks for the handshake: their next connection from here is asked, and
+     * its pre-login reads {@link #ownerAsked} to know the account turns premium rather than changes hands.
+     */
+    public void ownerAsks(String address, PlayerName name) {
+        ownerClaims.remember(address, name);
+    }
+
+    /** Whether the owner of the account asked for this connection's handshake. Read once, by the pre-login. */
+    public boolean ownerAsked(String address, PlayerName name) {
+        boolean asked = ownerClaims.holds(address, name);
+        ownerClaims.forget(address, name);
+        return asked;
+    }
+
+    /**
+     * A connection from this address under this name failed the handshake. An unverified account under the
+     * name is settled: a paid owner exists, its holder is not them, and the first comer keeps it until a claim.
+     */
     public void failed(String address, PlayerName name) {
         failed.remember(address, name);
+        accounts.findByName(name).filter(Account::unverified).ifPresent(found -> accounts.update(found.asVerified()));
     }
 
     /** A connection from this address under this name passed the handshake. */

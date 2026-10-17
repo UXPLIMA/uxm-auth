@@ -183,6 +183,18 @@ final class NameOwnershipTest {
     }
 
     @Test
+    @DisplayName("a premium account whose last try failed is refused once with the reason, under every rule")
+    void aPremiumAccountThatFailedIsToldWhy() {
+        Arrival failed = new Arrival(Holder.PREMIUM, false, true, "play.example.org");
+
+        for (NameRule each : NameRule.values()) {
+            assertThat(rule(each).decide(failed, web(PREMIUM)))
+                    .as(each.name())
+                    .isEqualTo(new Decision.Refuse(Refusal.PAID_NAME));
+        }
+    }
+
+    @Test
     @DisplayName("by domain: a failed handshake on the premium address is refused, and told to use the other one")
     void domainRefusesAFailedPremiumAddress() {
         Arrival failed = new Arrival(Holder.NOBODY, false, true, "premium.example.org");

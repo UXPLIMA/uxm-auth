@@ -18,6 +18,7 @@ import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
+import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.auth.testing.AuthFixture;
 import com.uxplima.auth.testing.TurnedClock;
@@ -51,7 +52,8 @@ final class AtTheDoorTest {
             () -> new NameOwnership(
                     NameRule.AUTOMATIC, WhenUnknown.CRACKED, new HostPatterns(List.of()), new HostPatterns(List.of())),
             failed,
-            claims);
+            claims,
+            new NameMemory(() -> Duration.ofMinutes(10), clock));
 
     @AfterEach
     void close() {
@@ -125,6 +127,52 @@ final class AtTheDoorTest {
 
         door.passed(HERE, new PlayerName("Notch"));
         assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Handshake());
+    }
+
+    @Test
+    @DisplayName("a refusal that explains a failed handshake is given once, and the next connection is asked again")
+    void anExplainedRefusalIsGivenOnce() {
+        held("Notch", AccountKind.PREMIUM);
+        door.failed(HERE, new PlayerName("Notch"));
+
+        assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Refuse(Refusal.PAID_NAME));
+        assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Handshake());
+    }
+
+    @Test
+    @DisplayName("an unverified account whose holder failed the handshake is verified, so it is not asked again")
+    void aFailedUnverifiedHolderIsVerified() {
+        Account taken = held("Notch", AccountKind.CRACKED).asUnverified();
+        fixture.accounts.seed(taken);
+
+        door.failed(HERE, new PlayerName("Notch"));
+
+        assertThat(fixture.accounts.findById(taken.id()))
+                .hasValueSatisfying(found -> assertThat(found.unverified()).isFalse());
+    }
+
+    @Test
+    @DisplayName("an unverified account the web now calls cracked is verified, so the web is not asked again")
+    void anUnverifiedAccountTheWebCallsCrackedIsVerified() {
+        Account taken = held("Steve", AccountKind.CRACKED).asUnverified();
+        fixture.accounts.seed(taken);
+        web = new PremiumAnswer.Cracked();
+
+        assertThat(door.decide("Steve", HERE, HOST)).isEqualTo(new Decision.Cracked(false, false));
+
+        assertThat(fixture.accounts.findById(taken.id()))
+                .hasValueSatisfying(found -> assertThat(found.unverified()).isFalse());
+    }
+
+    @Test
+    @DisplayName("an owner's own request asks for the handshake and waits for the pre-login to read it")
+    void anOwnersRequestWaitsForThePreLogin() {
+        held("Notch", AccountKind.CRACKED);
+        door.ownerAsks(HERE, new PlayerName("Notch"));
+
+        assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Handshake());
+        assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isTrue();
+        assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isFalse();
     }
 
     @Test

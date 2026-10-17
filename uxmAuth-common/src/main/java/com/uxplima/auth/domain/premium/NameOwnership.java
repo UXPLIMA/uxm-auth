@@ -32,8 +32,9 @@ public final class NameOwnership {
             return new Decision.Cracked(false, false);
         }
         if (arrival.holder() == Holder.PREMIUM) {
-            // An account that proved itself has no password to fall back on, under any rule and any address.
-            return new Decision.Handshake();
+            // An account that proved itself has no password to fall back on, under any rule and any address. A
+            // try that failed lately is told why once, rather than shown "Invalid session" again.
+            return arrival.failedBefore() ? new Decision.Refuse(Refusal.PAID_NAME) : new Decision.Handshake();
         }
         return switch (rule) {
             case AUTOMATIC -> automatic(arrival, lookup);
