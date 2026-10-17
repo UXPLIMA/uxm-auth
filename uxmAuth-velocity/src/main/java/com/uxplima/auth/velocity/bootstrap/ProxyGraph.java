@@ -11,6 +11,8 @@ import java.util.function.Supplier;
 import java.util.random.RandomGenerator;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
+import com.uxplima.auth.adapter.outbound.LocalEvents;
+import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
@@ -18,16 +20,19 @@ import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.port.LastServers;
+import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
+import com.uxplima.auth.velocity.adapter.inbound.EndedSessions;
 import com.uxplima.auth.velocity.adapter.inbound.HoldListener;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
@@ -53,6 +58,7 @@ final class ProxyGraph implements AutoCloseable {
     private final Path folder;
     private final HttpClient web = HttpClient.newHttpClient();
     private final WaitingWorld waiting;
+    private NetworkEvents events = new LocalEvents();
 
     ProxyGraph(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -125,11 +131,16 @@ final class ProxyGraph implements AutoCloseable {
         register(new ClaimWriter(sessions, claims, clock));
         proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
         register(new ReportListener(sessions, claims, clock, logger, routes::loggedIn));
+        NetworkEvents bulletins = NetworkBulletins.open(
+                settings.current().network().redis(), new Bulletins(claims.get().orElseThrow()), logger::warn);
+        bulletins.listen(new EndedSessions(sessions));
+        this.events = bulletins;
         return sessions;
     }
 
     @Override
     public void close() {
+        events.close();
         waiting.close();
     }
 

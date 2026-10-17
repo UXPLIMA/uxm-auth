@@ -82,6 +82,13 @@ tasks.shadowJar {
     // BouncyCastle hashes the passwords. It ships as a signed jar, and a signature that names classes we
     // relocated no longer verifies, so the JVM would refuse the jar: the signature files stay out.
     relocate("org.bouncycastle", "com.uxplima.auth.libs.bouncycastle")
+    // Lettuce carries the bulletins on Redis, and brings Netty and Reactor. The server ships a Netty of its own, at a
+    // version it chose; relocating ours keeps the two from ever meeting.
+    relocate("io.lettuce", "com.uxplima.auth.libs.lettuce")
+    relocate("io.netty", "com.uxplima.auth.libs.netty")
+    relocate("reactor", "com.uxplima.auth.libs.reactor")
+    relocate("org.reactivestreams", "com.uxplima.auth.libs.reactivestreams")
+    relocate("redis.clients.authentication", "com.uxplima.auth.libs.redisauth")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC")
 }
 
@@ -98,12 +105,17 @@ val forbiddenJarEntries =
         "com/typesafe/" to "Typesafe Config must be relocated.",
         "io/leangen/" to "geantyref must be relocated.",
         "org/bouncycastle/" to "BouncyCastle must be relocated, or two plugins that bundle it clash.",
+        "io/lettuce/" to "Lettuce must be relocated.",
+        "io/netty/" to "Netty must be relocated: the server ships its own, at another version.",
+        "reactor/" to "Reactor must be relocated.",
+        "org/reactivestreams/" to "Reactive Streams must be relocated.",
         "net/elytrium/" to "LimboAPI is a plugin of its own. A copy inside this jar is a second, broken LimboAPI.",
     )
 
 // What a proxy jar must carry. Velocity ships no JDBC driver, so every database the brief names rides here.
 val requiredJarEntries =
     listOf(
+        "com/uxplima/auth/libs/lettuce/" to "Lettuce is missing, and a network's bulletins ride it on Redis.",
         "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
         "com/uxplima/auth/velocity/bootstrap/" to "The plugin's own classes are missing.",
         "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",

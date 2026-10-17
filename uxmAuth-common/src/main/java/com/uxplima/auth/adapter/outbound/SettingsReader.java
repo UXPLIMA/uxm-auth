@@ -115,7 +115,10 @@ final class SettingsReader {
                 routing(config),
                 word(config, "network.wait-in", "server", AuthSettings.WaitIn.class),
                 config.getString("network.limbo-file", "limbo.schem").trim(),
-                spot(list(config, "network", "limbo-spawn", List.of("0.5", "100", "0.5")), "network.limbo-spawn"));
+                spot(list(config, "network", "limbo-spawn", List.of("0.5", "100", "0.5")), "network.limbo-spawn"),
+                new AuthSettings.Redis(
+                        config.getString("network.redis.uri", "").trim(),
+                        config.getString("network.redis.channel", "uxmauth").trim()));
     }
 
     /** A point written as x, y and z, with a yaw and a pitch after them when the operator gives a facing. */

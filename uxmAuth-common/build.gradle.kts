@@ -27,6 +27,10 @@ dependencies {
     runtimeOnly(libs.h2)
     // Argon2id and BCrypt in pure Java. Shaded and relocated by each platform module.
     implementation(libs.bouncycastle)
+    // The bulletins of a network travel on Redis when the operator names one. Lettuce brings Netty and Reactor;
+    // each platform module relocates all three, so they never meet the copies the server ships.
+    implementation(libs.uxmlib.redis)
+    implementation(libs.lettuce.core)
 
     // Adventure is compileOnly on purpose. Paper and Velocity each ship it, and a shaded
     // copy would break the serializers the platform uses on its own components.

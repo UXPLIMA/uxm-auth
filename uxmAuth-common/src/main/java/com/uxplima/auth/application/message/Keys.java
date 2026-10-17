@@ -183,6 +183,9 @@ public enum Keys implements MessageKey {
     CHANGE_NEEDS_BOTH("change.needs-both", "<etag:'ERROR'> <body>Write the old password, then the new one."),
 
     LOGOUT_NOT_LOGGED_IN("logout.not-logged-in", "<etag:'ERROR'> <body>You are not logged in."),
+    LOGOUT_SESSIONS_ENDED(
+            "logout.sessions-ended",
+            "<body>Your password was changed, so you were logged out. Log in with the new one."),
 
     PASSWORD_TOO_SHORT(
             "password.too-short", "<etag:'ERROR'> <body>A password needs at least <value><min><body> characters."),

@@ -152,7 +152,8 @@ public final class AuthSettings {
             Routing routing,
             WaitIn waitIn,
             String limboFile,
-            Spot limboSpawn) {
+            Spot limboSpawn,
+            Redis redis) {
         public Network {
             Objects.requireNonNull(secret, "secret");
             Objects.requireNonNull(claimFor, "claimFor");
@@ -161,6 +162,7 @@ public final class AuthSettings {
             Objects.requireNonNull(waitIn, "waitIn");
             Objects.requireNonNull(limboFile, "limboFile");
             Objects.requireNonNull(limboSpawn, "limboSpawn");
+            Objects.requireNonNull(redis, "redis");
             if (enabled && secret.isBlank()) {
                 throw new IllegalArgumentException("network.enabled is true and network.secret is empty. The proxy"
                         + " writes the secret into its own data folder on its first start: copy it here.");
@@ -171,6 +173,32 @@ public final class AuthSettings {
         @Override
         public String toString() {
             return "Network[enabled=" + enabled + ", claimFor=" + claimFor + "]";
+        }
+    }
+
+    /**
+     * Where the bulletins of a network travel: a Redis every member reaches, and the channel on it. An empty
+     * address leaves Redis off.
+     */
+    public record Redis(String uri, String channel) {
+        public Redis {
+            Objects.requireNonNull(uri, "uri");
+            Objects.requireNonNull(channel, "channel");
+            if (channel.isBlank()) {
+                throw new IllegalArgumentException("network.redis.channel is empty. Name the channel every member"
+                        + " of this network listens on.");
+            }
+        }
+
+        /** Whether the operator wrote an address. */
+        public boolean on() {
+            return !uri.isBlank();
+        }
+
+        /** Never printed: the address may carry the Redis password. */
+        @Override
+        public String toString() {
+            return "Redis[on=" + on() + ", channel=" + channel + "]";
         }
     }
 

@@ -14,6 +14,7 @@ import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
+import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
@@ -27,6 +28,7 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.application.premium.LetPremiumIn;
@@ -34,6 +36,7 @@ import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.state.AuthState;
@@ -46,6 +49,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
+import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
@@ -116,6 +120,7 @@ final class AuthGraph implements AutoCloseable {
     private final Plugin plugin;
     private final PasswordLogFilters filters;
     private final HttpClient web = HttpClient.newHttpClient();
+    private final NetworkEvents events;
     private final ServerHellos hellos;
 
     AuthGraph(
@@ -274,6 +279,7 @@ final class AuthGraph implements AutoCloseable {
         this.login = new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies);
         this.register = new RegisterCommand(
                 registering, door, joins::openingOf, () -> settings.current().passwords(), messages, replies);
+        this.events = bulletins(settings, plugin.getLogger());
         this.changePassword = new ChangePasswordCommand(
                 new ChangePassword(
                         accounts,
@@ -281,13 +287,15 @@ final class AuthGraph implements AutoCloseable {
                         lane,
                         sessions,
                         () -> settings.current().passwordPolicy(),
-                        new LocalEvents()),
+                        events),
                 moments,
                 () -> settings.current().passwords(),
                 messages,
                 replies);
-        this.logout = new LogoutCommand(
-                new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
+        LogOut logOut =
+                new LogOut(sessions, () -> settings.current().passwords().maxAttempts());
+        this.logout = new LogoutCommand(logOut, door, moments, messages);
+        events.listen(new EndedSessions(plugin.getServer()::getPlayer, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         this.screenClicks = new ScreenClickListener(
@@ -322,6 +330,7 @@ final class AuthGraph implements AutoCloseable {
 
     @Override
     public void close() {
+        events.close();
         filters.uninstall();
         hellos.close();
         web.close();
@@ -334,6 +343,14 @@ final class AuthGraph implements AutoCloseable {
         return network.enabled()
                 ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor()))
                 : Optional.empty();
+    }
+
+    /** The bulletins of this server: on Redis while it is on a network that names one, and on itself otherwise. */
+    private static NetworkEvents bulletins(PluginSettings settings, java.util.logging.Logger logger) {
+        return claims(settings)
+                .map(claims -> NetworkBulletins.open(
+                        settings.current().network().redis(), new Bulletins(claims), logger::warning))
+                .orElseGet(LocalEvents::new);
     }
 
     /** The decision at the hello: the web sources, the operator's rule, and the memories of claims and failures. */

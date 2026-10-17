@@ -417,6 +417,23 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("Redis is off until the operator writes its address, and the address is never printed")
+    void redisIsOffByDefault(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").network().redis()).isEqualTo(new AuthSettings.Redis("", "uxmauth"));
+        assertThat(settingsFrom(folder, "").network().redis().on()).isFalse();
+        AuthSettings.Redis written = settingsFrom(
+                        folder, "network { redis { uri = \"redis://:pw@10.0.0.9:6379\", channel = \"eu\" } }\n")
+                .network()
+                .redis();
+        assertThat(written).isEqualTo(new AuthSettings.Redis("redis://:pw@10.0.0.9:6379", "eu"));
+        assertThat(written.on()).isTrue();
+        assertThat(written.toString()).doesNotContain("pw").doesNotContain("10.0.0.9");
+        assertThatThrownBy(() -> settingsFrom(folder, "network { redis { channel = \" \" } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("network.redis.channel");
+    }
+
+    @Test
     @DisplayName("the proxy commands allowed before login are read without their slash and in lower case")
     void theAllowedProxyCommandsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "network { allowed-commands = [\"/GList\", \" server \"] }\n")

@@ -21,6 +21,8 @@ bstats         = "3.0.2"
 # Argon2id and BCrypt in pure Java, with no native library to load on a host we do not control.
 gson           = "2.14.0"                  # com.google.code.gson:gson, the copy Paper and Velocity already ship
 bouncycastle   = "1.86"                    # org.bouncycastle:bcprov-jdk18on (Maven Central, verified 2026-10-17)
+# Redis carries the bulletins of a network. The version uxmlib-redis compiles against.
+lettuce        = "7.6.0.RELEASE"           # io.lettuce:lettuce-core (Maven Central, verified 2026-10-18)
 
 # soft dependencies, compileOnly, reached only past a plugin-present guard
 placeholderapi = "2.11.6"                  # me.clip:placeholderapi (extendedclip repo, not Maven Central)
@@ -78,6 +80,7 @@ fastutil          = { module = "it.unimi.dsi:fastutil",                         
 adventure-legacy  = { module = "net.kyori:adventure-text-serializer-legacy",     version.ref = "adventure" }
 gson              = { module = "com.google.code.gson:gson",                      version.ref = "gson" }
 bouncycastle      = { module = "org.bouncycastle:bcprov-jdk18on",                version.ref = "bouncycastle" }
+lettuce-core      = { module = "io.lettuce:lettuce-core",                        version.ref = "lettuce" }
 configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
 jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }
 # bstats is here for the plugin that wants metrics. Nothing in the template builds a
