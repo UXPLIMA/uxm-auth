@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.ChangeResult;
 import com.uxplima.auth.application.message.Keys;
@@ -75,7 +76,8 @@ public final class ChangePasswordCommand {
         switch (result) {
             case ChangeResult.Changed changed -> moments.fire(player, AuthSettings.Moment.PASSWORD_CHANGED);
             case ChangeResult.WrongOld wrongOld -> messages.send(player, Keys.CHANGE_WRONG_OLD);
-            case ChangeResult.Rejected rejected -> PasswordWords.say(messages, player, rejected.verdict());
+            case ChangeResult.Rejected rejected ->
+                PasswordWords.reason(messages, player, rejected.verdict()).ifPresent(player::sendMessage);
             case ChangeResult.NotLoggedIn notLoggedIn -> messages.send(player, Keys.CHANGE_NOT_LOGGED_IN);
             case ChangeResult.Gone gone -> {}
         }

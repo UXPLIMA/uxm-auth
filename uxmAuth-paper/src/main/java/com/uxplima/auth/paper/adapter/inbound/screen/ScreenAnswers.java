@@ -10,6 +10,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
@@ -19,7 +20,6 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
-import com.uxplima.auth.paper.adapter.inbound.command.PasswordWords;
 import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 import org.jspecify.annotations.Nullable;

@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -16,14 +17,22 @@ import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
+import com.uxplima.auth.application.RegisterAccount;
+import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.domain.hash.Argon2idHasher;
+import com.uxplima.auth.domain.hash.BcryptHasher;
+import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.NamePolicy;
+import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.HostPatterns;
@@ -32,6 +41,7 @@ import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
+import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyLocales;
 import com.uxplima.uxmlib.storage.sql.Database;
@@ -80,6 +90,10 @@ public final class ProxyWorld implements AutoCloseable {
             new MessageCatalog(Map.of(Locale.ENGLISH, MessageCatalog.defaults(Keys.class)), Locale.ENGLISH),
             new ProxyLocales(() -> LanguageSettings.following(Locale.ENGLISH)));
     public final DoorWords words = new DoorWords(messages);
+    public final HashingLane lane = new HashingLane(1, 1, 16);
+    public final Hashing hashing = new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4)));
+    public final PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 0);
+    public final Sessions sessions = new Sessions();
     public PremiumAnswer web = new PremiumAnswer.Premium(MOJANG, "Notch");
     public NameRule rule = NameRule.AUTOMATIC;
     public ConflictStrategy conflict = ConflictStrategy.RENAME;
@@ -118,8 +132,23 @@ public final class ProxyWorld implements AutoCloseable {
                 clock);
     }
 
+    /** The password login of the proxy's waiting world, with /login, /giris and /register as its words. */
+    public LimboLogin limboLogin(boolean asksTwice) {
+        NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
+        return new LimboLogin(
+                new ReadTheName(accounts, () -> names, () -> 3),
+                new LogIn(accounts, hashing, lane, sessions, clock),
+                new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock),
+                sessions,
+                messages,
+                () -> Set.of("login", "l", "giris"),
+                () -> Set.of("register", "reg"),
+                () -> asksTwice);
+    }
+
     @Override
     public void close() {
+        lane.close();
         database.close();
     }
 }

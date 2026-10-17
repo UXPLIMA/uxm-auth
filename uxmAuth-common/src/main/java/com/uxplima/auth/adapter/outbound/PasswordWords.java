@@ -1,9 +1,7 @@
-package com.uxplima.auth.paper.adapter.inbound.command;
+package com.uxplima.auth.adapter.outbound;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import org.bukkit.entity.Player;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
@@ -14,14 +12,10 @@ import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 
-/** Tells a player why the policy refused a password, in their language. */
+/** Why the policy refused a password, in the reader's language, on a server and on the proxy alike. */
 public final class PasswordWords {
 
     private PasswordWords() {}
-
-    static void say(Messages messages, Player player, PasswordVerdict verdict) {
-        reason(messages, player, verdict).ifPresent(player::sendMessage);
-    }
 
     /** The line that says why, or nothing for a password that was accepted. */
     public static java.util.Optional<Component> reason(Messages messages, Audience reader, PasswordVerdict verdict) {

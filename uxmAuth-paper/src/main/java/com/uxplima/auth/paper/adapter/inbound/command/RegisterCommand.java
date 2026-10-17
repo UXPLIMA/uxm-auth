@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.message.Keys;
@@ -90,7 +91,8 @@ public final class RegisterCommand {
         switch (result) {
             case RegisterResult.Created created -> door.open(player, AuthSettings.Moment.REGISTERED);
             case RegisterResult.Mismatch mismatch -> messages.send(player, Keys.REGISTER_MISMATCH);
-            case RegisterResult.Rejected rejected -> PasswordWords.say(messages, player, rejected.verdict());
+            case RegisterResult.Rejected rejected ->
+                PasswordWords.reason(messages, player, rejected.verdict()).ifPresent(player::sendMessage);
             case RegisterResult.NameTaken taken ->
                 messages.send(
                         player,
