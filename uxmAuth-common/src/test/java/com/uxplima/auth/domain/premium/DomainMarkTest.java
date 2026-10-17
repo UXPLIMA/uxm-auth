@@ -30,4 +30,14 @@ final class DomainMarkTest {
         assertThatThrownBy(() -> new DomainMark("", false)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new DomainMark("x".repeat(14), false)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("a mark holds only characters the server takes in a profile name: no space, nothing past ASCII")
+    void aMarkHoldsCharactersTheServerTakes() {
+        assertThat(new DomainMark("+", false).mark()).isEqualTo("+");
+        assertThat(new DomainMark("~!", true).mark()).isEqualTo("~!");
+        assertThatThrownBy(() -> new DomainMark(" ", false)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new DomainMark("\u2605", false)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new DomainMark("\u007f", false)).isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -111,6 +111,19 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("a rename mark the name pattern refuses is refused, since a renamed player types it to log in")
+    void aRenameMarkMustPassTheNamePattern(@TempDir Path folder) throws IOException {
+        assertThatThrownBy(() -> settingsFrom(folder, "ownership { rename-mark = \"+\" }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ownership.rename-mark")
+                .hasMessageContaining("names.pattern");
+        assertThat(settingsFrom(folder, "names { pattern = \"[A-Za-z0-9_+]+\" }\nownership { rename-mark = \"+\" }\n")
+                        .ownership()
+                        .renameMark())
+                .isEqualTo("+");
+    }
+
+    @Test
     @DisplayName("the UUID scheme is read in the words config.conf uses, and an unknown one is refused")
     void theUuidSchemeIsRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "ownership { uuid-scheme = mojang }\n")

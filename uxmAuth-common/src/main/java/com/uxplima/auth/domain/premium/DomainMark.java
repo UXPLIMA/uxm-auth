@@ -22,6 +22,11 @@ public record DomainMark(String mark, boolean atStart) {
             throw new IllegalArgumentException(
                     "the mark must be from 1 to " + (MarkedName.LONGEST - ROOM) + " characters, got: \"" + mark + "\"");
         }
+        // The server refuses a profile name with a space, a control character or anything past ASCII.
+        if (mark.chars().anyMatch(c -> c <= ' ' || c > '~')) {
+            throw new IllegalArgumentException(
+                    "the mark holds a character the server refuses in a name, got: \"" + mark + "\"");
+        }
     }
 
     /** The name a cracked player plays under. */

@@ -165,6 +165,13 @@ final class SettingsReader {
             throw new IllegalArgumentException("ownership.rename-mark must be from 1 to " + (MarkedName.LONGEST - 3)
                     + " characters, got: \"" + mark + "\"");
         }
+        // A renamed player types the marked name at their next login, so the operator's own pattern must take it.
+        if (!Pattern.compile(pattern(config, "names.pattern", "[A-Za-z0-9_]+"))
+                .matcher("Steve" + mark)
+                .matches()) {
+            throw new IllegalArgumentException("ownership.rename-mark \"" + mark
+                    + "\" makes names that names.pattern refuses, so a renamed player could never log in again");
+        }
         return mark;
     }
 
