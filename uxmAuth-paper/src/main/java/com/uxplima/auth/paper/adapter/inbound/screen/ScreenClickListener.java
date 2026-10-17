@@ -6,7 +6,9 @@ import java.util.function.Function;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 import io.papermc.paper.connection.PlayerGameConnection;
 import io.papermc.paper.dialog.DialogResponseView;
@@ -41,6 +43,12 @@ public final class ScreenClickListener implements Listener {
         scheduler.entity(player, () -> {
             CompletableFuture<Void> unused = answers.answer(guests.apply(player), action, answer);
         });
+    }
+
+    /** A player who leaves drops whatever they pressed on the pad. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        answers.forget(event.getPlayer().getUniqueId());
     }
 
     /** The fields as the client sent them, read once, so nothing holds the response after the event. */

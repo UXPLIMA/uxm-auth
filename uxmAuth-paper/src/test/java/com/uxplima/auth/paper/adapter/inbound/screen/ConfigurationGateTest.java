@@ -63,6 +63,7 @@ final class ConfigurationGateTest {
     private final List<DialogSpec> shown = new ArrayList<>();
     private final Welcomes welcomes = new Welcomes();
     private PlayerMock steve;
+    private @Nullable ScreenAnswers answers;
 
     @BeforeEach
     void setUp() {
@@ -125,6 +126,25 @@ final class ConfigurationGateTest {
         gate().onConfigure(new AsyncPlayerConnectionConfigureEvent(connection));
 
         verify(connection).disconnect(any(Component.class));
+    }
+
+    @Test
+    @DisplayName("digits pressed on the pad at the dialog are dropped when the wait ends")
+    void theEndOfAWaitDropsThePad() throws Exception {
+        world.registered(steve, "hunter22");
+        PlayerConfigurationConnection connection = connection(steve.getUniqueId());
+        ConfigurationGate gate = gate();
+        CompletableFuture<ConfigurationGate.Outcome> wait =
+                gate.open(connection).orElseThrow();
+        gate.answer(connection, PinPad.digit(4), typed("")).get(5, TimeUnit.SECONDS);
+        ScreenAnswers pressed = java.util.Objects.requireNonNull(answers);
+        assertThat(pressed.pinPad().peek(steve.getUniqueId())).isPresent();
+
+        gate.onClose(
+                new PlayerConnectionCloseEvent(steve.getUniqueId(), "Steve", InetAddress.getLoopbackAddress(), false));
+        wait.get(1, TimeUnit.SECONDS);
+
+        assertThat(pressed.pinPad().peek(steve.getUniqueId())).isEmpty();
     }
 
     @Test
@@ -277,8 +297,15 @@ final class ConfigurationGateTest {
             @Override
             public void close(Audience who) {}
         };
-        ScreenAnswers answers = new ScreenAnswers(
-                screens, world.register, world.logIn, () -> settings, () -> world.passwords, world.messages, shower);
+        answers = new ScreenAnswers(
+                screens,
+                world.register,
+                world.logIn,
+                () -> settings,
+                () -> world.passwords,
+                world.messages,
+                shower,
+                id -> world.sessions.state(id).orElse(null) instanceof AuthState.Unregistered);
         return new ConfigurationGate(
                 world.sessions,
                 () -> settings,

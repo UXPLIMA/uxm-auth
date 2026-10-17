@@ -46,7 +46,7 @@ public final class PaperScreens implements ScreenShower {
                 spec.buttons().stream().map(PaperScreens::button).toList();
         DialogType type = buttons.size() == 2
                 ? DialogType.confirmation(buttons.get(0), buttons.get(1))
-                : DialogType.multiAction(buttons).build();
+                : DialogType.multiAction(buttons).columns(spec.columns()).build();
         return Dialog.create(factory -> factory.empty().base(base).type(type));
     }
 

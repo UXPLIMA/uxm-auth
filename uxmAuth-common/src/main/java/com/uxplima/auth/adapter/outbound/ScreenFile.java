@@ -17,7 +17,7 @@ public final class ScreenFile {
     private static final Map<String, List<String>> LABELS = Map.of(
             "register", List.of("password", "confirm", "accept", "submit", "cancel"),
             "login", List.of("password", "submit", "cancel"),
-            "pin", List.of("erase", "enter", "cancel"));
+            "pin", List.of("erase", "enter", "cancel", "entered", "repeat", "mask"));
 
     private final Path file;
     private volatile ScreenSettings current;

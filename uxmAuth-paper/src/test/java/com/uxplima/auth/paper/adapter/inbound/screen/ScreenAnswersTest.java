@@ -16,6 +16,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.text.style.Styler;
 import com.uxplima.uxmlib.text.style.Theme;
@@ -183,7 +184,14 @@ final class ScreenAnswersTest {
             }
         };
         return new ScreenAnswers(
-                screens, world.register, world.logIn, () -> settings, () -> world.passwords, world.messages, shower);
+                screens,
+                world.register,
+                world.logIn,
+                () -> settings,
+                () -> world.passwords,
+                world.messages,
+                shower,
+                id -> world.sessions.state(id).orElse(null) instanceof AuthState.Unregistered);
     }
 
     private Guest guest() {

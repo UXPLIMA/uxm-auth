@@ -20,6 +20,7 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
@@ -132,7 +133,8 @@ final class AuthGraph implements AutoCloseable {
                 screenFile::current,
                 () -> settings.current().passwords(),
                 messages,
-                shower);
+                shower,
+                id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,

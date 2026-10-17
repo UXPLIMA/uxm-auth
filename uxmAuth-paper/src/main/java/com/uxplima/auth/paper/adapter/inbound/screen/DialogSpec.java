@@ -12,13 +12,30 @@ import net.kyori.adventure.text.Component;
  * player sees is decided here and the step to Paper's types is a translation with no choices in it.
  */
 public record DialogSpec(
-        Component title, List<Component> body, List<Input> inputs, List<Button> buttons, boolean canClose) {
+        Component title,
+        List<Component> body,
+        List<Input> inputs,
+        List<Button> buttons,
+        boolean canClose,
+        int columns) {
+
+    /** Two buttons to a row, as Paper lays out a screen with more than two. */
+    public static final int TWO_COLUMNS = 2;
 
     public DialogSpec {
         Objects.requireNonNull(title, "title");
         body = List.copyOf(Objects.requireNonNull(body, "body"));
         inputs = List.copyOf(Objects.requireNonNull(inputs, "inputs"));
         buttons = List.copyOf(Objects.requireNonNull(buttons, "buttons"));
+        if (columns < 1) {
+            throw new IllegalArgumentException("A screen has at least one column of buttons");
+        }
+    }
+
+    /** A screen with its buttons two to a row. */
+    public DialogSpec(
+            Component title, List<Component> body, List<Input> inputs, List<Button> buttons, boolean canClose) {
+        this(title, body, inputs, buttons, canClose, TWO_COLUMNS);
     }
 
     /** One field the player fills in, named by the key its answer comes back under. */

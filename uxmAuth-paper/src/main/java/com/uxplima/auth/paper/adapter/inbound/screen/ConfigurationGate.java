@@ -185,7 +185,10 @@ public final class ConfigurationGate implements Listener {
             connection.disconnect(messages.render(entry.reader(), Keys.KICK_ALREADY_ONLINE));
             return Optional.empty();
         }
-        CompletableFuture<Outcome> unused = done.whenComplete((outcome, failure) -> waiting.remove(id, entry));
+        CompletableFuture<Outcome> unused = done.whenComplete((outcome, failure) -> {
+            waiting.remove(id, entry);
+            answers.forget(id);
+        });
         done.completeOnTimeout(Outcome.TIMEOUT, limit(state).toMillis(), TimeUnit.MILLISECONDS);
         shower.show(entry.reader(), firstScreen(entry));
         return Optional.of(done);

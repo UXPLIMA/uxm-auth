@@ -156,6 +156,9 @@ public enum Keys implements MessageKey {
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),
     SCREEN_PIN_ENTER("screen.pin.enter", "Enter"),
     SCREEN_PIN_CANCEL("screen.pin.cancel", "Leave"),
+    SCREEN_PIN_ENTERED("screen.pin.entered", "<body>Code: <value><code>"),
+    SCREEN_PIN_REPEAT("screen.pin.repeat", "<body>Press the same code once more to confirm it."),
+    SCREEN_PIN_MASK("screen.pin.mask", "●"),
     RULES_LINE_1("rules.line-1", "<body>Be kind to other players."),
     RULES_LINE_2("rules.line-2", "<body>No cheating and no griefing.");
     private final String path;

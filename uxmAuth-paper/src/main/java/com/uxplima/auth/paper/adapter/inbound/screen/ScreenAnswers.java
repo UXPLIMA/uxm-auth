@@ -1,7 +1,9 @@
 package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import net.kyori.adventure.audience.Audience;
@@ -44,7 +46,10 @@ public final class ScreenAnswers {
     private final Supplier<AuthSettings.Passwords> passwords;
     private final Messages messages;
     private final ScreenShower shower;
+    private final Predicate<UUID> registering;
+    private final PinPad pad = new PinPad();
 
+    /** @param registering whether the session under this id waits for an account rather than a password */
     public ScreenAnswers(
             AuthScreens screens,
             RegisterAccount register,
@@ -52,7 +57,8 @@ public final class ScreenAnswers {
             Supplier<ScreenSettings> settings,
             Supplier<AuthSettings.Passwords> passwords,
             Messages messages,
-            ScreenShower shower) {
+            ScreenShower shower,
+            Predicate<UUID> registering) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -60,6 +66,17 @@ public final class ScreenAnswers {
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.shower = Objects.requireNonNull(shower, "shower");
+        this.registering = Objects.requireNonNull(registering, "registering");
+    }
+
+    /** The pad's digits, for whoever ends a connection to drop them. */
+    PinPad pinPad() {
+        return pad;
+    }
+
+    /** Drops anything a connection pressed and did not hand over. */
+    public void forget(UUID connection) {
+        pad.forget(connection);
     }
 
     /** Runs one press, answering when the guest has been shown the outcome. */
@@ -67,6 +84,9 @@ public final class ScreenAnswers {
         Objects.requireNonNull(guest, "guest");
         Objects.requireNonNull(action, "action");
         Objects.requireNonNull(answer, "answer");
+        if (PinPad.handles(action)) {
+            return press(guest, action, answer);
+        }
         // A screen is another way to type the command, so it asks the command's permission.
         return switch (action) {
             case AuthScreens.LOGIN ->
@@ -76,6 +96,41 @@ public final class ScreenAnswers {
             case AuthScreens.CANCEL -> cancel(guest);
             default -> CompletableFuture.completedFuture(null);
         };
+    }
+
+    private CompletableFuture<Void> press(Guest guest, String action, Answer answer) {
+        boolean registers = registering.test(guest.id());
+        boolean twice = registers && passwords.get().confirmOnRegister();
+        PinPad.Step step = pad.press(guest.id(), action, twice, passwords.get().maxLength());
+        return switch (step) {
+            case PinPad.Shown shown -> {
+                shower.show(
+                        guest.audience(),
+                        screens.pad(guest.audience(), null, shown.entered(), shown.repeating(), registers));
+                yield CompletableFuture.completedFuture(null);
+            }
+            case PinPad.Code code -> {
+                Answer typed = new Typed(code, answer);
+                yield registers ? answer(guest, AuthScreens.REGISTER, typed) : answer(guest, AuthScreens.LOGIN, typed);
+            }
+        };
+    }
+
+    /** The code from the pad, read as the fields a typed screen sends, with the rules box as pressed. */
+    private record Typed(PinPad.Code code, Answer pressed) implements Answer {
+        @Override
+        public @Nullable String text(String key) {
+            return switch (key) {
+                case AuthScreens.PASSWORD -> code.first();
+                case AuthScreens.CONFIRM -> code.second();
+                default -> null;
+            };
+        }
+
+        @Override
+        public boolean ticked(String key) {
+            return pressed.ticked(key);
+        }
     }
 
     private CompletableFuture<Void> login(Guest guest, Answer answer) {
@@ -148,6 +203,7 @@ public final class ScreenAnswers {
     }
 
     private CompletableFuture<Void> cancel(Guest guest) {
+        pad.forget(guest.id());
         if (settings.get().cancel() == ScreenSettings.Cancel.KICK) {
             guest.kick(messages.render(guest.audience(), Keys.KICK_CANCELLED));
         } else {

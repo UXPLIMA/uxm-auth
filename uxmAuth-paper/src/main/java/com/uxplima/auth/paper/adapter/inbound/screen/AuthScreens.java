@@ -1,13 +1,17 @@
 package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
@@ -34,6 +38,9 @@ public final class AuthScreens {
     public static final String CONFIRM = "confirm";
     public static final String ACCEPT = "accept";
 
+    /** The pad's digits sit three to a row, as on a telephone. */
+    static final int PAD_COLUMNS = 3;
+
     private static final String KEY_MARK = "@";
 
     private final Supplier<ScreenSettings> screens;
@@ -56,6 +63,9 @@ public final class AuthScreens {
     public DialogSpec register(Audience reader, @Nullable Component reason) {
         Objects.requireNonNull(reader, "reader");
         ScreenSettings settings = screens.get();
+        if (settings.pinPad()) {
+            return pad(reader, reason, 0, false, true);
+        }
         ScreenSettings.Screen screen = settings.register();
         List<Component> body = start(reason);
         if (settings.rules().enabled()) {
@@ -78,6 +88,9 @@ public final class AuthScreens {
     public DialogSpec login(Audience reader, @Nullable Component reason) {
         Objects.requireNonNull(reader, "reader");
         ScreenSettings settings = screens.get();
+        if (settings.pinPad()) {
+            return pad(reader, reason, 0, false, false);
+        }
         ScreenSettings.Screen screen = settings.login();
         List<Component> body = start(reason);
         screen.body().forEach(line -> body.add(text(reader, line)));
@@ -87,6 +100,46 @@ public final class AuthScreens {
                 List.of(password(reader, screen, PASSWORD)),
                 buttons(reader, screen, LOGIN),
                 settings.canClose());
+    }
+
+    /**
+     * The pad: the digits in rows of three, erase and enter beside the zero, and a line under it that masks
+     * every digit pressed so far. A registration carries the rules box while the rules are on.
+     */
+    public DialogSpec pad(
+            Audience reader, @Nullable Component reason, int entered, boolean repeating, boolean registering) {
+        Objects.requireNonNull(reader, "reader");
+        ScreenSettings settings = screens.get();
+        ScreenSettings.Screen pin = settings.pin();
+        List<Component> body = start(reason);
+        if (registering && settings.rules().enabled()) {
+            settings.rules().lines().forEach(line -> body.add(text(reader, line)));
+        }
+        pin.body().forEach(line -> body.add(text(reader, line)));
+        if (repeating) {
+            body.add(text(reader, pin.label("repeat")));
+        }
+        Component mask = text(reader, pin.label("mask"));
+        Component code = Component.join(JoinConfiguration.noSeparators(), Collections.nCopies(entered, mask));
+        body.add(text(reader, pin.label("entered"), Placeholder.component("code", code)));
+        List<DialogSpec.Input> inputs = registering && settings.rules().enabled()
+                ? List.of(new DialogSpec.Toggle(
+                        ACCEPT, text(reader, settings.register().label(ACCEPT))))
+                : List.of();
+        return new DialogSpec(
+                text(reader, pin.title()), body, inputs, padButtons(reader, pin), settings.canClose(), PAD_COLUMNS);
+    }
+
+    private List<DialogSpec.Button> padButtons(Audience reader, ScreenSettings.Screen pin) {
+        List<DialogSpec.Button> buttons = new ArrayList<>();
+        for (int digit = 1; digit <= 9; digit++) {
+            buttons.add(new DialogSpec.Button(Component.text(digit), PinPad.digit(digit)));
+        }
+        buttons.add(new DialogSpec.Button(text(reader, pin.label("erase")), PinPad.ERASE));
+        buttons.add(new DialogSpec.Button(Component.text(0), PinPad.digit(0)));
+        buttons.add(new DialogSpec.Button(text(reader, pin.label("enter")), PinPad.ENTER));
+        buttons.add(new DialogSpec.Button(text(reader, pin.label(CANCEL)), CANCEL));
+        return buttons;
     }
 
     private static List<Component> start(@Nullable Component reason) {
@@ -109,11 +162,12 @@ public final class AuthScreens {
     }
 
     /** A line of the catalogue when it starts with @, the operator's own MiniMessage otherwise. */
-    Component text(Audience reader, String written) {
+    Component text(Audience reader, String written, TagResolver... resolvers) {
         if (written.startsWith(KEY_MARK)) {
             String path = written.substring(KEY_MARK.length());
-            return messages.render(reader, MessageKey.of(path, path));
+            return messages.render(reader, MessageKey.of(path, path), resolvers);
         }
-        return MiniMessage.miniMessage().deserialize(styler.tokens(written, messages.localeOf(reader)));
+        return MiniMessage.miniMessage()
+                .deserialize(styler.tokens(written, messages.localeOf(reader)), TagResolver.resolver(resolvers));
     }
 }
