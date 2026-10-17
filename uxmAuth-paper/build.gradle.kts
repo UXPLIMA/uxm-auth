@@ -108,6 +108,10 @@ tasks.shadowJar {
     relocate("reactor", "com.uxplima.auth.libs.reactor")
     relocate("org.reactivestreams", "com.uxplima.auth.libs.reactivestreams")
     relocate("redis.clients.authentication", "com.uxplima.auth.libs.redisauth")
+    // uxmlib-storage pools connections with HikariCP and caches with Caffeine. Another plugin may ship either, at
+    // another version, so ours carry our namespace. The JDBC drivers stay where they are: they are found by name.
+    relocate("com.zaxxer.hikari", "com.uxplima.auth.libs.hikari")
+    relocate("com.github.benmanes.caffeine", "com.uxplima.auth.libs.caffeine")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC")
 
     dependencies {
@@ -151,6 +155,8 @@ val forbiddenJarEntries =
         "io/netty/" to "Netty must be relocated: the server ships its own, at another version.",
         "reactor/" to "Reactor must be relocated.",
         "org/reactivestreams/" to "Reactive Streams must be relocated.",
+        "com/zaxxer/hikari/" to "HikariCP must be relocated, or another plugin's copy is the one that loads.",
+        "com/github/benmanes/caffeine/" to "Caffeine must be relocated, or another plugin's copy is the one that loads.",
         "org/bstats/" to "bstats must be relocated when it is taken at all.",
     )
 
