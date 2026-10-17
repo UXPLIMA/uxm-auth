@@ -1,7 +1,7 @@
 package com.uxplima.auth.application.port;
 
-import com.uxplima.auth.application.premium.PremiumAnswer;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 
 /**
  * One place on the web that knows whether a name is a paid account's.

@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import com.uxplima.auth.application.port.NameSource;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.testing.AuthFixture;
 import com.uxplima.auth.testing.TurnedClock;
 import org.junit.jupiter.api.DisplayName;

@@ -18,6 +18,12 @@ import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.auth.domain.premium.Arrival;
+import com.uxplima.auth.domain.premium.Decision;
+import com.uxplima.auth.domain.premium.Holder;
+import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
+import com.uxplima.auth.domain.premium.WhenUnknown;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -50,6 +56,66 @@ final class AuthSettingsTest {
         assertThat(settings.premium().timeout()).isEqualTo(Duration.ofSeconds(3));
         assertThat(settings.premium().address(PremiumSource.MOJANG))
                 .isEqualTo("https://api.mojang.com/users/profiles/minecraft/{name}");
+    }
+
+    @Test
+    @DisplayName("who owns a name defaults to the automatic rule, cracked when nobody can say, five minutes of memory")
+    void ownershipDefaults(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot settings = settingsFrom(folder, "");
+
+        assertThat(settings.ownership())
+                .isEqualTo(new AuthSettings.Ownership(
+                        NameRule.AUTOMATIC, WhenUnknown.CRACKED, Duration.ofMinutes(5), List.of(), List.of()));
+    }
+
+    @Test
+    @DisplayName("the rule and the failure policy are read in the words config.conf uses")
+    void ownershipReadsItsWords(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot settings = settingsFrom(folder, """
+                ownership {
+                  rule = opt-in
+                  when-every-source-fails = refuse
+                }
+                """);
+
+        assertThat(settings.ownership().rule()).isEqualTo(NameRule.OPT_IN);
+        assertThat(settings.ownership().whenUnknown()).isEqualTo(WhenUnknown.REFUSE);
+    }
+
+    @Test
+    @DisplayName("a rule this plugin does not have is refused, naming the line and the four it has")
+    void anUnknownRuleIsRefused(@TempDir Path folder) {
+        assertThatThrownBy(() -> settingsFrom(folder, "ownership { rule = mixed }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ownership.rule")
+                .hasMessageContaining("mixed")
+                .hasMessageContaining("opt-in");
+    }
+
+    @Test
+    @DisplayName("the domain rule without an address for paid accounts is refused, since nobody could prove a name")
+    void theDomainRuleNeedsAPremiumAddress(@TempDir Path folder) {
+        assertThatThrownBy(() -> settingsFrom(folder, "ownership { rule = domain }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ownership.domains.premium");
+    }
+
+    @Test
+    @DisplayName("the operator's rule is the decision the door makes")
+    void theRuleIsTheDecision(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot settings = settingsFrom(folder, """
+                ownership {
+                  rule = domain
+                  domains { premium = ["premium.example.org"] }
+                }
+                """);
+
+        assertThat(settings.ownership()
+                        .decision()
+                        .decide(
+                                new Arrival(Holder.NOBODY, false, false, "premium.example.org"),
+                                PremiumAnswer.Unknown::new))
+                .isEqualTo(new Decision.Handshake());
     }
 
     @Test

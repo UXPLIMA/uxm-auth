@@ -15,6 +15,8 @@ import java.util.regex.PatternSyntaxException;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
+import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.uxmlib.config.HoconConfig;
 
 /**
@@ -120,6 +122,37 @@ final class SettingsReader {
                 addresses);
     }
 
+    static AuthSettings.Ownership ownership(HoconConfig config) {
+        NameRule rule = word(config, "ownership.rule", "automatic", NameRule.class);
+        List<String> premiumDomains = list(config, "ownership.domains", "premium", List.of());
+        if (rule == NameRule.DOMAIN && premiumDomains.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "ownership.domains.premium is empty, and the domain rule needs the address paid accounts join through");
+        }
+        return new AuthSettings.Ownership(
+                rule,
+                word(config, "ownership.when-every-source-fails", "cracked", WhenUnknown.class),
+                Duration.ofSeconds(positive(config, "ownership.failed-memory-seconds", 300)),
+                premiumDomains,
+                list(config, "ownership.domains", "cracked", List.of()));
+    }
+
+    /** One of an enum's constants, written in config.conf in lower case with dashes. */
+    private static <E extends Enum<E>> E word(HoconConfig config, String path, String fallback, Class<E> type) {
+        String written = config.getString(path, fallback);
+        String name = written.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        for (E constant : type.getEnumConstants()) {
+            if (constant.name().equals(name)) {
+                return constant;
+            }
+        }
+        List<String> known = Arrays.stream(type.getEnumConstants())
+                .map(constant -> constant.name().toLowerCase(Locale.ROOT).replace('_', '-'))
+                .toList();
+        throw new IllegalArgumentException(
+                path + " is " + written + ", and this plugin knows " + String.join(", ", known));
+    }
+
     private static List<PremiumSource> sources(HoconConfig config) {
         List<String> shipped =
                 Arrays.stream(PremiumSource.values()).map(PremiumSource::key).toList();
@@ -159,7 +192,7 @@ final class SettingsReader {
      * default, so the node is asked whether it exists before it is read.
      */
     private static List<String> list(HoconConfig config, String block, String name, List<String> shipped) {
-        if (config.nodeAt(block, name).virtual()) {
+        if (config.nodeAt((Object[]) (block + "." + name).split("\\.")).virtual()) {
             return shipped;
         }
         return List.copyOf(config.getList(block + "." + name, String.class));

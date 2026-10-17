@@ -1,4 +1,4 @@
-package com.uxplima.auth.application.premium;
+package com.uxplima.auth.domain.premium;
 
 import java.util.Objects;
 import java.util.UUID;

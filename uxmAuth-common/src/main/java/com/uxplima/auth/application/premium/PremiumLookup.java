@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.NameSource;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 
 /**
  * Asks the web whether a name is a paid account's: the sources in the operator's order, the first one that

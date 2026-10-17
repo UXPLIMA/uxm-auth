@@ -10,6 +10,10 @@ import java.util.Set;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
+import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.domain.premium.NameOwnership;
+import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.WhenUnknown;
 
 /** The blocks of {@code config.conf} that decide how a player gets in, one immutable record each. */
 public final class AuthSettings {
@@ -51,6 +55,31 @@ public final class AuthSettings {
         /** Where this source answers, with {@code {name}} in place of the name. */
         public String address(PremiumSource source) {
             return addresses.getOrDefault(Objects.requireNonNull(source, "source"), source.shippedAddress());
+        }
+    }
+
+    /**
+     * Who owns a name: the rule, what a name nobody could look up is taken for, how long a failed handshake is
+     * remembered, and the addresses of the domain rule.
+     */
+    public record Ownership(
+            NameRule rule,
+            WhenUnknown whenUnknown,
+            Duration failedMemory,
+            List<String> premiumDomains,
+            List<String> crackedDomains) {
+        public Ownership {
+            Objects.requireNonNull(rule, "rule");
+            Objects.requireNonNull(whenUnknown, "whenUnknown");
+            Objects.requireNonNull(failedMemory, "failedMemory");
+            premiumDomains = List.copyOf(Objects.requireNonNull(premiumDomains, "premiumDomains"));
+            crackedDomains = List.copyOf(Objects.requireNonNull(crackedDomains, "crackedDomains"));
+        }
+
+        /** The decision the door makes under this rule. */
+        public NameOwnership decision() {
+            return new NameOwnership(
+                    rule, whenUnknown, new HostPatterns(premiumDomains), new HostPatterns(crackedDomains));
         }
     }
 

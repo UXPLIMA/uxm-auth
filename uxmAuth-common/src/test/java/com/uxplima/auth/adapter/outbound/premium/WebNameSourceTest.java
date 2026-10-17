@@ -16,8 +16,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.sun.net.httpserver.HttpServer;
-import com.uxplima.auth.application.premium.PremiumAnswer;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

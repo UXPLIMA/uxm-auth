@@ -13,8 +13,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.NameSource;
-import com.uxplima.auth.application.premium.PremiumAnswer;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 
 /**
  * One web source, asked over HTTP at the address config.conf gives it, with {@code {name}} replaced by the
