@@ -88,6 +88,18 @@ final class ClaimsTest {
     }
 
     @Test
+    @DisplayName(
+            "a player still waiting for a password is vouched for with what the door decided, signed as a login is")
+    void aWaitingPlayerReadsBack() {
+        Claim waiting = new Claim(STEVE, "Steve+", new Claim.Waiting(true, false, true), NOW, "n0nce");
+
+        assertThat(claims.read(claims.sign(waiting), STEVE, "Steve+", NOW))
+                .isEqualTo(new Claims.Reading.Valid(waiting));
+        assertThat(new Claim(STEVE, "Steve", AuthMethod.PREMIUM, NOW, "n0nce").standing())
+                .isEqualTo(new Claim.LoggedIn(AuthMethod.PREMIUM));
+    }
+
+    @Test
     @DisplayName("a secret is at least 32 characters, and a fresh one is 43 that read back the same")
     void aSecretIsLongEnough() {
         assertThatThrownBy(() -> NetworkSecret.parse("short")).isInstanceOf(IllegalArgumentException.class);
