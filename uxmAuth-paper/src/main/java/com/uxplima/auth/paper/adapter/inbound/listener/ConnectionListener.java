@@ -157,6 +157,7 @@ public final class ConnectionListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID id = player.getUniqueId();
+        door.leave(player);
         Joined mine = joined.get(id);
         if (mine == null || mine.player() != player) {
             return;

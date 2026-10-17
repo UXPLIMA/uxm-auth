@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 
 import org.bukkit.entity.Player;
 
@@ -21,12 +22,17 @@ public final class Greeter {
 
     private final MomentRunner moments;
     private final BiConsumer<Player, Runnable> later;
+    private final Predicate<Player> stillWaiting;
     private final Map<UUID, AuthSettings.Moment> waiting = new ConcurrentHashMap<>();
 
-    /** @param later runs the fallback a moment later on the player's own thread */
-    public Greeter(MomentRunner moments, BiConsumer<Player, Runnable> later) {
+    /**
+     * @param later runs the fallback a moment later on the player's own thread
+     * @param stillWaiting whether the player still waits at the door, asked again when the greeting runs
+     */
+    public Greeter(MomentRunner moments, BiConsumer<Player, Runnable> later, Predicate<Player> stillWaiting) {
         this.moments = Objects.requireNonNull(moments, "moments");
         this.later = Objects.requireNonNull(later, "later");
+        this.stillWaiting = Objects.requireNonNull(stillWaiting, "stillWaiting");
     }
 
     public void greet(Player player, AuthSettings.Moment moment) {
@@ -41,9 +47,15 @@ public final class Greeter {
         flush(Objects.requireNonNull(player, "player"));
     }
 
+    /** Drops a greeting that has not run, because the player got in or left first. */
+    public void forget(Player player) {
+        waiting.remove(Objects.requireNonNull(player, "player").getUniqueId());
+    }
+
+    /** Runs a waiting greeting, if the player is still the one at the door it was meant for. */
     private void flush(Player player) {
         AuthSettings.Moment moment = waiting.remove(player.getUniqueId());
-        if (moment != null && player.isOnline()) {
+        if (moment != null && player.isOnline() && stillWaiting.test(player)) {
             moments.fire(player, moment);
         }
     }

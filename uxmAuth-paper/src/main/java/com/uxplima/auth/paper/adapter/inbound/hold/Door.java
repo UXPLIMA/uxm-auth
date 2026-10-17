@@ -45,6 +45,11 @@ public final class Door {
                         : AuthSettings.Moment.JOIN_REGISTERED);
     }
 
+    /** The player left: a greeting that waited for them is dropped. */
+    public void leave(Player player) {
+        greeter.forget(player);
+    }
+
     /** The client said what language it reads, so a greeting that waited for it can run. */
     public void languageKnown(Player player) {
         greeter.languageKnown(player);
@@ -54,6 +59,7 @@ public final class Door {
     public void open(Player player, AuthSettings.Moment moment) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(moment, "moment");
+        greeter.forget(player);
         keeper.giveBack(player);
         moments.fire(player, moment);
     }

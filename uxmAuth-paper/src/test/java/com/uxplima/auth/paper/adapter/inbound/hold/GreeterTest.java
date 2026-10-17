@@ -22,13 +22,16 @@ final class GreeterTest {
     private ServerMock server;
     private final List<AuthSettings.Moment> fired = new ArrayList<>();
     private final List<Runnable> later = new ArrayList<>();
+    private final java.util.Set<java.util.UUID> waitingPlayers = new java.util.HashSet<>();
     private Greeter greeter;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         greeter = new Greeter(
-                (Player player, AuthSettings.Moment moment) -> fired.add(moment), (player, task) -> later.add(task));
+                (Player player, AuthSettings.Moment moment) -> fired.add(moment),
+                (player, task) -> later.add(task),
+                player -> waitingPlayers.contains(player.getUniqueId()));
     }
 
     @AfterEach
@@ -39,7 +42,7 @@ final class GreeterTest {
     @Test
     @DisplayName("the join moment waits for the client to say its language, and runs once")
     void theJoinMomentWaitsForTheClientLanguage() {
-        PlayerMock steve = server.addPlayer("Steve");
+        PlayerMock steve = waiting(server.addPlayer("Steve"));
 
         greeter.greet(steve, AuthSettings.Moment.JOIN_REGISTERED);
         assertThat(fired).isEmpty();
@@ -53,7 +56,7 @@ final class GreeterTest {
     @Test
     @DisplayName("a client that never reports a language is greeted anyway, a moment later")
     void aSilentClientIsGreetedAfterTheFallback() {
-        PlayerMock steve = server.addPlayer("Steve");
+        PlayerMock steve = waiting(server.addPlayer("Steve"));
 
         greeter.greet(steve, AuthSettings.Moment.JOIN_UNREGISTERED);
         later.forEach(Runnable::run);
@@ -64,12 +67,43 @@ final class GreeterTest {
     @Test
     @DisplayName("a language change long after the greeting greets nobody again")
     void aLaterLanguageChangeIsNotAGreeting() {
-        PlayerMock steve = server.addPlayer("Steve");
+        PlayerMock steve = waiting(server.addPlayer("Steve"));
         greeter.greet(steve, AuthSettings.Moment.JOIN_REGISTERED);
         later.forEach(Runnable::run);
 
         greeter.languageKnown(steve);
 
         assertThat(fired).containsExactly(AuthSettings.Moment.JOIN_REGISTERED);
+    }
+
+    @Test
+    @DisplayName("a player who got in before the greeting ran is not greeted as one who waits")
+    void aLoginBeforeTheGreetingCancelsIt() {
+        PlayerMock steve = waiting(server.addPlayer("Steve"));
+        greeter.greet(steve, AuthSettings.Moment.JOIN_REGISTERED);
+
+        waitingPlayers.remove(steve.getUniqueId());
+        greeter.forget(steve);
+        greeter.languageKnown(steve);
+        later.forEach(Runnable::run);
+
+        assertThat(fired).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a greeting whose player no longer waits is dropped even without a forget")
+    void aGreetingChecksThePlayerStillWaits() {
+        PlayerMock steve = waiting(server.addPlayer("Steve"));
+        greeter.greet(steve, AuthSettings.Moment.JOIN_REGISTERED);
+
+        waitingPlayers.remove(steve.getUniqueId());
+        later.forEach(Runnable::run);
+
+        assertThat(fired).isEmpty();
+    }
+
+    private PlayerMock waiting(PlayerMock player) {
+        waitingPlayers.add(player.getUniqueId());
+        return player;
     }
 }

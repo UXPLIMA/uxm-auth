@@ -100,8 +100,8 @@ final class AuthGraph implements AutoCloseable {
         WaitingClock waiting =
                 new WaitingClock(scheduler, sessions, () -> settings.current().timeouts(), clock, moments, messages);
         // A second is enough for a client to report its language; an English one may never report it.
-        Greeter greeter =
-                new Greeter(moments, (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task));
+        Greeter greeter = new Greeter(
+                moments, (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task), hold::isHeld);
         Door door = new Door(sessions, keeper, waiting, moments, greeter);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
 

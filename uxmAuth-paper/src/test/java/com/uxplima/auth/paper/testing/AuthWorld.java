@@ -102,7 +102,17 @@ public final class AuthWorld implements AutoCloseable {
                 clock,
                 moments,
                 messages);
-        this.door = new Door(sessions, keeper, waiting, moments, new Greeter(moments, (player, task) -> task.run()));
+        this.door = new Door(
+                sessions,
+                keeper,
+                waiting,
+                moments,
+                new Greeter(
+                        moments,
+                        (player, task) -> task.run(),
+                        player -> sessions.state(player.getUniqueId())
+                                .filter(state -> !(state instanceof AuthState.Authenticated))
+                                .isPresent()));
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy);
