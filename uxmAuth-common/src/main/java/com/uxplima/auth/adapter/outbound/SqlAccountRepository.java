@@ -22,13 +22,13 @@ import org.jspecify.annotations.Nullable;
 public final class SqlAccountRepository implements AccountRepository {
 
     private static final String COLUMNS = "id, name, name_key, kind, premium_id, password, registered_at,"
-            + " registration_address, last_login_at, last_address";
+            + " registration_address, last_login_at, last_address, unverified";
     private static final String SELECT = "SELECT " + COLUMNS + " FROM uxmauth_account WHERE ";
     private static final String INSERT =
-            "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
             + " premium_id = ?, password = ?, registered_at = ?, registration_address = ?, last_login_at = ?,"
-            + " last_address = ? WHERE id = ?";
+            + " last_address = ?, unverified = ? WHERE id = ?";
     private static final String RECORD_LOGIN =
             "UPDATE uxmauth_account SET last_login_at = ?, last_address = ? WHERE id = ?";
     private static final String REPLACE_PASSWORD =
@@ -85,7 +85,7 @@ public final class SqlAccountRepository implements AccountRepository {
         Objects.requireNonNull(account, "account");
         database.inTransaction(sql -> sql.update(UPDATE, statement -> {
             bindFields(statement, 1, account);
-            statement.setString(10, account.id().toString());
+            statement.setString(11, account.id().toString());
         }));
     }
 
@@ -141,7 +141,8 @@ public final class SqlAccountRepository implements AccountRepository {
         statement.setLong(column++, account.registeredAt().toEpochMilli());
         statement.setString(column++, account.registrationAddress());
         setMillis(statement, column++, account.lastLoginAt());
-        setText(statement, column, account.lastAddress());
+        setText(statement, column++, account.lastAddress());
+        statement.setInt(column, account.unverified() ? 1 : 0);
     }
 
     private static Account read(ResultSet row) throws SQLException {
@@ -158,7 +159,8 @@ public final class SqlAccountRepository implements AccountRepository {
                 Instant.ofEpochMilli(row.getLong("registered_at")),
                 row.getString("registration_address"),
                 lastLoginAt,
-                row.getString("last_address"));
+                row.getString("last_address"),
+                row.getInt("unverified") != 0);
     }
 
     private static void setText(PreparedStatement statement, int column, @Nullable String value) throws SQLException {

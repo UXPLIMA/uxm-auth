@@ -23,6 +23,7 @@ import com.uxplima.auth.domain.premium.Decision;
 import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
+import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -65,7 +66,25 @@ final class AuthSettingsTest {
 
         assertThat(settings.ownership())
                 .isEqualTo(new AuthSettings.Ownership(
-                        NameRule.AUTOMATIC, WhenUnknown.CRACKED, Duration.ofMinutes(5), List.of(), List.of()));
+                        NameRule.AUTOMATIC,
+                        WhenUnknown.CRACKED,
+                        Duration.ofMinutes(5),
+                        List.of(),
+                        List.of(),
+                        UuidScheme.KEEP_FIRST));
+    }
+
+    @Test
+    @DisplayName("the UUID scheme is read in the words config.conf uses, and an unknown one is refused")
+    void theUuidSchemeIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "ownership { uuid-scheme = mojang }\n")
+                        .ownership()
+                        .uuidScheme())
+                .isEqualTo(UuidScheme.MOJANG);
+        assertThatThrownBy(() -> settingsFrom(folder, "ownership { uuid-scheme = by-name }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ownership.uuid-scheme")
+                .hasMessageContaining("keep-first");
     }
 
     @Test

@@ -16,6 +16,7 @@ import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.uxmlib.config.HoconConfig;
 
@@ -134,7 +135,8 @@ final class SettingsReader {
                 word(config, "ownership.when-every-source-fails", "cracked", WhenUnknown.class),
                 Duration.ofSeconds(positive(config, "ownership.failed-memory-seconds", 300)),
                 premiumDomains,
-                list(config, "ownership.domains", "cracked", List.of()));
+                list(config, "ownership.domains", "cracked", List.of()),
+                word(config, "ownership.uuid-scheme", "keep-first", UuidScheme.class));
     }
 
     /** One of an enum's constants, written in config.conf in lower case with dashes. */

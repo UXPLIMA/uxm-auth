@@ -13,6 +13,7 @@ import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 
 /** The blocks of {@code config.conf} that decide how a player gets in, one immutable record each. */
@@ -60,15 +61,17 @@ public final class AuthSettings {
 
     /**
      * Who owns a name: the rule, what a name nobody could look up is taken for, how long a failed handshake is
-     * remembered, and the addresses of the domain rule.
+     * remembered, the addresses of the domain rule, and the UUID a player plays under.
      */
     public record Ownership(
             NameRule rule,
             WhenUnknown whenUnknown,
             Duration failedMemory,
             List<String> premiumDomains,
-            List<String> crackedDomains) {
+            List<String> crackedDomains,
+            UuidScheme uuidScheme) {
         public Ownership {
+            Objects.requireNonNull(uuidScheme, "uuidScheme");
             Objects.requireNonNull(rule, "rule");
             Objects.requireNonNull(whenUnknown, "whenUnknown");
             Objects.requireNonNull(failedMemory, "failedMemory");

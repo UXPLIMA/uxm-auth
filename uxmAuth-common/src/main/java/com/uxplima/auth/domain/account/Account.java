@@ -12,7 +12,9 @@ import org.jspecify.annotations.Nullable;
  * One account: who it is, how it proves it, and when and where it was last used.
  *
  * <p>The password is absent for an account that never had one, a premium or Bedrock player who was let in
- * by the handshake or by Xbox Live. The premium id is the Mojang UUID once the account has proved one.
+ * by the handshake or by Xbox Live. The premium id is the Mojang UUID once the account has proved one. An
+ * unverified account was taken while no premium source could say who owns its name, so the next connection
+ * under it asks again.
  */
 public record Account(
         UUID id,
@@ -23,7 +25,8 @@ public record Account(
         Instant registeredAt,
         String registrationAddress,
         @Nullable Instant lastLoginAt,
-        @Nullable String lastAddress) {
+        @Nullable String lastAddress,
+        boolean unverified) {
 
     public Account {
         Objects.requireNonNull(id, "id");
@@ -33,17 +36,62 @@ public record Account(
         Objects.requireNonNull(registrationAddress, "registrationAddress");
     }
 
+    /** An account nobody doubts, as every account is when it is made. */
+    public Account(
+            UUID id,
+            PlayerName name,
+            AccountKind kind,
+            @Nullable UUID premiumId,
+            @Nullable PasswordHash password,
+            Instant registeredAt,
+            String registrationAddress,
+            @Nullable Instant lastLoginAt,
+            @Nullable String lastAddress) {
+        this(id, name, kind, premiumId, password, registeredAt, registrationAddress, lastLoginAt, lastAddress, false);
+    }
+
+    /** The same account, taken while no premium source could say who owns its name. */
+    public Account asUnverified() {
+        return new Account(
+                id, name, kind, premiumId, password, registeredAt, registrationAddress, lastLoginAt, lastAddress, true);
+    }
+
+    /** The same account, once a source has said who owns its name. */
+    public Account asVerified() {
+        return new Account(
+                id,
+                name,
+                kind,
+                premiumId,
+                password,
+                registeredAt,
+                registrationAddress,
+                lastLoginAt,
+                lastAddress,
+                false);
+    }
+
     /** The same account with a new password, as after a change or a rehash. */
     public Account withPassword(PasswordHash fresh) {
         Objects.requireNonNull(fresh, "fresh");
         return new Account(
-                id, name, kind, premiumId, fresh, registeredAt, registrationAddress, lastLoginAt, lastAddress);
+                id,
+                name,
+                kind,
+                premiumId,
+                fresh,
+                registeredAt,
+                registrationAddress,
+                lastLoginAt,
+                lastAddress,
+                unverified);
     }
 
     /** The same account after a login at this moment from this address. */
     public Account loggedIn(Instant at, String address) {
         Objects.requireNonNull(at, "at");
         Objects.requireNonNull(address, "address");
-        return new Account(id, name, kind, premiumId, password, registeredAt, registrationAddress, at, address);
+        return new Account(
+                id, name, kind, premiumId, password, registeredAt, registrationAddress, at, address, unverified);
     }
 }

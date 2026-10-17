@@ -148,6 +148,20 @@ final class SqlAccountRepositoryTest {
     }
 
     @Test
+    @DisplayName("an account taken while nobody could say who owns the name comes back unverified, until verified")
+    void unverifiedRoundTrips() {
+        Account taken = cracked("Notch", "10.0.0.1").asUnverified();
+        repository.insert(taken);
+
+        assertThat(repository.findById(taken.id()))
+                .hasValueSatisfying(found -> assertThat(found.unverified()).isTrue());
+
+        repository.update(taken.asVerified());
+        assertThat(repository.findById(taken.id()))
+                .hasValueSatisfying(found -> assertThat(found.unverified()).isFalse());
+    }
+
+    @Test
     @DisplayName("a name nobody registered finds nothing")
     void anUnknownNameFindsNothing() {
         assertThat(repository.findByName(new PlayerName("Nobody"))).isEmpty();

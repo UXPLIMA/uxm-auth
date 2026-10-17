@@ -16,6 +16,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
@@ -175,17 +176,25 @@ final class PluginModule {
      * Open the database and bring its tables up to date.
      *
      * <p>Done at enable, before anything that reads an account is registered, so the first join finds the
-     * tables. The migrations are read from the jar, and an operator never runs SQL by hand.
+     * tables. The migrations are read from the jar, and an operator never runs SQL by hand. The UUID scheme is
+     * written down on the first start and held against every later one.
      */
     private Database openDatabase() {
         PluginSettings.Storage storage = settings.current().storage();
-        return AuthSchema.migrate(Database.builder()
+        Database opened = AuthSchema.migrate(Database.builder()
                 .poolName(plugin.getName())
                 .jdbcUrl(storage.jdbcUrl())
                 .username(storage.username())
                 .password(storage.password())
                 .maxPoolSize(storage.poolSize())
                 .build());
+        try {
+            new RecordedScheme(opened).check(settings.current().ownership().uuidScheme());
+        } catch (RuntimeException refused) {
+            opened.close();
+            throw refused;
+        }
+        return opened;
     }
 
     /**

@@ -2,6 +2,11 @@ package com.uxplima.auth.paper.bootstrap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
+
+import com.uxplima.auth.adapter.outbound.RecordedScheme;
+import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.uxmlib.storage.sql.Database;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -51,6 +56,16 @@ class PluginEnablesTest {
         plugin = MockBukkit.load(Loaded.class);
 
         assertThat(plugin.isEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the first start writes its UUID scheme into the database, for every later start to be held to")
+    void theFirstStartRecordsTheUuidScheme() {
+        Path file = plugin.getDataFolder().toPath().resolve("auth.db");
+        try (Database database =
+                Database.builder().sqlite(file).poolName("uxmauth-reader").build()) {
+            assertThat(new RecordedScheme(database).recorded()).contains(UuidScheme.KEEP_FIRST);
+        }
     }
 
     /**

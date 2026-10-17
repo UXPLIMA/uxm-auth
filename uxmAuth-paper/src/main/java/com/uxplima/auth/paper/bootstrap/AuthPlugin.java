@@ -2,6 +2,7 @@ package com.uxplima.auth.paper.bootstrap;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.uxplima.auth.adapter.outbound.SchemeChanged;
 import org.bstats.bukkit.Metrics;
 import org.jspecify.annotations.Nullable;
 
@@ -31,7 +32,14 @@ public class AuthPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         PluginModule wired = new PluginModule(this);
-        wired.wire();
+        try {
+            wired.wire();
+        } catch (SchemeChanged refused) {
+            // An operator's mistake with a sentence that fixes it, not a defect: no stack trace to read past.
+            getLogger().severe(refused.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         module = wired;
         startMetrics();
     }
