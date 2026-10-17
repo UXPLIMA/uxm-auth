@@ -1,0 +1,90 @@
+package com.uxplima.auth.application;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.Objects;
+import java.util.UUID;
+
+import com.uxplima.auth.domain.hash.PasswordHash;
+import com.uxplima.auth.domain.hash.Verification;
+import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.auth.testing.AuthFixture;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+@Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+final class ChangePasswordTest {
+
+    private final AuthFixture fixture = new AuthFixture(1);
+
+    @AfterEach
+    void close() {
+        fixture.close();
+    }
+
+    @Test
+    @DisplayName("a change without the old password changes nothing")
+    void changeNeedsTheOldPassword() {
+        UUID connection = loggedIn("Steve", "hunter22");
+
+        assertThat(change(connection, "wrong999", "fresh777")).isEqualTo(new ChangeResult.WrongOld());
+        assertThat(login(connection, "hunter22")).isTrue();
+    }
+
+    @Test
+    @DisplayName("the new password meets the same policy as a first one")
+    void changeAppliesThePolicy() {
+        UUID connection = loggedIn("Steve", "hunter22");
+
+        assertThat(change(connection, "hunter22", "abc"))
+                .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.TooShort(6)));
+    }
+
+    @Test
+    @DisplayName("a change is stored and the old password stops working")
+    void changeIsStored() {
+        UUID connection = loggedIn("Steve", "hunter22");
+
+        assertThat(change(connection, "hunter22", "fresh777")).isEqualTo(new ChangeResult.Changed());
+
+        PasswordHash stored = Objects.requireNonNull(fixture.accounts
+                .findByName(new PlayerName("Steve"))
+                .orElseThrow()
+                .password());
+        assertThat(fixture.hashing.verify(Password.of("fresh777"), stored)).isNotInstanceOf(Verification.Wrong.class);
+        assertThat(fixture.hashing.verify(Password.of("hunter22"), stored)).isInstanceOf(Verification.Wrong.class);
+    }
+
+    @Test
+    @DisplayName("a player who has not logged in cannot change a password")
+    void changeNeedsALogin() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+
+        assertThat(change(connection, "hunter22", "fresh777")).isEqualTo(new ChangeResult.NotLoggedIn());
+    }
+
+    private UUID loggedIn(String name, String password) {
+        UUID connection = fixture.registered(name, password);
+        assertThat(login(connection, password)).isTrue();
+        return connection;
+    }
+
+    private boolean login(UUID connection, String password) {
+        new LogOut(fixture.sessions, () -> AuthFixture.MAX_ATTEMPTS).run(connection);
+        return new LogIn(fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, fixture.clock)
+                        .run(connection, Password.of(password), "10.0.0.7")
+                        .join()
+                instanceof LoginResult.LoggedIn;
+    }
+
+    private ChangeResult change(UUID connection, String old, String fresh) {
+        return new ChangePassword(
+                        fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy)
+                .run(connection, Password.of(old), Password.of(fresh))
+                .join();
+    }
+}

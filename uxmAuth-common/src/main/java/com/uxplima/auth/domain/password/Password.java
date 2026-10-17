@@ -5,6 +5,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -47,6 +48,19 @@ public final class Password implements AutoCloseable {
         byte[] bytes = Arrays.copyOf(encoded.array(), encoded.position());
         Arrays.fill(encoded.array(), (byte) 0);
         return bytes;
+    }
+
+    /** Whether two typed passwords are the same, compared in constant time. */
+    public boolean sameAs(Password other) {
+        Objects.requireNonNull(other, "other");
+        byte[] mine = utf8();
+        byte[] theirs = other.utf8();
+        try {
+            return MessageDigest.isEqual(mine, theirs);
+        } finally {
+            Arrays.fill(mine, (byte) 0);
+            Arrays.fill(theirs, (byte) 0);
+        }
     }
 
     /** The length a player sees: one for every character, however many units it takes in memory. */
