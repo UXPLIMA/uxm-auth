@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Objects;
 
 import com.uxplima.auth.domain.network.NetworkSecret;
@@ -28,6 +29,16 @@ public final class ProxySecret {
 
     private ProxySecret() {}
 
+    /** Whoever reads the file can log anybody in, so only the proxy's own user may read it. */
+    private static void writePrivately(Path file, String text) throws IOException {
+        if (file.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+            Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+        } else {
+            Files.createFile(file);
+        }
+        Files.writeString(file, text, StandardCharsets.UTF_8);
+    }
+
     /** The configured secret, or the one in the file, or a new one written to the file. */
     public static Loaded loadOrCreate(Path folder, String configured) {
         Objects.requireNonNull(folder, "folder");
@@ -42,7 +53,7 @@ public final class ProxySecret {
             }
             NetworkSecret made = NetworkSecret.generate();
             Files.createDirectories(folder);
-            Files.writeString(file, made.encoded() + System.lineSeparator(), StandardCharsets.UTF_8);
+            writePrivately(file, made.encoded() + System.lineSeparator());
             return new Loaded(made, file, true);
         } catch (IOException unreadable) {
             throw new UncheckedIOException("Cannot read or write the network secret at " + file, unreadable);

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 
 import com.uxplima.auth.domain.network.NetworkSecret;
 import org.junit.jupiter.api.DisplayName;
@@ -37,5 +38,14 @@ final class ProxySecretTest {
 
         assertThat(loaded.secret()).isEqualTo(NetworkSecret.parse(own));
         assertThat(loaded.created()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the secret file is readable by the proxy's own user alone")
+    void theSecretFileIsPrivate(@TempDir Path folder) throws IOException {
+        ProxySecret.Loaded loaded = ProxySecret.loadOrCreate(folder, "");
+
+        assertThat(Files.getPosixFilePermissions(loaded.file()))
+                .containsExactlyInAnyOrder(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
     }
 }
