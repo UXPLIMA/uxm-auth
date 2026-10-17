@@ -16,6 +16,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -45,6 +46,7 @@ final class DoorListenerTest {
     private final InboundConnection connection = mock(InboundConnection.class);
     private final Logger logger = mock(Logger.class);
     private final ProxySessions sessions = new ProxySessions();
+    private Admission admission = Admission.none();
 
     DoorListenerTest(@TempDir Path folder) {
         this.world = new ProxyWorld(folder);
@@ -59,7 +61,7 @@ final class DoorListenerTest {
     }
 
     private DoorListener listener() {
-        return new DoorListener(world.door(), sessions, world.words, logger);
+        return new DoorListener(world.door(), admission, sessions, world.words, logger);
     }
 
     private PreLoginEvent preLoginOf(String name) {
@@ -218,7 +220,7 @@ final class DoorListenerTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.eq(false),
                         org.mockito.ArgumentMatchers.any());
-        DoorListener listener = new DoorListener(door, sessions, world.words, logger);
+        DoorListener listener = new DoorListener(door, admission, sessions, world.words, logger);
         listener.preLogin(preLoginOf("Steve"));
 
         listener.profile(new GameProfileRequestEvent(
@@ -352,5 +354,28 @@ final class DoorListenerTest {
         listener.left(new DisconnectEvent(player, DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
 
         assertThat(listener.door().arrival(FROM)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a connection the door's rules refuse is turned away before its name is read, with the rule's words")
+    void theDoorsRulesComeFirst() {
+        java.util.List<Admission.Arrival> seen = new java.util.ArrayList<>();
+        admission = new Admission(
+                () -> new com.uxplima.auth.domain.premium.HostPatterns(java.util.List.of()),
+                java.util.List.of(arrival -> {
+                    seen.add(arrival);
+                    return Optional.of(new Admission.Refused(
+                            com.uxplima.auth.application.message.Keys.KICK_TIMEOUT, java.util.Map.of()));
+                }));
+        PreLoginEvent event = preLoginOf("Steve");
+
+        listener().preLogin(event);
+
+        assertThat(event.getResult().isAllowed()).isFalse();
+        assertThat(plain(event.getResult().getReasonComponent().orElseThrow()))
+                .isEqualTo(plain(world.messages.render(
+                        net.kyori.adventure.audience.Audience.empty(),
+                        com.uxplima.auth.application.message.Keys.KICK_TIMEOUT)));
+        assertThat(seen).containsExactly(new Admission.Arrival("127.0.0.1", ProxyWorld.PLAY));
     }
 }

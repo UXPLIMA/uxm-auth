@@ -434,6 +434,18 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("no host is a shared-address filter until the operator lists one")
+    void sharedHostsAreListed(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").protection().sharedHosts().matches("mc.tcpshield.com"))
+                .isFalse();
+        assertThat(settingsFrom(folder, "protection { shared-address-hosts = [\"*.tcpshield.com\"] }\n")
+                        .protection()
+                        .sharedHosts()
+                        .matches("mc.tcpshield.com:25565"))
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("the proxy commands allowed before login are read without their slash and in lower case")
     void theAllowedProxyCommandsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "network { allowed-commands = [\"/GList\", \" server \"] }\n")

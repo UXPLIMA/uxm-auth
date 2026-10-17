@@ -93,7 +93,8 @@ final class NetworkArrivalsTest {
                 server::createProfile,
                 () -> new DomainMark("+", false),
                 scheme,
-                new NetworkDoor(() -> Optional.of(claims), world.accounts::findById, world.clock, logger));
+                new NetworkDoor(() -> Optional.of(claims), world.accounts::findById, world.clock, logger),
+                com.uxplima.auth.application.protection.Admission.none());
     }
 
     private AsyncPlayerPreLoginEvent arriving(UUID id, String name, Optional<String> claim) {

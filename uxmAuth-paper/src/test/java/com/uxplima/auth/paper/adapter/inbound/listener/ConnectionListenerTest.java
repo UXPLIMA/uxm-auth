@@ -23,6 +23,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import io.papermc.paper.connection.PlayerLoginConnection;
 
+import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
@@ -33,12 +34,14 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.application.LetBedrockIn;
 import com.uxplima.auth.application.ReadTheName;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
@@ -83,6 +86,7 @@ final class ConnectionListenerTest {
     private @org.jspecify.annotations.Nullable AtTheDoor door;
     private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
     private NetworkDoor network = NetworkDoor.none();
+    private Admission admission = Admission.none();
 
     @BeforeEach
     void setUp() {
@@ -140,6 +144,23 @@ final class ConnectionListenerTest {
         assertThat(world.sessions.held(alone).orElseThrow().visit())
                 .isNotBlank()
                 .isNotEqualTo("n0nce-1");
+    }
+
+    @Test
+    @DisplayName("a connection the door's rules refuse is turned away before its name is read, holding no session")
+    void theDoorsRulesComeFirst() {
+        admission = new Admission(
+                () -> new com.uxplima.auth.domain.premium.HostPatterns(List.of()),
+                List.of(arrival -> Optional.of(new Admission.Refused(Keys.KICK_TIMEOUT, Map.of()))));
+        UUID id = UUID.randomUUID();
+
+        AsyncPlayerPreLoginEvent event = preLogin(server.createProfile(id, "Newbie"), loginConnection(MINE, true));
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(plain(event.kickMessage()))
+                .isEqualTo(plain(world.messages.render(Audience.empty(), Keys.KICK_TIMEOUT)));
+        assertThat(world.sessions.isOpen(id)).isFalse();
     }
 
     @Test
@@ -745,7 +766,8 @@ final class ConnectionListenerTest {
                         server::createProfile,
                         () -> new DomainMark("+", false),
                         scheme,
-                        network),
+                        network,
+                        admission),
                 world.notices,
                 world.door,
                 world.keeper,

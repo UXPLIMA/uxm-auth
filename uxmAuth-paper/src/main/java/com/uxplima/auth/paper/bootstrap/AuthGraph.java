@@ -3,6 +3,7 @@ package com.uxplima.auth.paper.bootstrap;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,6 +36,7 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
@@ -269,7 +271,8 @@ final class AuthGraph implements AutoCloseable {
                         plugin.getServer()::createProfile,
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
-                        new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger())),
+                        new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
+                        new Admission(() -> settings.current().protection().sharedHosts(), List.of())),
                 notices,
                 door,
                 keeper,

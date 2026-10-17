@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.velocitypowered.api.event.EventTask;
@@ -31,13 +32,16 @@ public final class DoorListener {
     /** Below every plugin that leaves the default, so a decision another plugin made is seen. */
     private static final short LATE = -1000;
 
+    private final Admission admission;
     private final ProxyDoor door;
     private final ProxySessions sessions;
     private final DoorWords words;
     private final Logger logger;
 
-    public DoorListener(ProxyDoor door, ProxySessions sessions, DoorWords words, Logger logger) {
+    /** @param admission the rules a connection meets before its name is read */
+    public DoorListener(ProxyDoor door, Admission admission, ProxySessions sessions, DoorWords words, Logger logger) {
         this.door = Objects.requireNonNull(door, "door");
+        this.admission = Objects.requireNonNull(admission, "admission");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.words = Objects.requireNonNull(words, "words");
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -68,14 +72,22 @@ public final class DoorListener {
         if (!before.isAllowed()) {
             return;
         }
-        if (before.isForceOfflineMode()) {
-            door.untouched(event.getConnection().getRemoteAddress());
-            return;
-        }
         String host = event.getConnection()
                 .getVirtualHost()
                 .map(InetSocketAddress::getHostString)
                 .orElse("");
+        if (ruledOut(event, host)) {
+            return;
+        }
+        if (before.isForceOfflineMode()) {
+            door.untouched(event.getConnection().getRemoteAddress());
+            return;
+        }
+        decide(event, host);
+    }
+
+    /** What the door makes of the name: Mojang's proof, the password, or a refusal. */
+    private void decide(PreLoginEvent event, String host) {
         try {
             event.setResult(
                     switch (door.preLogin(
@@ -97,6 +109,15 @@ public final class DoorListener {
             event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
                     words.refusal(Refusal.LOOKUP_FAILED, Optional.empty())));
         }
+    }
+
+    /** Whether one of the door's rules turned the connection away; it reads the address, never the name. */
+    private boolean ruledOut(PreLoginEvent event, String host) {
+        Optional<Admission.Refused> ruled = admission.decide(new Admission.Arrival(
+                event.getConnection().getRemoteAddress().getAddress().getHostAddress(), host));
+        ruled.ifPresent(
+                refused -> event.setResult(PreLoginEvent.PreLoginComponentResult.denied(words.admission(refused))));
+        return ruled.isPresent();
     }
 
     void profile(GameProfileRequestEvent event) {

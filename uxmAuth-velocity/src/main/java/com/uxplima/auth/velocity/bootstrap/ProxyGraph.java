@@ -4,6 +4,7 @@ import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
@@ -120,7 +122,12 @@ final class ProxyGraph implements AutoCloseable {
                 proxy::getServer,
                 this::playersOnline,
                 RandomGenerator.getDefault());
-        register(new DoorListener(door, sessions, new DoorWords(words), logger));
+        register(new DoorListener(
+                door,
+                new Admission(() -> settings.current().protection().sharedHosts(), List.of()),
+                sessions,
+                new DoorWords(words),
+                logger));
         register(new HoldListener(
                 sessions,
                 proxy.getCommandManager(),

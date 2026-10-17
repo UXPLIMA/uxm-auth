@@ -18,6 +18,7 @@ import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.DomainMark;
@@ -87,11 +88,13 @@ public final class Arrivals {
     private final Supplier<DomainMark> mark;
     private final UuidScheme scheme;
     private final NetworkDoor network;
+    private final Admission admission;
 
     /**
      * @param mark the domain rule's mark, for a connection through the cracked address
      * @param scheme the UUID scheme this start recorded, which a cracked player plays under too
      * @param network the proxy's word, on a server behind it
+     * @param admission the rules a connection meets before its name is read, on a server alone
      */
     public Arrivals(
             ReadTheName names,
@@ -102,7 +105,8 @@ public final class Arrivals {
             BiFunction<UUID, String, PlayerProfile> profiles,
             Supplier<DomainMark> mark,
             UuidScheme scheme,
-            NetworkDoor network) {
+            NetworkDoor network,
+            Admission admission) {
         this.names = Objects.requireNonNull(names, "names");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.hellos = Objects.requireNonNull(hellos, "hellos");
@@ -112,6 +116,7 @@ public final class Arrivals {
         this.mark = Objects.requireNonNull(mark, "mark");
         this.scheme = Objects.requireNonNull(scheme, "scheme");
         this.network = Objects.requireNonNull(network, "network");
+        this.admission = Objects.requireNonNull(admission, "admission");
     }
 
     /** What this pre-login comes to. */
@@ -119,10 +124,22 @@ public final class Arrivals {
         Objects.requireNonNull(event, "event");
         // Read first on every way in: the claim comes off the profile before anything else can see it.
         NetworkDoor.Reading vouched = network.read(event);
-        UUID id = event.getUniqueId();
-        if (bedrock.vouches(id)) {
+        // Behind a proxy the proxy's door already met the connection; alone, this door does.
+        Optional<Admission.Refused> ruled = vouched instanceof NetworkDoor.Reading.None
+                ? admission.decide(new Admission.Arrival(event.getAddress().getHostAddress(), event.getHostname()))
+                : Optional.empty();
+        if (ruled.isPresent()) {
+            return new Arrival.Refused(words.admission(ruled.get()));
+        }
+        if (bedrock.vouches(event.getUniqueId())) {
             return bedrockArrival(event);
         }
+        return vouched(event, vouched);
+    }
+
+    /** What the proxy's word, or its absence, comes to. */
+    private Arrival vouched(AsyncPlayerPreLoginEvent event, NetworkDoor.Reading vouched) {
+        UUID id = event.getUniqueId();
         return switch (vouched) {
             case NetworkDoor.Reading.None none -> alone(event);
             case NetworkDoor.Reading.LoggedIn in ->
@@ -203,6 +220,11 @@ public final class Arrivals {
         if (usual.unverified() && state instanceof AuthState.Unregistered unregistered) {
             state = new AuthState.Unregistered(unregistered.name(), true);
         }
+        return played(event, state, notices(usual, state), visit);
+    }
+
+    /** What the player reads once in: why the last try failed, and a move of their account they never read. */
+    private List<Notice> notices(HelloAtTheDoor.Reading.Usual usual, AuthState state) {
         List<Notice> notices = new java.util.ArrayList<>();
         if (usual.explain()) {
             notices.add(new Notice(new Notices.Notice(Keys.LOGIN_HANDSHAKE_FAILED, List.of(), () -> {}), false));
@@ -219,7 +241,7 @@ public final class Arrivals {
                                     () -> scheduler.async(() -> hellos.toldMove(account))),
                             true)));
         }
-        return played(event, state, notices, visit);
+        return notices;
     }
 
     /**

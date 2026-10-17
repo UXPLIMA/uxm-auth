@@ -62,7 +62,8 @@ public final class PluginSettings {
             AuthSettings.Bedrock bedrock,
             AuthSettings.Premium premium,
             AuthSettings.Ownership ownership,
-            AuthSettings.Network network) {
+            AuthSettings.Network network,
+            ProtectionSettings protection) {
 
         public Snapshot {
             Objects.requireNonNull(language, "language");
@@ -73,6 +74,7 @@ public final class PluginSettings {
             Objects.requireNonNull(lane, "lane");
             Objects.requireNonNull(hold, "hold");
             Objects.requireNonNull(timeouts, "timeouts");
+            Objects.requireNonNull(protection, "protection");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -218,7 +220,8 @@ public final class PluginSettings {
                 SettingsReader.bedrock(config),
                 SettingsReader.premium(config),
                 SettingsReader.ownership(config),
-                SettingsReader.network(config));
+                SettingsReader.network(config),
+                ProtectionReader.protection(config));
     }
 
     /**

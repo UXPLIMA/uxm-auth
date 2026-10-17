@@ -5,8 +5,10 @@ import java.util.Optional;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.name.NameVerdict;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.Refusal;
@@ -70,5 +72,14 @@ public final class DoorWords {
                         Text.placeholder("name", wrongCase.registered().value()));
             case NameVerdict.Accepted accepted -> throw new IllegalArgumentException("an accepted name is no refusal");
         };
+    }
+
+    /** Why one of the door's rules turned the connection away, read before anybody knows its language. */
+    public Component admission(Admission.Refused refused) {
+        Objects.requireNonNull(refused, "refused");
+        TagResolver[] values = refused.values().entrySet().stream()
+                .map(entry -> Text.placeholder(entry.getKey(), entry.getValue()))
+                .toArray(TagResolver[]::new);
+        return messages.render(Audience.empty(), refused.key(), values);
     }
 }
