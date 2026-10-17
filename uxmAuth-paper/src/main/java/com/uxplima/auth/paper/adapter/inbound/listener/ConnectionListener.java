@@ -53,6 +53,7 @@ public final class ConnectionListener implements Listener {
     private final Door door;
     private final HoldKeeper keeper;
     private final IntSupplier maxAttempts;
+    private final BedrockAdmission bedrock;
     private final Function<UUID, Optional<InetAddress>> holders;
     private final BooleanSupplier sameAddress;
     private final Messages messages;
@@ -84,6 +85,7 @@ public final class ConnectionListener implements Listener {
             Door door,
             HoldKeeper keeper,
             IntSupplier maxAttempts,
+            BedrockAdmission bedrock,
             Function<UUID, Optional<InetAddress>> holders,
             BooleanSupplier sameAddress,
             Messages messages,
@@ -94,6 +96,7 @@ public final class ConnectionListener implements Listener {
         this.door = Objects.requireNonNull(door, "door");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.maxAttempts = Objects.requireNonNull(maxAttempts, "maxAttempts");
+        this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.holders = Objects.requireNonNull(holders, "holders");
         this.sameAddress = Objects.requireNonNull(sameAddress, "sameAddress");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -117,7 +120,11 @@ public final class ConnectionListener implements Listener {
             return;
         }
         try {
-            sessions.open(event.getUniqueId(), waiting(new PlayerName(event.getName())));
+            PlayerName name = new PlayerName(event.getName());
+            AuthState state = bedrock.admit(
+                            event.getUniqueId(), name, event.getAddress().getHostAddress())
+                    .orElseGet(() -> waiting(name));
+            sessions.open(event.getUniqueId(), state);
             remember(event);
         } catch (RuntimeException unreachable) {
             logger.log(

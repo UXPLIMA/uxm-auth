@@ -18,7 +18,7 @@ import com.uxplima.uxmlib.scheduler.Scheduler;
 import org.jspecify.annotations.Nullable;
 
 /** Hands a press on one of this plugin's screens, by a player in the world, to the answers. */
-public final class ScreenClickListener implements Listener {
+public final class ScreenClickListener implements Listener, FormAnswers {
 
     private final ScreenAnswers answers;
     private final Function<Player, Guest> guests;
@@ -36,9 +36,12 @@ public final class ScreenClickListener implements Listener {
                 || !(event.getCommonConnection() instanceof PlayerGameConnection game)) {
             return;
         }
-        Player player = game.getPlayer();
-        String action = event.getIdentifier().value();
-        ScreenAnswers.Answer answer = answerOf(event.getDialogResponseView());
+        answer(game.getPlayer(), event.getIdentifier().value(), answerOf(event.getDialogResponseView()));
+    }
+
+    /** One press, from a dialog or a Bedrock form, answered on the player's own thread. */
+    @Override
+    public void answer(Player player, String action, ScreenAnswers.Answer answer) {
         // The press may arrive off the player's thread; everything it does to the player happens on it.
         scheduler.entity(player, () -> {
             CompletableFuture<Void> unused = answers.answer(guests.apply(player), action, answer);

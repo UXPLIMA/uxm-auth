@@ -27,6 +27,16 @@ dependencies:
     ViaVersion:
       load: BEFORE
       required: false
+    # Vouches for a Bedrock player through Xbox Live, and carries the native forms they read every
+    # screen in. Reached only past a plugin-present check: without it every player is a Java one.
+    floodgate:
+      load: BEFORE
+      required: false
+    # Geyser without Floodgate still names a Bedrock connection for uxmLib's form sender, which asks for it
+    # by name. Nothing here needs it.
+    Geyser-Spigot:
+      load: BEFORE
+      required: false
 
 permissions:
   # What a player has by default.

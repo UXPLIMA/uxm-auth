@@ -26,11 +26,13 @@ import net.kyori.adventure.text.Component;
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.application.LetBedrockIn;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.storage.StorageException;
 import org.junit.jupiter.api.AfterEach;
@@ -54,6 +56,7 @@ final class ConnectionListenerTest {
     private ServerMock server;
     private AuthWorld world;
     private boolean sameAddress;
+    private BedrockAdmission bedrock = BedrockAdmission.NONE;
     private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
 
     @BeforeEach
@@ -223,6 +226,30 @@ final class ConnectionListenerTest {
     }
 
     @Test
+    @DisplayName("a Bedrock player Floodgate vouches for is let in at the door while auto-login is on")
+    void aBedrockPlayerIsLetInAtTheDoor() throws Exception {
+        UUID id = UUID.randomUUID();
+        bedrock = new BedrockAdmission(
+                new BedrockLink() {
+                    @Override
+                    public Optional<BedrockLink.Player> player(UUID connection) {
+                        return Optional.of(new BedrockLink.Player(false));
+                    }
+
+                    @Override
+                    public Optional<String> prefix() {
+                        return Optional.of(".");
+                    }
+                },
+                new LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock),
+                () -> true);
+
+        listener(world.accounts).onPreLogin(preLogin(".Steve", id));
+
+        assertThat(world.sessions.state(id)).containsInstanceOf(AuthState.Authenticated.class);
+    }
+
+    @Test
     @DisplayName("a name with no account is asked to register")
     void anUnknownNameRegisters() throws Exception {
         UUID id = UUID.randomUUID();
@@ -373,6 +400,7 @@ final class ConnectionListenerTest {
                 world.door,
                 world.keeper,
                 () -> AuthWorld.MAX_ATTEMPTS,
+                bedrock,
                 new NameHolders(server, id -> Optional.ofNullable(waitingAtTheDialog.get(id))),
                 () -> sameAddress,
                 world.messages,

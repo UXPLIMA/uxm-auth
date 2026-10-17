@@ -87,6 +87,10 @@ final class SettingsReader {
                 seconds(config, "timeouts.reminder-seconds", 5));
     }
 
+    static AuthSettings.Bedrock bedrock(HoconConfig config) {
+        return new AuthSettings.Bedrock(config.getBoolean("bedrock.auto-login", true));
+    }
+
     static AuthSettings.Effects effects(HoconConfig config) {
         Map<AuthSettings.Moment, List<String>> lists = new EnumMap<>(AuthSettings.Moment.class);
         for (AuthSettings.Moment moment : AuthSettings.Moment.values()) {

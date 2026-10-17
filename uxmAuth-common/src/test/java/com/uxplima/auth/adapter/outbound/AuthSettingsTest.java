@@ -40,6 +40,7 @@ final class AuthSettingsTest {
         assertThat(settings.hold().movement()).isTrue();
         assertThat(settings.hold().allowedCommands()).isEmpty();
         assertThat(settings.hold().hideStats()).isTrue();
+        assertThat(settings.bedrock()).isEqualTo(new AuthSettings.Bedrock(true));
     }
 
     @Test

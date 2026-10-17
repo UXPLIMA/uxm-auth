@@ -161,6 +161,26 @@ final class PinPadTest {
     }
 
     @Test
+    @DisplayName("a Bedrock form's answer reaches the same login a dialog's does, on the player's own thread")
+    void aFormAnswerReachesTheLogin() throws InterruptedException {
+        world.registered(steve, "123456");
+        ScreenClickListener clicks = new ScreenClickListener(answers, player -> guest(), world.scheduler);
+
+        for (String digit : List.of("1", "2", "3", "4", "5", "6")) {
+            clicks.answer(steve, PinPad.digit(Integer.parseInt(digit)), nothing());
+            world.scheduler.drain();
+        }
+        clicks.answer(steve, PinPad.ENTER, nothing());
+        // The hash runs on the lane; the answer comes back to the player's thread when it is done.
+        for (int turn = 0; turn < 500 && !world.isAuthenticated(steve); turn++) {
+            world.scheduler.drain();
+            Thread.sleep(10);
+        }
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+    }
+
+    @Test
     @DisplayName("no more digits are taken than the longest password the file allows")
     void theCodeStopsAtTheLongestPassword() {
         world.registered(steve, "123456");

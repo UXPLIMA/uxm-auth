@@ -30,6 +30,9 @@ public final class AuthSettings {
         }
     }
 
+    /** What a Bedrock player Floodgate vouched for gets: in at once, or the same password as everyone. */
+    public record Bedrock(boolean autoLogin) {}
+
     /** What a password may be, which confirmations are asked, and how many wrong ones a player gets. */
     public record Passwords(
             int minLength,

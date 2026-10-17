@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -14,6 +15,7 @@ import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.application.ChangePassword;
+import com.uxplima.auth.application.LetBedrockIn;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LogOut;
 import com.uxplima.auth.application.RegisterAccount;
@@ -32,16 +34,22 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
+import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
 import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.BedrockForms;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConfigurationGate;
+import com.uxplima.auth.paper.adapter.inbound.screen.FormAnswers;
 import com.uxplima.auth.paper.adapter.inbound.screen.InWorldScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.PaperScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.PermissionDefaults;
 import com.uxplima.auth.paper.adapter.inbound.screen.PlayerGuest;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenAnswers;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
+import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
+import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
+import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
@@ -51,6 +59,7 @@ import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilter;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordMask;
 import com.uxplima.auth.paper.adapter.outbound.world.LoginWorld;
+import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.storage.sql.Database;
@@ -77,6 +86,7 @@ final class AuthGraph implements AutoCloseable {
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
     private final LoginWorld loginWorld;
+    private final BedrockLink bedrock;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -128,7 +138,16 @@ final class AuthGraph implements AutoCloseable {
                 moments, (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task), hold::isHeld);
         AuthScreens screens =
                 new AuthScreens(screenFile::current, () -> settings.current().passwords(), messages, styler);
-        PaperScreens shower = new PaperScreens();
+        this.bedrock = BedrockLink.on(plugin.getServer(), plugin.getLogger());
+        // A form's answer goes where a dialog's does; the listener that takes them is built further down.
+        AtomicReference<FormAnswers> formAnswers = new AtomicReference<>((player, action, answer) -> {});
+        ScreenShower shower = new ScreenRouter(
+                new PaperScreens(),
+                new BedrockForms(
+                        BedrockScreen.forServer(plugin.getServer()),
+                        (player, action, answer) -> Objects.requireNonNull(formAnswers.get(), "formAnswers")
+                                .answer(player, action, answer)),
+                id -> bedrock.player(id).isPresent());
         Welcomes welcomes = new Welcomes();
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock);
@@ -151,7 +170,7 @@ final class AuthGraph implements AutoCloseable {
                 answers,
                 shower,
                 messages,
-                DialogClients.on(plugin.getServer(), plugin.getLogger()),
+                BedrockLink.javaOnly(bedrock, DialogClients.on(plugin.getServer(), plugin.getLogger())),
                 new PermissionDefaults(plugin.getServer().getPluginManager()),
                 welcomes,
                 plugin.getLogger());
@@ -171,6 +190,11 @@ final class AuthGraph implements AutoCloseable {
                 door,
                 keeper,
                 () -> settings.current().passwords().maxAttempts(),
+                new BedrockAdmission(
+                        bedrock,
+                        new LetBedrockIn(
+                                accounts, () -> settings.current().passwords().maxAttempts(), clock),
+                        () -> settings.current().bedrock().autoLogin()),
                 new NameHolders(plugin.getServer(), gate::waitingFrom),
                 () -> settings.current().names().reconnectFromSameAddress(),
                 messages,
@@ -194,12 +218,20 @@ final class AuthGraph implements AutoCloseable {
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts()), door, moments, messages);
         this.screenClicks = new ScreenClickListener(
                 answers, player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies), scheduler);
+        formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }
 
     /** Listens, filters the log, and sends every player already online to the door. */
     void start() {
         loginWorld.prepare();
+        bedrock.prefix()
+                .filter(BedrockLink::collides)
+                .ifPresent(prefix -> plugin.getLogger()
+                        .warning("Floodgate's username-prefix is \"" + prefix
+                                + "\". A Bedrock name with it can be a Java"
+                                + " name too, and an unlinked Bedrock player could then reach a Java player's account."
+                                + " Set it in Floodgate's config.yml to a character no Java name has, such as a dot."));
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
