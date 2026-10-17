@@ -108,7 +108,8 @@ public final class HoldKeeper {
         UUID id = player.getUniqueId();
         onDisk(id, () -> {
             Optional<HeldState> leftover = store.load(id);
-            scheduler.entity(player, () -> settle(player, leftover));
+            Optional<HeldPlace> left = store.loadPlace(id);
+            scheduler.entity(player, () -> settle(player, leftover, left));
         });
     }
 
@@ -127,7 +128,7 @@ public final class HoldKeeper {
         restore(player, true);
     }
 
-    private void settle(Player player, Optional<HeldState> leftover) {
+    private void settle(Player player, Optional<HeldState> leftover, Optional<HeldPlace> left) {
         UUID id = player.getUniqueId();
         if (!player.isOnline()) {
             // Gone before the hold was set up. A leftover stays on disk for their next join.
@@ -136,13 +137,17 @@ public final class HoldKeeper {
         leftover.ifPresent(state -> apply(player, state, true));
         hideTheWaitingFrom(player);
         if (!isHeld.test(player)) {
-            if (leftover.isPresent()) {
-                onDisk(id, () -> store.delete(id));
+            left.flatMap(place -> place.on(plugin.getServer())).ifPresent(target -> move(player, target));
+            if (leftover.isPresent() || left.isPresent()) {
+                onDisk(id, () -> {
+                    store.delete(id);
+                    store.deletePlace(id);
+                });
             }
             return;
         }
         // A player still on their way back from the login world stood where the leftover says, not here.
-        HeldPlace place = room.get().isEmpty() ? null : placeOf(player, leftover);
+        HeldPlace place = room.get().isEmpty() ? null : placeOf(player, leftover, left);
         HeldState snapshot = capture(player, hold.get(), place);
         taken.put(id, snapshot);
         onDisk(id, () -> {
@@ -151,6 +156,7 @@ public final class HoldKeeper {
                 return;
             }
             store.save(id, snapshot);
+            store.deletePlace(id);
             scheduler.entity(player, () -> strip(player));
         });
     }
@@ -207,15 +213,25 @@ public final class HoldKeeper {
                 scheduler.entity(other, () -> other.showPlayer(plugin, player));
             }
         }
-        if (!(leaving && state != null && state.place() != null)) {
+        HeldPlace place = state == null ? null : state.place();
+        if (leaving && place != null) {
+            // Only the place outlives the quit; everything else came back just now.
+            onDisk(id, () -> {
+                store.savePlace(id, place);
+                store.delete(id);
+            });
+        } else {
             onDisk(id, () -> store.delete(id));
         }
     }
 
-    private static @Nullable HeldPlace placeOf(Player player, Optional<HeldState> leftover) {
+    private static @Nullable HeldPlace placeOf(Player player, Optional<HeldState> leftover, Optional<HeldPlace> left) {
         HeldPlace before = leftover.isPresent() ? leftover.get().place() : null;
         if (before != null) {
             return before;
+        }
+        if (left.isPresent()) {
+            return left.get();
         }
         Location here = player.getLocation();
         return here == null || here.getWorld() == null ? null : HeldPlace.of(here);

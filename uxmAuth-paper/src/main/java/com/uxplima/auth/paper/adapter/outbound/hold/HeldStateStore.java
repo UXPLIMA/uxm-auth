@@ -77,6 +77,56 @@ public final class HeldStateStore {
         }
     }
 
+    /**
+     * Keeps only where a player stood, for one who left from the login world. Nothing else of theirs is kept:
+     * an operator status written down here would come back at the next join even if it was taken away since.
+     */
+    public void savePlace(UUID player, HeldPlace place) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(place, "place");
+        Path side = folder.resolve(player + ".place.conf.tmp");
+        try {
+            Files.createDirectories(folder);
+            HoconConfigurationLoader loader =
+                    HoconConfigurationLoader.builder().path(side).build();
+            CommentedConfigurationNode root = loader.createNode();
+            writePlace(root.node("place"), place);
+            loader.save(root);
+            Files.move(side, placeOf(player), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException unwritable) {
+            throw new UncheckedIOException("cannot write the place of " + player, unwritable);
+        }
+    }
+
+    /** Where a player who left from the login world stood, if they did. */
+    public Optional<HeldPlace> loadPlace(UUID player) {
+        Objects.requireNonNull(player, "player");
+        Path file = placeOf(player);
+        if (!Files.isRegularFile(file)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(
+                    place(HoconConfigurationLoader.builder().path(file).build().load()));
+        } catch (ConfigurateException | RuntimeException unreadable) {
+            setAside(file);
+            return Optional.empty();
+        }
+    }
+
+    public void deletePlace(UUID player) {
+        Objects.requireNonNull(player, "player");
+        try {
+            Files.deleteIfExists(placeOf(player));
+        } catch (IOException undeletable) {
+            throw new UncheckedIOException("cannot delete the place of " + player, undeletable);
+        }
+    }
+
+    private Path placeOf(UUID player) {
+        return folder.resolve(player + ".place.conf");
+    }
+
     public void delete(UUID player) {
         Objects.requireNonNull(player, "player");
         try {
@@ -106,14 +156,17 @@ public final class HeldStateStore {
         root.node("inventory").setList(String.class, slots);
         HeldPlace place = state.place();
         if (place != null) {
-            ConfigurationNode at = root.node("place");
-            at.node("world").set(place.world());
-            at.node("x").set(place.x());
-            at.node("y").set(place.y());
-            at.node("z").set(place.z());
-            at.node("yaw").set(place.yaw());
-            at.node("pitch").set(place.pitch());
+            writePlace(root.node("place"), place);
         }
+    }
+
+    private static void writePlace(ConfigurationNode at, HeldPlace place) throws ConfigurateException {
+        at.node("world").set(place.world());
+        at.node("x").set(place.x());
+        at.node("y").set(place.y());
+        at.node("z").set(place.z());
+        at.node("yaw").set(place.yaw());
+        at.node("pitch").set(place.pitch());
     }
 
     private static @Nullable HeldPlace place(ConfigurationNode root) {

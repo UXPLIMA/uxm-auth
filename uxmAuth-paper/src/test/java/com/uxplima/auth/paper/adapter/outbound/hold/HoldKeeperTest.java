@@ -272,13 +272,54 @@ final class HoldKeeperTest {
         keeper.arrive(steve);
 
         keeper.leave(steve);
-        assertThat(store.load(steve.getUniqueId())).isPresent();
+        assertThat(store.load(steve.getUniqueId())).isEmpty();
+        assertThat(store.loadPlace(steve.getUniqueId())).contains(HeldPlace.of(stood));
 
         held.remove(steve.getUniqueId());
         keeper.arrive(steve);
 
         assertThat(steve.getLocation()).isEqualTo(stood);
-        assertThat(store.load(steve.getUniqueId())).isEmpty();
+        assertThat(store.loadPlace(steve.getUniqueId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "an operator taken off the list while away from the login world is not made one again at the next join")
+    void aQuitFromTheLoginWorldGivesNothingBackButThePlace() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)));
+        PlayerMock steve = joining("Steve");
+        steve.setOp(true);
+        keeper.arrive(steve);
+        keeper.leave(steve);
+
+        steve.setOp(false);
+        held.remove(steve.getUniqueId());
+        keeper.arrive(steve);
+
+        assertThat(steve.isOp()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a player who left the login world and waits again at the next join still comes back to their place")
+    void aQuitThenAWaitingJoinKeepsThePlace() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)));
+        PlayerMock steve = joining("Steve");
+        Location stood = new Location(steve.getWorld(), 10.5, 70, -3.5);
+        steve.teleport(stood);
+        keeper.arrive(steve);
+        keeper.leave(steve);
+        slowMoves = true;
+
+        keeper.arrive(steve);
+        later.forEach(Runnable::run);
+        slowMoves = false;
+        held.remove(steve.getUniqueId());
+        keeper.giveBack(steve);
+
+        assertThat(steve.getLocation()).isEqualTo(stood);
+        assertThat(store.loadPlace(steve.getUniqueId())).isEmpty();
     }
 
     @Test
