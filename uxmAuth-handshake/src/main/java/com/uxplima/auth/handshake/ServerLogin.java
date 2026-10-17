@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import io.netty.channel.Channel;
+import io.netty.util.AttributeKey;
 import net.minecraft.network.Connection;
 import net.minecraft.network.HandlerNames;
 import net.minecraft.network.protocol.login.ClientboundHelloPacket;
@@ -28,14 +29,20 @@ import org.jspecify.annotations.Nullable;
  */
 final class ServerLogin implements Login {
 
+    /** Where Floodgate keeps the Bedrock player it vouched for on a connection, from the handshake on. */
+    private static final String FLOODGATE_PLAYER = "floodgate-player";
+
     /** The listener's verify token, or null on a server whose login has none by that name. */
     static final @Nullable Field CHALLENGE = challengeField();
 
+    private final Channel channel;
     private final Connection connection;
     private final ServerLoginPacketListenerImpl listener;
     private final InetSocketAddress address;
 
-    private ServerLogin(Connection connection, ServerLoginPacketListenerImpl listener, InetSocketAddress address) {
+    private ServerLogin(
+            Channel channel, Connection connection, ServerLoginPacketListenerImpl listener, InetSocketAddress address) {
+        this.channel = channel;
         this.connection = connection;
         this.listener = listener;
         this.address = address;
@@ -49,7 +56,7 @@ final class ServerLogin implements Login {
                 || CHALLENGE == null) {
             return Optional.empty();
         }
-        return Optional.of(new ServerLogin(connection, listener, address));
+        return Optional.of(new ServerLogin(channel, connection, listener, address));
     }
 
     @Override
@@ -79,6 +86,13 @@ final class ServerLogin implements Login {
     @Override
     public boolean proved() {
         return listener.state == ServerLoginPacketListenerImpl.State.AUTHENTICATING;
+    }
+
+    /** Floodgate is never named: its attribute is read by the name it registers, when it registered one. */
+    @Override
+    public boolean bedrock() {
+        return AttributeKey.exists(FLOODGATE_PLAYER)
+                && channel.attr(AttributeKey.valueOf(FLOODGATE_PLAYER)).get() != null;
     }
 
     private byte[] challenge() {

@@ -31,6 +31,7 @@ final class HelloInterceptorTest {
         final List<String> done = new ArrayList<>();
         boolean proved;
         boolean atHello = true;
+        boolean bedrock;
 
         @Override
         public InetSocketAddress address() {
@@ -54,6 +55,11 @@ final class HelloInterceptorTest {
         @Override
         public boolean proved() {
             return proved;
+        }
+
+        @Override
+        public boolean bedrock() {
+            return bedrock;
         }
     }
 
@@ -255,6 +261,18 @@ final class HelloInterceptorTest {
         assertThat(login.done).isEmpty();
         assertThat(results.size()).isZero();
         assertThat(door.failed).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a Bedrock connection Floodgate vouched for passes straight to the server, never asked for a key")
+    void aBedrockConnectionPassesStraightThrough() {
+        login.bedrock = true;
+
+        channel.writeInbound(HELLO);
+
+        assertThat(server.read).containsExactly(HELLO);
+        assertThat(door.asked).isEmpty();
+        assertThat(results.size()).isZero();
     }
 
     @Test

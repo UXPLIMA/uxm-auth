@@ -64,6 +64,10 @@ final class HelloInterceptor extends ChannelInboundHandlerAdapter {
             return;
         }
         Login mine = found.get();
+        if (mine.bedrock()) {
+            ctx.fireChannelRead(msg);
+            return;
+        }
         login = mine;
         waiting = true;
         CompletableFuture<Decision> unused = door.decide(hello.name(), mine.address(), mine.host())

@@ -24,4 +24,7 @@ interface Login {
 
     /** Whether the server's own check of the key and Mojang's answer passed. */
     boolean proved();
+
+    /** Whether Floodgate vouched for this connection as a Bedrock player, which Xbox Live has already proved. */
+    boolean bedrock();
 }
