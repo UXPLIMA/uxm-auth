@@ -22,11 +22,13 @@ import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.velocitypowered.api.event.EventHandler;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.config.ProxyConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,8 +43,36 @@ final class ProxyModuleTest {
     private final EventManager events = mock(EventManager.class);
     private final Logger logger = mock(Logger.class);
 
+    private final ProxyConfig config = mock(ProxyConfig.class);
+
     ProxyModuleTest() {
         when(proxy.getEventManager()).thenReturn(events);
+        when(proxy.getConfiguration()).thenReturn(config);
+    }
+
+    @Test
+    @DisplayName("an offline proxy puts the door before every connection and says premium auto-login is on")
+    void anOfflineProxyRunsTheDoor(@TempDir Path folder) {
+        ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
+
+        module.wire();
+        module.shutdown();
+
+        verify(events).register(eq(plugin), any(DoorListener.class));
+        verify(logger).info(contains("Premium auto-login is on"));
+    }
+
+    @Test
+    @DisplayName("an online-mode proxy proves every player itself, so the door stays out and the console says why")
+    void anOnlineProxyRunsNoDoor(@TempDir Path folder) {
+        when(config.isOnlineMode()).thenReturn(true);
+        ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
+
+        module.wire();
+        module.shutdown();
+
+        verify(events, never()).register(eq(plugin), any(DoorListener.class));
+        verify(logger).warn(contains("online-mode"));
     }
 
     @Test

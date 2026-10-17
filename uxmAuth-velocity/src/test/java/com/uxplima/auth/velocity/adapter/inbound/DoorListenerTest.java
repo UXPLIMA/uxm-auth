@@ -1,0 +1,187 @@
+package com.uxplima.auth.velocity.adapter.inbound;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+
+import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.account.AccountKind;
+import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.ConflictStrategy;
+import com.uxplima.auth.domain.premium.NameRule;
+import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.testing.ProxyWorld;
+import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.LoginEvent;
+import com.velocitypowered.api.event.connection.PreLoginEvent;
+import com.velocitypowered.api.event.player.GameProfileRequestEvent;
+import com.velocitypowered.api.proxy.InboundConnection;
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.util.GameProfile;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+
+/** The door's answers become what Velocity does: online or offline mode, the profile, and the refusals. */
+final class DoorListenerTest {
+
+    private static final InetSocketAddress FROM = new InetSocketAddress(InetAddress.getLoopbackAddress(), 40001);
+
+    private final ProxyWorld world;
+    private final InboundConnection connection = mock(InboundConnection.class);
+    private final Logger logger = mock(Logger.class);
+
+    DoorListenerTest(@TempDir Path folder) {
+        this.world = new ProxyWorld(folder);
+        when(connection.getRemoteAddress()).thenReturn(FROM);
+        when(connection.getVirtualHost())
+                .thenReturn(Optional.of(InetSocketAddress.createUnresolved(ProxyWorld.PLAY, 25565)));
+    }
+
+    @AfterEach
+    void close() {
+        world.close();
+    }
+
+    private DoorListener listener() {
+        return new DoorListener(world.door(), world.words, logger);
+    }
+
+    private PreLoginEvent preLoginOf(String name) {
+        // The id a client sends with its hello; an offline client derives it from the name.
+        return new PreLoginEvent(
+                connection, name, UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static String plain(Component component) {
+        return PlainTextComponentSerializer.plainText().serialize(component);
+    }
+
+    @Test
+    @DisplayName("a paid name is put in online mode, and the proxy hands the backend Mojang's profile")
+    void aPaidNameGoesOnline() {
+        DoorListener listener = listener();
+        PreLoginEvent preLogin = preLoginOf("Notch");
+
+        listener.preLogin(preLogin);
+        GameProfileRequestEvent profile =
+                new GameProfileRequestEvent(connection, new GameProfile(ProxyWorld.MOJANG, "Notch", List.of()), true);
+        listener.profile(profile);
+
+        assertThat(preLogin.getResult().isOnlineModeAllowed()).isTrue();
+        assertThat(profile.getGameProfile().getId()).isEqualTo(ProxyWorld.MOJANG);
+    }
+
+    @Test
+    @DisplayName("a cracked name is kept in offline mode, under the mark when the domain rule gives one")
+    void aCrackedNameStaysOffline() {
+        world.rule = NameRule.DOMAIN;
+        DoorListener listener = listener();
+        PreLoginEvent preLogin = preLoginOf("Notch");
+
+        listener.preLogin(preLogin);
+        GameProfileRequestEvent profile = new GameProfileRequestEvent(
+                connection, new GameProfile(UuidScheme.offline(new PlayerName("Notch")), "Notch", List.of()), false);
+        listener.profile(profile);
+
+        assertThat(preLogin.getResult().isForceOfflineMode()).isTrue();
+        assertThat(profile.getGameProfile().getName()).isEqualTo("Notch+");
+    }
+
+    @Test
+    @DisplayName("a refused name is turned away at the pre-login with the rule it broke")
+    void aBadNameIsTurnedAway() {
+        PreLoginEvent preLogin = preLoginOf("no");
+
+        listener().preLogin(preLogin);
+
+        assertThat(preLogin.getResult().isAllowed()).isFalse();
+        assertThat(preLogin.getResult().getReasonComponent())
+                .hasValueSatisfying(reason -> assertThat(plain(reason)).contains("3"));
+    }
+
+    @Test
+    @DisplayName("a connection another plugin put in offline mode, as Floodgate does a Bedrock player, is left alone")
+    void aBedrockConnectionIsLeftAlone() {
+        PreLoginEvent preLogin = preLoginOf("Notch");
+        preLogin.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+
+        listener().preLogin(preLogin);
+
+        assertThat(preLogin.getResult().isForceOfflineMode()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a proved owner the conflict rule stops is turned away at the login with the reason")
+    void aBlockedOwnerIsTurnedAwayAtTheLogin() {
+        world.rule = NameRule.STRICT;
+        world.conflict = ConflictStrategy.BLOCK;
+        AccountRepository.Insert unused = world.accounts.insert(new Account(
+                UUID.randomUUID(),
+                new PlayerName("Notch"),
+                AccountKind.CRACKED,
+                null,
+                null,
+                world.clock.instant(),
+                "10.0.0.1",
+                null,
+                null));
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+        listener.profile(
+                new GameProfileRequestEvent(connection, new GameProfile(ProxyWorld.MOJANG, "Notch", List.of()), true));
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(FROM);
+        LoginEvent login = new LoginEvent(player, "");
+
+        listener.login(login);
+
+        assertThat(login.getResult().isAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a door that fails turns the connection away with the lookup reason and says why in the console")
+    void aFailingDoorTurnsAway() {
+        world.close();
+        DoorListener listener = listener();
+        PreLoginEvent preLogin = preLoginOf("Notch");
+
+        listener.preLogin(preLogin);
+
+        assertThat(preLogin.getResult().isAllowed()).isFalse();
+        org.mockito.Mockito.verify(logger)
+                .warn(
+                        org.mockito.ArgumentMatchers.contains("Notch"),
+                        org.mockito.ArgumentMatchers.any(Throwable.class));
+    }
+
+    @Test
+    @DisplayName("a player who leaves is forgotten")
+    void aPlayerWhoLeavesIsForgotten() {
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+        listener.profile(
+                new GameProfileRequestEvent(connection, new GameProfile(ProxyWorld.MOJANG, "Notch", List.of()), true));
+        assertThat(listener.door().arrival(FROM)).isPresent();
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(FROM);
+
+        listener.left(new DisconnectEvent(player, DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
+
+        assertThat(listener.door().arrival(FROM)).isEmpty();
+    }
+}

@@ -12,10 +12,10 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 
 import io.papermc.paper.connection.PlayerConnection;
 
-import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
+import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.name.NameVerdict;
@@ -73,7 +73,7 @@ public final class Arrivals {
     private final ReadTheName names;
     private final BedrockAdmission bedrock;
     private final HelloAtTheDoor hellos;
-    private final Messages messages;
+    private final DoorWords words;
     private final Scheduler scheduler;
     private final BiFunction<UUID, String, PlayerProfile> profiles;
     private final Supplier<DomainMark> mark;
@@ -95,7 +95,7 @@ public final class Arrivals {
         this.names = Objects.requireNonNull(names, "names");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.hellos = Objects.requireNonNull(hellos, "hellos");
-        this.messages = Objects.requireNonNull(messages, "messages");
+        this.words = new DoorWords(Objects.requireNonNull(messages, "messages"));
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.mark = Objects.requireNonNull(mark, "mark");
@@ -110,7 +110,8 @@ public final class Arrivals {
             return bedrockArrival(event);
         }
         return switch (hellos.read(event.getName(), id, clientAddress(event))) {
-            case HelloAtTheDoor.Reading.Refused refused -> new Arrival.Refused(refusal(refused));
+            case HelloAtTheDoor.Reading.Refused refused ->
+                new Arrival.Refused(words.refusal(refused.why(), refused.movedTo()));
             case HelloAtTheDoor.Reading.Premium premium -> premiumArrival(event, premium.state());
             case HelloAtTheDoor.Reading.Usual usual -> usualArrival(event, usual);
         };
@@ -124,7 +125,7 @@ public final class Arrivals {
     private Arrival bedrockArrival(AsyncPlayerPreLoginEvent event) {
         Optional<NameVerdict> blocked = names.readBedrock(event.getName());
         if (blocked.isPresent()) {
-            return new Arrival.Refused(refusal(blocked.get()));
+            return new Arrival.Refused(words.name(blocked.get()));
         }
         PlayerName name = new PlayerName(event.getName());
         AuthState state = bedrock.admit(
@@ -148,7 +149,7 @@ public final class Arrivals {
         ReadTheName.Reading reading =
                 usual.marked() ? names.readMarked(event.getName(), mark.get()) : names.read(event.getName());
         if (reading instanceof ReadTheName.Reading.Refused refused) {
-            return new Arrival.Refused(refusal(refused.verdict()));
+            return new Arrival.Refused(words.name(refused.verdict()));
         }
         AuthState state = ((ReadTheName.Reading.Opens) reading).state();
         if (usual.unverified() && state instanceof AuthState.Unregistered unregistered) {
@@ -201,42 +202,5 @@ public final class Arrivals {
         PlayerConnection connection = event.getConnection();
         InetSocketAddress address = connection == null ? null : connection.getClientAddress();
         return address == null ? new InetSocketAddress(event.getAddress(), 0) : address;
-    }
-
-    private Component refusal(HelloAtTheDoor.Reading.Refused refused) {
-        Audience nobody = Audience.empty();
-        return switch (refused.why()) {
-            case LOOKUP_FAILED -> messages.render(nobody, Keys.KICK_LOOKUP_FAILED);
-            case PAID_NAME ->
-                refused.movedTo()
-                        .map(to -> messages.render(
-                                nobody, Keys.KICK_PAID_NAME_MOVED, Text.placeholder("name", to.value())))
-                        .orElseGet(() -> messages.render(nobody, Keys.KICK_PAID_NAME));
-            case PREMIUM_ADDRESS -> messages.render(nobody, Keys.KICK_PREMIUM_ADDRESS);
-            case NAME_DISPUTED -> messages.render(nobody, Keys.KICK_NAME_DISPUTED);
-            case NAME_KEPT -> messages.render(nobody, Keys.KICK_NAME_KEPT);
-        };
-    }
-
-    /** The reason a refused name reads on the screen it is kicked to. */
-    private Component refusal(NameVerdict verdict) {
-        Audience nobody = Audience.empty();
-        return switch (verdict) {
-            case NameVerdict.TooShort tooShort ->
-                messages.render(
-                        nobody, Keys.KICK_NAME_TOO_SHORT, Text.placeholder("min", String.valueOf(tooShort.minimum())));
-            case NameVerdict.TooLong tooLong ->
-                messages.render(
-                        nobody, Keys.KICK_NAME_TOO_LONG, Text.placeholder("max", String.valueOf(tooLong.maximum())));
-            case NameVerdict.BadCharacters bad -> messages.render(nobody, Keys.KICK_NAME_CHARACTERS);
-            case NameVerdict.Blocked blocked ->
-                messages.render(nobody, Keys.KICK_NAME_BLOCKED, Text.placeholder("word", blocked.word()));
-            case NameVerdict.WrongCase wrongCase ->
-                messages.render(
-                        nobody,
-                        Keys.KICK_NAME_CASE,
-                        Text.placeholder("name", wrongCase.registered().value()));
-            case NameVerdict.Accepted accepted -> throw new IllegalArgumentException("an accepted name is no refusal");
-        };
     }
 }
