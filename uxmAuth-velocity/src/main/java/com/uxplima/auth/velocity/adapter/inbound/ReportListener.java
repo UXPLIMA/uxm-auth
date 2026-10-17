@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.domain.network.Claim;
@@ -29,12 +30,20 @@ public final class ReportListener {
     private final Supplier<Optional<Claims>> claims;
     private final Clock clock;
     private final Logger logger;
+    private final Consumer<Player> loggedIn;
 
-    public ReportListener(ProxySessions sessions, Supplier<Optional<Claims>> claims, Clock clock, Logger logger) {
+    /** @param loggedIn what follows a login a server reported, such as a move on from an auth server */
+    public ReportListener(
+            ProxySessions sessions,
+            Supplier<Optional<Claims>> claims,
+            Clock clock,
+            Logger logger,
+            Consumer<Player> loggedIn) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.loggedIn = Objects.requireNonNull(loggedIn, "loggedIn");
     }
 
     @Subscribe
@@ -60,7 +69,10 @@ public final class ReportListener {
         switch (reader.get().read(text, player.getUniqueId(), player.getUsername(), clock.instant())) {
             case Claims.Reading.Valid valid -> {
                 switch (valid.claim().standing()) {
-                    case Claim.LoggedIn in -> sessions.reported(player.getUniqueId(), in.method());
+                    case Claim.LoggedIn in -> {
+                        sessions.reported(player.getUniqueId(), in.method());
+                        loggedIn.accept(player);
+                    }
                     // The server knows no door flags of the proxy's; the proxy keeps its own.
                     case Claim.Waiting waiting -> sessions.loggedOut(player.getUniqueId());
                 }

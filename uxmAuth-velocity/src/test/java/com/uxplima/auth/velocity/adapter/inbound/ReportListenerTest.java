@@ -9,6 +9,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,7 +35,9 @@ final class ReportListenerTest {
     private final Claims claims = new Claims(NetworkSecret.parse("q".repeat(43)), Duration.ofSeconds(30));
     private final ProxySessions sessions = new ProxySessions();
     private final Logger logger = mock(Logger.class);
-    private final ReportListener listener = new ReportListener(sessions, () -> Optional.of(claims), clock, logger);
+    private final List<Player> movedOn = new ArrayList<>();
+    private final ReportListener listener =
+            new ReportListener(sessions, () -> Optional.of(claims), clock, logger, movedOn::add);
     private final Player steve = mock(Player.class);
     private final ServerConnection server = mock(ServerConnection.class);
 
@@ -63,6 +67,7 @@ final class ReportListenerTest {
         assertThat(sessions.loggedIn(STEVE)).isTrue();
         assertThat(sessions.nextStanding(STEVE)).contains(new Claim.LoggedIn(AuthMethod.NETWORK));
         assertThat(event.getResult().isAllowed()).isFalse();
+        assertThat(movedOn).containsExactly(steve);
     }
 
     @Test
