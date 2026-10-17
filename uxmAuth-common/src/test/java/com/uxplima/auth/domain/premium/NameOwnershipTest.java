@@ -99,7 +99,7 @@ final class NameOwnershipTest {
     @Test
     @DisplayName("every rule asks a premium account for the handshake, and lets a Bedrock account through")
     void everyRuleKnowsPremiumAndBedrockAccounts() {
-        for (NameRule each : List.of(NameRule.AUTOMATIC, NameRule.OPT_IN, NameRule.STRICT)) {
+        for (NameRule each : NameRule.values()) {
             assertThat(rule(each).decide(arrival(Holder.PREMIUM), web(UNKNOWN)))
                     .as(each.name())
                     .isEqualTo(HANDSHAKE);
@@ -167,11 +167,19 @@ final class NameOwnershipTest {
                 .isEqualTo(HANDSHAKE);
         assertThat(domain.decide(new Arrival(Holder.NOBODY, false, false, "eu.paid.example.org"), web(CRACKED)))
                 .isEqualTo(HANDSHAKE);
-        assertThat(domain.decide(new Arrival(Holder.PREMIUM, false, false, "cracked.example.org"), web(PREMIUM)))
-                .isEqualTo(JOINS_CRACKED);
         assertThat(domain.decide(new Arrival(Holder.NOBODY, false, false, "10.0.0.1"), web(PREMIUM)))
                 .isEqualTo(JOINS_CRACKED);
         assertThat(asked).hasValue(0);
+    }
+
+    @Test
+    @DisplayName(
+            "by domain: a premium account joining through the cracked address still proves itself, never a password")
+    void domainNeverHandsAPremiumAccountToAPassword() {
+        Arrival throughTheCrackedAddress = new Arrival(Holder.PREMIUM, false, false, "cracked.example.org");
+
+        assertThat(rule(NameRule.DOMAIN).decide(throughTheCrackedAddress, web(PREMIUM)))
+                .isEqualTo(HANDSHAKE);
     }
 
     @Test

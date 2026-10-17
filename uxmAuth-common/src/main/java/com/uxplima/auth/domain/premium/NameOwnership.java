@@ -31,6 +31,10 @@ public final class NameOwnership {
         if (arrival.holder() == Holder.BEDROCK) {
             return new Decision.Cracked(false, false);
         }
+        if (arrival.holder() == Holder.PREMIUM) {
+            // An account that proved itself has no password to fall back on, under any rule and any address.
+            return new Decision.Handshake();
+        }
         return switch (rule) {
             case AUTOMATIC -> automatic(arrival, lookup);
             case OPT_IN -> optIn(arrival);
@@ -41,25 +45,20 @@ public final class NameOwnership {
 
     private Decision automatic(Arrival arrival, Supplier<PremiumAnswer> lookup) {
         return switch (arrival.holder()) {
-            case PREMIUM -> new Decision.Handshake();
             case CRACKED -> asked(arrival);
-            case NOBODY, CRACKED_UNVERIFIED, BEDROCK ->
+            case NOBODY, CRACKED_UNVERIFIED, PREMIUM, BEDROCK ->
                 arrival.failedBefore() ? new Decision.Cracked(false, true) : fromTheWeb(lookup.get());
         };
     }
 
     private static Decision optIn(Arrival arrival) {
         return switch (arrival.holder()) {
-            case PREMIUM -> new Decision.Handshake();
             case NOBODY -> new Decision.Cracked(false, false);
-            case CRACKED, CRACKED_UNVERIFIED, BEDROCK -> asked(arrival);
+            case CRACKED, CRACKED_UNVERIFIED, PREMIUM, BEDROCK -> asked(arrival);
         };
     }
 
     private Decision strict(Arrival arrival, Supplier<PremiumAnswer> lookup) {
-        if (arrival.holder() == Holder.PREMIUM) {
-            return new Decision.Handshake();
-        }
         Decision web = fromTheWeb(lookup.get());
         if (web instanceof Decision.Handshake && arrival.failedBefore()) {
             return new Decision.Refuse(Refusal.PAID_NAME);
