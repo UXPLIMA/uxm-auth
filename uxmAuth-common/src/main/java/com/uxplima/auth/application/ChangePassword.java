@@ -7,10 +7,12 @@ import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.hash.Verification;
+import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
@@ -25,18 +27,21 @@ public final class ChangePassword {
     private final HashingLane lane;
     private final Sessions sessions;
     private final Supplier<PasswordPolicy> policy;
+    private final NetworkEvents events;
 
     public ChangePassword(
             AccountRepository accounts,
             Hashing hashing,
             HashingLane lane,
             Sessions sessions,
-            Supplier<PasswordPolicy> policy) {
+            Supplier<PasswordPolicy> policy,
+            NetworkEvents events) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.policy = Objects.requireNonNull(policy, "policy");
+        this.events = Objects.requireNonNull(events, "events");
     }
 
     /** Both passwords are wiped once the answer is known, whatever it is. */
@@ -103,6 +108,8 @@ public final class ChangePassword {
                 state -> state instanceof AuthState.Authenticated authenticated
                         ? new AuthState.Authenticated(updated, authenticated.method())
                         : state);
+        // The password ends every other session of the account, on every server; this login stays.
+        events.publish(new Bulletin.SessionsEnded(id, true));
         return new ChangeResult.Changed();
     }
 

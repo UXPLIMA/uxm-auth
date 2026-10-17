@@ -2,12 +2,17 @@ package com.uxplima.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
+import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.testing.AuthFixture;
@@ -20,6 +25,16 @@ import org.junit.jupiter.api.Timeout;
 final class ChangePasswordTest {
 
     private final AuthFixture fixture = new AuthFixture(1);
+    private final List<Bulletin> heard = new CopyOnWriteArrayList<>();
+    private final NetworkEvents events = new NetworkEvents() {
+        @Override
+        public void publish(Bulletin bulletin) {
+            heard.add(bulletin);
+        }
+
+        @Override
+        public void listen(Consumer<Bulletin> listener) {}
+    };
 
     @AfterEach
     void close() {
@@ -60,6 +75,23 @@ final class ChangePasswordTest {
     }
 
     @Test
+    @DisplayName(
+            "a change tells every member of the network that the account's other sessions ended, and a refused one tells nobody")
+    void aChangeEndsTheOtherSessions() {
+        UUID connection = loggedIn("Steve", "hunter22");
+        UUID account = fixture.accounts
+                .findByName(new PlayerName("Steve"))
+                .orElseThrow()
+                .id();
+
+        change(connection, "wrong999", "fresh777");
+        assertThat(heard).isEmpty();
+
+        change(connection, "hunter22", "fresh777");
+        assertThat(heard).containsExactly(new Bulletin.SessionsEnded(account, true));
+    }
+
+    @Test
     @DisplayName("a player who has not logged in cannot change a password")
     void changeNeedsALogin() {
         UUID connection = fixture.registered("Steve", "hunter22");
@@ -85,7 +117,7 @@ final class ChangePasswordTest {
     void aReplaceSkipsTheOldPassword() {
         UUID connection = loggedIn("Steve", "hunter22");
         ChangePassword useCase = new ChangePassword(
-                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy);
+                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy, events);
 
         assertThat(useCase.replace(connection, Password.of("abc")).join())
                 .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.TooShort(6)));
@@ -99,7 +131,12 @@ final class ChangePasswordTest {
         UUID connection = fixture.registered("Steve", "hunter22");
 
         assertThat(new ChangePassword(
-                                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy)
+                                fixture.accounts,
+                                fixture.hashing,
+                                fixture.lane,
+                                fixture.sessions,
+                                () -> fixture.policy,
+                                events)
                         .replace(connection, Password.of("fresh777"))
                         .join())
                 .isEqualTo(new ChangeResult.NotLoggedIn());
@@ -121,7 +158,7 @@ final class ChangePasswordTest {
 
     private ChangeResult change(UUID connection, String old, String fresh) {
         return new ChangePassword(
-                        fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy)
+                        fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy, events)
                 .run(connection, Password.of(old), Password.of(fresh))
                 .join();
     }

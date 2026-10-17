@@ -83,13 +83,29 @@ public final class Claims {
             return new Reading.Refused(ClaimRefusal.MALFORMED);
         }
         Claim read = claim.get();
-        if (now.isAfter(read.issued().plus(fresh)) || read.issued().isAfter(now.plus(DRIFT))) {
+        if (!fresh(read.issued(), now)) {
             return new Reading.Refused(ClaimRefusal.STALE);
         }
         if (!read.id().equals(id) || !read.name().equals(name)) {
             return new Reading.Refused(ClaimRefusal.NOT_THIS_PLAYER);
         }
         return new Reading.Valid(read);
+    }
+
+    /** Whether a text issued then is still fresh now, allowing the other clock a little drift ahead. */
+    boolean fresh(Instant issued, Instant now) {
+        return !now.isAfter(issued.plus(fresh)) && !issued.isAfter(now.plus(DRIFT));
+    }
+
+    /** The text of something sealed with this secret; nothing when it is malformed or its signature is wrong. */
+    Optional<String> unseal(String sealed) {
+        int dot = sealed.indexOf('.');
+        Optional<byte[]> text = decode(dot < 0 ? "" : sealed.substring(0, dot));
+        Optional<byte[]> signature = decode(dot < 0 ? "" : sealed.substring(dot + 1));
+        if (text.isEmpty() || signature.isEmpty() || !MessageDigest.isEqual(signature.get(), mac(text.get()))) {
+            return Optional.empty();
+        }
+        return Optional.of(new String(text.get(), StandardCharsets.UTF_8));
     }
 
     /** Any text, signed the way a claim is. */

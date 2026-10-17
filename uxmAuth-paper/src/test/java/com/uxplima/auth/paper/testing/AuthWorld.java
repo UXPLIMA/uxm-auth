@@ -19,6 +19,7 @@ import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.application.ChangePassword;
@@ -153,7 +154,7 @@ public final class AuthWorld implements AutoCloseable {
                 });
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
-        this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy);
+        this.change = new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents());
         this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS);
     }
 

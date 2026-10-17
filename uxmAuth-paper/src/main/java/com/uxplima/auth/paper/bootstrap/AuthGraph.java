@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
@@ -279,7 +280,8 @@ final class AuthGraph implements AutoCloseable {
                         hashing,
                         lane,
                         sessions,
-                        () -> settings.current().passwordPolicy()),
+                        () -> settings.current().passwordPolicy(),
+                        new LocalEvents()),
                 moments,
                 () -> settings.current().passwords(),
                 messages,
