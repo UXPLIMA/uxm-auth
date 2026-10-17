@@ -13,9 +13,12 @@ rootProject.name = "uxmAuth"
 
 // Three modules, because a lone server and a network decide who a player is in two different places.
 // The common module holds every rule and every use case; a platform module holds only the translation
-// between a platform event and a use-case call. See docs/adr/0003.
+// between a platform event and a use-case call. See docs/adr/0003. A fourth holds the one part of a lone
+// server that the Paper API cannot reach, the login handshake, so a Minecraft update touches it alone.
+// See docs/adr/0006.
 include(
     ":uxmAuth-common",
+    ":uxmAuth-handshake",
     ":uxmAuth-paper",
     ":uxmAuth-velocity",
 )

@@ -40,6 +40,7 @@ spotless       = "8.7.0"
 palantir-fmt   = "2.93.0"
 shadow         = "9.4.1"
 run-paper      = "3.0.2"
+paperweight    = "2.0.0-beta.22"            # io.papermc.paperweight.userdev, the version uxmEssentials builds with
 
 [libraries]
 paper-api         = { module = "io.papermc.paper:paper-api",                     version.ref = "paper" }
@@ -95,3 +96,4 @@ adventure = ["adventure-api", "adventure-mini", "adventure-plain", "adventure-le
 [plugins]
 shadow    = { id = "com.gradleup.shadow",   version.ref = "shadow" }
 run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }
+paperweight = { id = "io.papermc.paperweight.userdev", version.ref = "paperweight" }
