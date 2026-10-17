@@ -14,6 +14,9 @@ import java.util.regex.PatternSyntaxException;
 
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
+import com.uxplima.auth.domain.network.AfterLogin;
+import com.uxplima.auth.domain.network.Balance;
+import com.uxplima.auth.domain.network.Route;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.DomainMark;
@@ -22,6 +25,7 @@ import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 import com.uxplima.uxmlib.config.HoconConfig;
+import org.spongepowered.configurate.ConfigurationNode;
 
 /**
  * Reads each block of {@code config.conf} into its record, with the default the shipped file also says.
@@ -107,7 +111,33 @@ final class SettingsReader {
                 Duration.ofSeconds(positive(config, "network.claim-seconds", 30)),
                 list(config, "network", "allowed-commands", List.of()).stream()
                         .map(command -> command.trim().toLowerCase(Locale.ROOT).replaceFirst("^/", ""))
-                        .toList());
+                        .toList(),
+                routing(config));
+    }
+
+    private static AuthSettings.Routing routing(HoconConfig config) {
+        return new AuthSettings.Routing(
+                list(config, "network", "auth-servers", List.of()),
+                list(config, "network", "lobbies", List.of()),
+                word(config, "network.balance", "least-players", Balance.class),
+                word(config, "network.after-login", "lobby", AfterLogin.class),
+                routes(config));
+    }
+
+    /** The routes by domain, in the order written: the first whose address matches is taken. */
+    private static List<Route> routes(HoconConfig config) {
+        ConfigurationNode written = config.nodeAt("network", "by-domain");
+        List<Route> routes = new ArrayList<>();
+        for (ConfigurationNode entry : written.childrenList()) {
+            String host = entry.node("host").getString("").trim();
+            String server = entry.node("server").getString("").trim();
+            if (host.isEmpty() || server.isEmpty()) {
+                throw new IllegalArgumentException("network.by-domain holds an entry without a host or a server;"
+                        + " write each as { host = \"eu.*\", server = lobby-eu }");
+            }
+            routes.add(new Route(host, server));
+        }
+        return routes;
     }
 
     /** Mojang refuses past this many requests in ten minutes. */

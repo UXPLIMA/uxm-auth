@@ -15,6 +15,9 @@ import java.util.Set;
 
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
+import com.uxplima.auth.domain.network.AfterLogin;
+import com.uxplima.auth.domain.network.Balance;
+import com.uxplima.auth.domain.network.Route;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordVerdict;
@@ -344,6 +347,44 @@ final class AuthSettingsTest {
         assertThat(network.secret()).isEmpty();
         assertThat(network.claimFor()).isEqualTo(Duration.ofSeconds(30));
         assertThat(network.allowedCommands()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a network has no auth server and no lobby until the operator names them, and balances by players")
+    void theRoutingDefaults(@TempDir Path folder) throws IOException {
+        AuthSettings.Routing routing = settingsFrom(folder, "").network().routing();
+
+        assertThat(routing.authServers()).isEmpty();
+        assertThat(routing.lobbies()).isEmpty();
+        assertThat(routing.balance()).isEqualTo(Balance.LEAST_PLAYERS);
+        assertThat(routing.afterLogin()).isEqualTo(AfterLogin.LOBBY);
+        assertThat(routing.byDomain()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the routes by domain are read in the order written, and a route without a server is refused")
+    void theRoutesAreRead(@TempDir Path folder) throws IOException {
+        AuthSettings.Routing routing = settingsFrom(folder, """
+                        network {
+                          auth-servers = [auth-1]
+                          lobbies = [lobby-1, lobby-2]
+                          balance = random
+                          after-login = by-domain
+                          by-domain = [
+                            { host = "eu.*", server = lobby-eu }
+                            { host = "*", server = lobby-1 }
+                          ]
+                        }
+                        """).network().routing();
+
+        assertThat(routing.authServers()).containsExactly("auth-1");
+        assertThat(routing.lobbies()).containsExactly("lobby-1", "lobby-2");
+        assertThat(routing.balance()).isEqualTo(Balance.RANDOM);
+        assertThat(routing.afterLogin()).isEqualTo(AfterLogin.BY_DOMAIN);
+        assertThat(routing.byDomain()).containsExactly(new Route("eu.*", "lobby-eu"), new Route("*", "lobby-1"));
+        assertThatThrownBy(() -> settingsFrom(folder, "network { by-domain = [ { host = \"eu.*\" } ] }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("network.by-domain");
     }
 
     @Test

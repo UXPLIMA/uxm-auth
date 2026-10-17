@@ -6,9 +6,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.random.RandomGenerator;
 
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
+import com.uxplima.auth.domain.network.AfterLogin;
+import com.uxplima.auth.domain.network.Balance;
+import com.uxplima.auth.domain.network.Destinations;
+import com.uxplima.auth.domain.network.Route;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.DomainMark;
@@ -97,6 +102,30 @@ public final class AuthSettings {
         }
     }
 
+    /**
+     * Where the proxy sends a player: an auth server while they wait, and once logged in a lobby, their last
+     * server or the server of the address they typed. Every name is a server in the proxy's own list.
+     */
+    public record Routing(
+            List<String> authServers,
+            List<String> lobbies,
+            Balance balance,
+            AfterLogin afterLogin,
+            List<Route> byDomain) {
+        public Routing {
+            authServers = List.copyOf(Objects.requireNonNull(authServers, "authServers"));
+            lobbies = List.copyOf(Objects.requireNonNull(lobbies, "lobbies"));
+            Objects.requireNonNull(balance, "balance");
+            Objects.requireNonNull(afterLogin, "afterLogin");
+            byDomain = List.copyOf(Objects.requireNonNull(byDomain, "byDomain"));
+        }
+
+        /** The rule that picks among these servers. */
+        public Destinations destinations(RandomGenerator random) {
+            return new Destinations(balance, afterLogin, lobbies, byDomain, random);
+        }
+    }
+
     /** What a Bedrock player Floodgate vouched for gets: in at once, or the same password as everyone. */
     public record Bedrock(boolean autoLogin) {}
 
@@ -107,11 +136,13 @@ public final class AuthSettings {
      * @param claimFor how long a signed claim stays fresh after the proxy wrote it
      * @param allowedCommands the proxy's own commands a player may run before logging in
      */
-    public record Network(boolean enabled, String secret, Duration claimFor, List<String> allowedCommands) {
+    public record Network(
+            boolean enabled, String secret, Duration claimFor, List<String> allowedCommands, Routing routing) {
         public Network {
             Objects.requireNonNull(secret, "secret");
             Objects.requireNonNull(claimFor, "claimFor");
             allowedCommands = List.copyOf(Objects.requireNonNull(allowedCommands, "allowedCommands"));
+            Objects.requireNonNull(routing, "routing");
             if (enabled && secret.isBlank()) {
                 throw new IllegalArgumentException("network.enabled is true and network.secret is empty. The proxy"
                         + " writes the secret into its own data folder on its first start: copy it here.");
