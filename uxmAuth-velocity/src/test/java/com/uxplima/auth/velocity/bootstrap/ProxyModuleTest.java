@@ -22,6 +22,7 @@ import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.velocitypowered.api.event.EventHandler;
@@ -59,7 +60,22 @@ final class ProxyModuleTest {
         module.shutdown();
 
         verify(events).register(eq(plugin), any(DoorListener.class));
+        verify(events).register(eq(plugin), any(ClaimWriter.class));
         verify(logger).info(contains("Premium auto-login is on"));
+    }
+
+    @Test
+    @DisplayName("the first start makes the network secret, writes it beside the config and says where")
+    void theFirstStartMakesTheSecret(@TempDir Path folder) throws IOException {
+        ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
+
+        module.wire();
+        module.shutdown();
+
+        assertThat(Files.readString(folder.resolve("network-secret.txt"), StandardCharsets.UTF_8)
+                        .trim())
+                .hasSize(43);
+        verify(logger).info(contains("network secret"), any(Object.class));
     }
 
     @Test

@@ -13,5 +13,7 @@ public enum AuthMethod {
     /** A session from an earlier login was still valid. */
     SESSION,
     /** A member of staff or the API logged the player in. */
-    FORCED
+    FORCED,
+    /** The player logged in on another server of the network, and the proxy vouched for it here. */
+    NETWORK
 }

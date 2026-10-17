@@ -9,6 +9,8 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.DoorWords;
@@ -25,10 +27,15 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.domain.network.Claims;
+import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
+import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyLocales;
+import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.language.LanguageFiles;
 import com.uxplima.uxmlib.text.language.Languages;
@@ -131,8 +138,27 @@ final class ProxyModule {
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
                 clock);
-        proxy.getEventManager().register(plugin, new DoorListener(door, new DoorWords(words), logger));
+        ProxySessions sessions = new ProxySessions();
+        proxy.getEventManager().register(plugin, new DoorListener(door, sessions, new DoorWords(words), logger));
+        proxy.getEventManager().register(plugin, new ClaimWriter(sessions, claims(settings), clock));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+    }
+
+    /**
+     * The signer of the claims every server behind this proxy reads. The secret is the one in config.conf, or the
+     * one this proxy made on its first start, which the console points the operator to.
+     */
+    private Supplier<Optional<Claims>> claims(PluginSettings settings) {
+        ProxySecret.Loaded loaded =
+                ProxySecret.loadOrCreate(folder, settings.current().network().secret());
+        if (loaded.created()) {
+            logger.info(
+                    "This proxy made the network secret and wrote it to {}. Copy it into network.secret in"
+                            + " config.conf on every server behind this proxy, and set network.enabled to true there.",
+                    loaded.file());
+        }
+        NetworkSecret secret = loaded.secret();
+        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor()));
     }
 
     /** The decision at the pre-login: the web sources, the operator's rule, and the memories of claims and failures. */

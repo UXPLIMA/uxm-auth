@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
+import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.ResultedEvent;
@@ -13,6 +14,7 @@ import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
+import com.velocitypowered.api.proxy.Player;
 import org.slf4j.Logger;
 
 /**
@@ -30,11 +32,13 @@ public final class DoorListener {
     private static final short LATE = -1000;
 
     private final ProxyDoor door;
+    private final ProxySessions sessions;
     private final DoorWords words;
     private final Logger logger;
 
-    public DoorListener(ProxyDoor door, DoorWords words, Logger logger) {
+    public DoorListener(ProxyDoor door, ProxySessions sessions, DoorWords words, Logger logger) {
         this.door = Objects.requireNonNull(door, "door");
+        this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.words = Objects.requireNonNull(words, "words");
         this.logger = Objects.requireNonNull(logger, "logger");
     }
@@ -113,11 +117,23 @@ public final class DoorListener {
      * put in online mode and never saw proved, one it lost track of, and one it refused are turned away.
      */
     void login(LoginEvent event) {
+        Player player = event.getPlayer();
         Optional<Refusal> refusal =
-                switch (door.arrival(event.getPlayer().getRemoteAddress()).orElse(null)) {
-                    case ProxyDoor.Arrival.Usual usual -> Optional.empty();
-                    case ProxyDoor.Arrival.Premium premium -> Optional.empty();
-                    case ProxyDoor.Arrival.Untouched untouched -> Optional.empty();
+                switch (door.arrival(player.getRemoteAddress()).orElse(null)) {
+                    case ProxyDoor.Arrival.Usual usual -> {
+                        sessions.waiting(
+                                player.getUniqueId(),
+                                new Claim.Waiting(usual.unverified(), usual.explain(), usual.marked()));
+                        yield Optional.empty();
+                    }
+                    case ProxyDoor.Arrival.Premium premium -> {
+                        sessions.loggedIn(player.getUniqueId(), premium.state().method());
+                        yield Optional.empty();
+                    }
+                    case ProxyDoor.Arrival.Untouched untouched -> {
+                        sessions.waiting(player.getUniqueId(), new Claim.Waiting(false, false, false));
+                        yield Optional.empty();
+                    }
                     case ProxyDoor.Arrival.Refused refused -> Optional.of(refused.why());
                     case ProxyDoor.Arrival.Asked asked -> Optional.of(Refusal.LOOKUP_FAILED);
                     case null -> Optional.of(Refusal.LOOKUP_FAILED);
@@ -128,6 +144,7 @@ public final class DoorListener {
 
     void left(DisconnectEvent event) {
         door.gone(event.getPlayer().getRemoteAddress());
+        sessions.forget(event.getPlayer().getUniqueId());
     }
 
     /** A name as the console may print it: a control character could rewrite the line around it. */

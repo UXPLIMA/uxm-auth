@@ -44,6 +44,7 @@ final class DoorListenerTest {
     private final ProxyWorld world;
     private final InboundConnection connection = mock(InboundConnection.class);
     private final Logger logger = mock(Logger.class);
+    private final ProxySessions sessions = new ProxySessions();
 
     DoorListenerTest(@TempDir Path folder) {
         this.world = new ProxyWorld(folder);
@@ -58,7 +59,7 @@ final class DoorListenerTest {
     }
 
     private DoorListener listener() {
-        return new DoorListener(world.door(), world.words, logger);
+        return new DoorListener(world.door(), sessions, world.words, logger);
     }
 
     private PreLoginEvent preLoginOf(String name) {
@@ -173,6 +174,7 @@ final class DoorListenerTest {
     private LoginEvent loginFrom(DoorListener listener) {
         Player player = mock(Player.class);
         when(player.getRemoteAddress()).thenReturn(FROM);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
         LoginEvent login = new LoginEvent(player, "");
         listener.login(login);
         return login;
@@ -216,7 +218,7 @@ final class DoorListenerTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.eq(false),
                         org.mockito.ArgumentMatchers.any());
-        DoorListener listener = new DoorListener(door, world.words, logger);
+        DoorListener listener = new DoorListener(door, sessions, world.words, logger);
         listener.preLogin(preLoginOf("Steve"));
 
         listener.profile(new GameProfileRequestEvent(
@@ -265,6 +267,51 @@ final class DoorListenerTest {
     }
 
     @Test
+    @DisplayName(
+            "a proved player is logged in on the proxy at the login, and a cracked one waits with the door's flags")
+    void theLoginRecordsWhereThePlayerStands() {
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+        listener.profile(
+                new GameProfileRequestEvent(connection, new GameProfile(ProxyWorld.MOJANG, "Notch", List.of()), true));
+        Player premium = mock(Player.class);
+        when(premium.getRemoteAddress()).thenReturn(FROM);
+        when(premium.getUniqueId()).thenReturn(ProxyWorld.MOJANG);
+        listener.login(new LoginEvent(premium, ""));
+        assertThat(sessions.loggedIn(ProxyWorld.MOJANG)).isTrue();
+
+        world.rule = NameRule.DOMAIN;
+        DoorListener marking = listener();
+        marking.preLogin(preLoginOf("Steve"));
+        UUID marked = UuidScheme.offline(new PlayerName("Steve+"));
+        marking.profile(new GameProfileRequestEvent(
+                connection, new GameProfile(UuidScheme.offline(new PlayerName("Steve")), "Steve", List.of()), false));
+        Player cracked = mock(Player.class);
+        when(cracked.getRemoteAddress()).thenReturn(FROM);
+        when(cracked.getUniqueId()).thenReturn(marked);
+        marking.login(new LoginEvent(cracked, ""));
+        assertThat(sessions.loggedIn(marked)).isFalse();
+        assertThat(sessions.nextStanding(marked))
+                .contains(new com.uxplima.auth.domain.network.Claim.Waiting(false, false, true));
+    }
+
+    @Test
+    @DisplayName("a refused login records nothing, and a player who leaves the proxy is forgotten there")
+    void aRefusedOrGonePlayerHasNoSession() {
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(FROM);
+        when(player.getUniqueId()).thenReturn(ProxyWorld.MOJANG);
+        listener.login(new LoginEvent(player, ""));
+        assertThat(sessions.nextStanding(ProxyWorld.MOJANG)).isEmpty();
+
+        sessions.loggedIn(ProxyWorld.MOJANG, com.uxplima.auth.domain.state.AuthMethod.PREMIUM);
+        listener.left(new DisconnectEvent(player, DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
+        assertThat(sessions.loggedIn(ProxyWorld.MOJANG)).isFalse();
+    }
+
+    @Test
     @DisplayName("a player who leaves is forgotten")
     void aPlayerWhoLeavesIsForgotten() {
         DoorListener listener = listener();
@@ -274,6 +321,7 @@ final class DoorListenerTest {
         assertThat(listener.door().arrival(FROM)).isPresent();
         Player player = mock(Player.class);
         when(player.getRemoteAddress()).thenReturn(FROM);
+        when(player.getUniqueId()).thenReturn(ProxyWorld.MOJANG);
 
         listener.left(new DisconnectEvent(player, DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
 
