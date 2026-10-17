@@ -26,8 +26,11 @@ dependencies {
     // Adventure is compileOnly on purpose. Paper and Velocity each ship it, and a shaded
     // copy would break the serializers the platform uses on its own components.
     compileOnly(libs.bundles.adventure)
+    // Reads what the premium sources answer. Paper and Velocity each ship it.
+    compileOnly(libs.gson)
 
     testImplementation(libs.bundles.adventure)
+    testImplementation(libs.gson)
     testImplementation(libs.archunit.junit)
     // Test only: the catalogue guards ask the command layer which keys it reads, so that a command.*
     // line in a language file is understood as an override of the library's default.

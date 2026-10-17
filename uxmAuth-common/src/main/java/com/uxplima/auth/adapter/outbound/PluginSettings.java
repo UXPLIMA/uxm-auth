@@ -59,7 +59,8 @@ public final class PluginSettings {
             AuthSettings.Hold hold,
             AuthSettings.Timeouts timeouts,
             AuthSettings.Effects effects,
-            AuthSettings.Bedrock bedrock) {
+            AuthSettings.Bedrock bedrock,
+            AuthSettings.Premium premium) {
 
         public Snapshot {
             Objects.requireNonNull(language, "language");
@@ -72,6 +73,7 @@ public final class PluginSettings {
             Objects.requireNonNull(timeouts, "timeouts");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
+            Objects.requireNonNull(premium, "premium");
             if (hashing.algorithm() == HashAlgorithm.BCRYPT && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
                 throw new IllegalArgumentException("passwords.max-length is " + passwords.maxLength()
                         + ", and bcrypt reads only the first " + AuthSettings.BCRYPT_BYTES
@@ -209,7 +211,8 @@ public final class PluginSettings {
                 SettingsReader.hold(config),
                 SettingsReader.timeouts(config),
                 SettingsReader.effects(config),
-                SettingsReader.bedrock(config));
+                SettingsReader.bedrock(config),
+                SettingsReader.premium(config));
     }
 
     /**

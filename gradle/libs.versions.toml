@@ -19,6 +19,7 @@ configurate    = "4.1.2"
 jspecify       = "1.0.0"
 bstats         = "3.0.2"
 # Argon2id and BCrypt in pure Java, with no native library to load on a host we do not control.
+gson           = "2.14.0"                  # com.google.code.gson:gson, the copy Paper and Velocity already ship
 bouncycastle   = "1.86"                    # org.bouncycastle:bcprov-jdk18on (Maven Central, verified 2026-10-17)
 
 # soft dependencies, compileOnly, reached only past a plugin-present guard
@@ -60,6 +61,7 @@ adventure-api     = { module = "net.kyori:adventure-api",                       
 adventure-mini    = { module = "net.kyori:adventure-text-minimessage",           version.ref = "adventure" }
 adventure-plain   = { module = "net.kyori:adventure-text-serializer-plain",      version.ref = "adventure" }
 adventure-legacy  = { module = "net.kyori:adventure-text-serializer-legacy",     version.ref = "adventure" }
+gson              = { module = "com.google.code.gson:gson",                      version.ref = "gson" }
 bouncycastle      = { module = "org.bouncycastle:bcprov-jdk18on",                version.ref = "bouncycastle" }
 configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
 jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }

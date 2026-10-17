@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 
@@ -27,6 +28,29 @@ public final class AuthSettings {
         public Names {
             Objects.requireNonNull(pattern, "pattern");
             blocked = List.copyOf(Objects.requireNonNull(blocked, "blocked"));
+        }
+    }
+
+    /**
+     * How a name is asked of the web: the sources in order, how long an answer is kept, how many requests
+     * Mojang is sent in ten minutes, how long one may take, and where each source answers.
+     */
+    public record Premium(
+            List<PremiumSource> sources,
+            Duration keepAnswers,
+            int mojangCap,
+            Duration timeout,
+            Map<PremiumSource, String> addresses) {
+        public Premium {
+            sources = List.copyOf(Objects.requireNonNull(sources, "sources"));
+            Objects.requireNonNull(keepAnswers, "keepAnswers");
+            Objects.requireNonNull(timeout, "timeout");
+            addresses = Map.copyOf(Objects.requireNonNull(addresses, "addresses"));
+        }
+
+        /** Where this source answers, with {@code {name}} in place of the name. */
+        public String address(PremiumSource source) {
+            return addresses.getOrDefault(Objects.requireNonNull(source, "source"), source.shippedAddress());
         }
     }
 

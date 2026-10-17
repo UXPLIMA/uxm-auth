@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.auth.domain.password.Password;
@@ -41,6 +42,47 @@ final class AuthSettingsTest {
         assertThat(settings.hold().allowedCommands()).isEmpty();
         assertThat(settings.hold().hideStats()).isTrue();
         assertThat(settings.bedrock()).isEqualTo(new AuthSettings.Bedrock(true));
+        assertThat(settings.premium().sources())
+                .containsExactly(
+                        PremiumSource.MOJANG, PremiumSource.PLAYERDB, PremiumSource.MINETOOLS, PremiumSource.ASHCON);
+        assertThat(settings.premium().keepAnswers()).isEqualTo(Duration.ofMinutes(30));
+        assertThat(settings.premium().mojangCap()).isEqualTo(550);
+        assertThat(settings.premium().timeout()).isEqualTo(Duration.ofSeconds(3));
+        assertThat(settings.premium().address(PremiumSource.MOJANG))
+                .isEqualTo("https://api.mojang.com/users/profiles/minecraft/{name}");
+    }
+
+    @Test
+    @DisplayName("the operator's order of the premium sources is kept, and a source left out is not asked")
+    void premiumSourcesFollowTheFile(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot settings = settingsFrom(folder, "premium { sources = [ashcon, \"Mojang\"] }\n");
+
+        assertThat(settings.premium().sources()).containsExactly(PremiumSource.ASHCON, PremiumSource.MOJANG);
+    }
+
+    @Test
+    @DisplayName("a premium source this plugin does not know is refused, naming the line and the word")
+    void anUnknownPremiumSourceIsRefused(@TempDir Path folder) {
+        assertThatThrownBy(() -> settingsFrom(folder, "premium { sources = [mojang, namemc] }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("premium.sources")
+                .hasMessageContaining("namemc");
+    }
+
+    @Test
+    @DisplayName("a Mojang cap at or past Mojang's own limit of 600 is refused, since Mojang would refuse first")
+    void aMojangCapPastTheLimitIsRefused(@TempDir Path folder) {
+        assertThatThrownBy(() -> settingsFrom(folder, "premium { mojang-cap-per-10-minutes = 600 }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("premium.mojang-cap-per-10-minutes");
+    }
+
+    @Test
+    @DisplayName("a source address without the {name} it is asked about is refused")
+    void anAddressWithoutTheNameIsRefused(@TempDir Path folder) {
+        assertThatThrownBy(() -> settingsFrom(folder, "premium { addresses { ashcon = \"https://example.org/\" } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("premium.addresses.ashcon");
     }
 
     @Test

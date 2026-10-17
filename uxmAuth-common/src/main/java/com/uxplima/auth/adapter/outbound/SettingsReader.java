@@ -1,6 +1,8 @@
 package com.uxplima.auth.adapter.outbound;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -10,6 +12,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.password.CharClass;
 import com.uxplima.uxmlib.config.HoconConfig;
@@ -89,6 +92,52 @@ final class SettingsReader {
 
     static AuthSettings.Bedrock bedrock(HoconConfig config) {
         return new AuthSettings.Bedrock(config.getBoolean("bedrock.auto-login", true));
+    }
+
+    /** Mojang refuses past this many requests in ten minutes. */
+    private static final int MOJANG_LIMIT = 600;
+
+    static AuthSettings.Premium premium(HoconConfig config) {
+        int cap = config.getInt("premium.mojang-cap-per-10-minutes", 550);
+        if (cap < 1 || cap >= MOJANG_LIMIT) {
+            throw new IllegalArgumentException("premium.mojang-cap-per-10-minutes must be from 1 to "
+                    + (MOJANG_LIMIT - 1) + ", below Mojang's own limit, got: " + cap);
+        }
+        Map<PremiumSource, String> addresses = new EnumMap<>(PremiumSource.class);
+        for (PremiumSource source : PremiumSource.values()) {
+            String path = "premium.addresses." + source.key();
+            String address = config.getString(path, source.shippedAddress());
+            if (!address.contains("{name}")) {
+                throw new IllegalArgumentException(path + " must hold {name} where the name goes, got: " + address);
+            }
+            addresses.put(source, address);
+        }
+        return new AuthSettings.Premium(
+                sources(config),
+                Duration.ofMinutes(positive(config, "premium.cache-minutes", 30)),
+                cap,
+                Duration.ofMillis(positive(config, "premium.timeout-millis", 3000)),
+                addresses);
+    }
+
+    private static List<PremiumSource> sources(HoconConfig config) {
+        List<String> shipped =
+                Arrays.stream(PremiumSource.values()).map(PremiumSource::key).toList();
+        List<PremiumSource> sources = new ArrayList<>();
+        for (String written : list(config, "premium", "sources", shipped)) {
+            sources.add(PremiumSource.byKey(written)
+                    .orElseThrow(() -> new IllegalArgumentException("premium.sources holds " + written
+                            + ", and this plugin knows " + String.join(", ", shipped))));
+        }
+        return sources;
+    }
+
+    private static int positive(HoconConfig config, String path, int fallback) {
+        int value = config.getInt(path, fallback);
+        if (value < 1) {
+            throw new IllegalArgumentException(path + " must be at least 1, got: " + value);
+        }
+        return value;
     }
 
     static AuthSettings.Effects effects(HoconConfig config) {
