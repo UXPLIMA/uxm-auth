@@ -159,6 +159,39 @@ final class ConfigurationGateTest {
     }
 
     @Test
+    @DisplayName("a right password typed after another connection opened the session again opens nothing")
+    void anAnswerForAReplacedOpeningIsThrownAway() throws Exception {
+        world.registered(steve, "hunter22");
+        PlayerConfigurationConnection connection = connection(steve.getUniqueId());
+        ConfigurationGate gate = gate();
+        assertThat(gate.open(connection)).isPresent();
+        world.sessions.open(
+                steve.getUniqueId(), world.sessions.state(steve.getUniqueId()).orElseThrow());
+
+        gate.answer(connection, AuthScreens.LOGIN, typed("hunter22")).get(5, TimeUnit.SECONDS);
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a second connection under an id that already waits here is sent away")
+    void aSecondWaitingConnectionIsSentAway() throws Exception {
+        world.registered(steve, "hunter22");
+        ConfigurationGate gate = gate();
+        PlayerConfigurationConnection first = connection(steve.getUniqueId());
+        PlayerConfigurationConnection second = connection(steve.getUniqueId());
+        CompletableFuture<ConfigurationGate.Outcome> wait = gate.open(first).orElseThrow();
+
+        assertThat(gate.open(second)).isEmpty();
+
+        verify(second).disconnect(any(Component.class));
+        assertThat(wait).isNotDone();
+        assertThat(gate.waitingFrom(steve.getUniqueId())).isPresent();
+        gate.answer(first, AuthScreens.LOGIN, typed("hunter22")).get(5, TimeUnit.SECONDS);
+        assertThat(wait.get(1, TimeUnit.SECONDS)).isEqualTo(ConfigurationGate.Outcome.IN);
+    }
+
+    @Test
     @DisplayName("a client too old for dialogs is not held here, and the world holds it with the commands")
     void anOldClientPassesThrough() {
         world.registered(steve, "hunter22");

@@ -1,5 +1,7 @@
 package com.uxplima.auth.paper.adapter.inbound.screen;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
@@ -59,6 +61,7 @@ public final class ConfigurationGate implements Listener {
     record Waiting(
             PlayerConfigurationConnection connection,
             ConnectingAudience reader,
+            long opening,
             AuthState state,
             CompletableFuture<Outcome> done) {}
 
@@ -147,6 +150,13 @@ public final class ConfigurationGate implements Listener {
         return toTheWorld.contains(Objects.requireNonNull(connection, "connection"));
     }
 
+    /** The address of a connection waiting here under this id, if one is. */
+    public Optional<InetAddress> waitingFrom(UUID connection) {
+        Waiting entry = waiting.get(Objects.requireNonNull(connection, "connection"));
+        InetSocketAddress address = entry == null ? null : entry.connection().getClientAddress();
+        return Optional.ofNullable(address == null ? null : address.getAddress());
+    }
+
     /** Shows the screen and starts the wait; empty when this connection does not wait here. */
     Optional<CompletableFuture<Outcome>> open(PlayerConfigurationConnection connection) {
         Objects.requireNonNull(connection, "connection");
@@ -154,17 +164,22 @@ public final class ConfigurationGate implements Listener {
         if (id == null || settings.get().waitingRoom() != ScreenSettings.WaitingRoom.DIALOG) {
             return Optional.empty();
         }
-        AuthState state = sessions.state(id).orElse(null);
-        if (state == null || state instanceof AuthState.Authenticated) {
+        Sessions.Held held = sessions.held(id).orElse(null);
+        if (held == null || held.state() instanceof AuthState.Authenticated) {
             return Optional.empty();
         }
+        AuthState state = held.state();
         if (!showsDialogs.test(id)) {
             toTheWorld.add(id);
             return Optional.empty();
         }
         CompletableFuture<Outcome> done = new CompletableFuture<>();
-        Waiting entry = new Waiting(connection, reader(connection), state, done);
-        waiting.put(id, entry);
+        Waiting entry = new Waiting(connection, reader(connection), held.generation(), state, done);
+        // Two connections under one id can pass the door at the same moment; the first one waits here.
+        if (waiting.putIfAbsent(id, entry) != null) {
+            connection.disconnect(messages.render(entry.reader(), Keys.KICK_ALREADY_ONLINE));
+            return Optional.empty();
+        }
         CompletableFuture<Outcome> unused = done.whenComplete((outcome, failure) -> waiting.remove(id, entry));
         done.completeOnTimeout(Outcome.TIMEOUT, limit(state).toMillis(), TimeUnit.MILLISECONDS);
         shower.show(entry.reader(), firstScreen(entry));

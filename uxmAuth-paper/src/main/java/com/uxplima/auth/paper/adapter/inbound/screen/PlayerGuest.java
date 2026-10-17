@@ -2,6 +2,7 @@ package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -34,6 +35,12 @@ public final class PlayerGuest implements Guest {
     @Override
     public UUID id() {
         return player.getUniqueId();
+    }
+
+    @Override
+    public OptionalLong opening() {
+        // One player per id stands in the world; whatever opening holds it now is theirs.
+        return OptionalLong.empty();
     }
 
     @Override

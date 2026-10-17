@@ -108,6 +108,34 @@ final class LogInTest {
     }
 
     @Test
+    @DisplayName("a login bound to an opening another connection replaced is gone, and opens nothing")
+    void aLoginForAnEarlierOpeningIsGone() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        long first = fixture.sessions.held(connection).orElseThrow().generation();
+        fixture.sessions.open(connection, fixture.sessions.state(connection).orElseThrow());
+
+        LoginResult result = useCase()
+                .run(connection, first, Password.of("hunter22"), "10.0.0.7")
+                .join();
+
+        assertThat(result).isEqualTo(new LoginResult.Gone());
+        assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Registered.class);
+    }
+
+    @Test
+    @DisplayName("a login bound to the opening that still holds the connection runs as usual")
+    void aLoginForTheCurrentOpeningRuns() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        long current = fixture.sessions.held(connection).orElseThrow().generation();
+
+        LoginResult result = useCase()
+                .run(connection, current, Password.of("hunter22"), "10.0.0.7")
+                .join();
+
+        assertThat(result).isInstanceOf(LoginResult.LoggedIn.class);
+    }
+
+    @Test
     @DisplayName("a connection nobody holds answers gone")
     void anUnknownConnectionIsGone() {
         assertThat(login(UUID.randomUUID(), "hunter22")).isEqualTo(new LoginResult.Gone());

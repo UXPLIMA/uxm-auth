@@ -29,7 +29,8 @@ final class SettingsReader {
                 pattern(config, "names.pattern", "[A-Za-z0-9_]+"),
                 config.getInt("names.min-length", 3),
                 config.getInt("names.max-length", 16),
-                list(config, "names", "blocked", List.of()));
+                list(config, "names", "blocked", List.of()),
+                config.getBoolean("names.reconnect-from-same-address", false));
     }
 
     static AuthSettings.Passwords passwords(HoconConfig config) {

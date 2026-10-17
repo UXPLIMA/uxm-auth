@@ -1,10 +1,13 @@
 package com.uxplima.auth.paper.adapter.inbound.listener;
 
+import java.net.InetAddress;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,6 +47,8 @@ public final class ConnectionListener implements Listener {
     private final Door door;
     private final HoldKeeper keeper;
     private final IntSupplier maxAttempts;
+    private final Function<UUID, Optional<InetAddress>> holders;
+    private final BooleanSupplier sameAddress;
     private final Messages messages;
     private final Logger logger;
 
@@ -64,6 +69,8 @@ public final class ConnectionListener implements Listener {
             Door door,
             HoldKeeper keeper,
             IntSupplier maxAttempts,
+            Function<UUID, Optional<InetAddress>> holders,
+            BooleanSupplier sameAddress,
             Messages messages,
             Logger logger) {
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
@@ -72,6 +79,8 @@ public final class ConnectionListener implements Listener {
         this.door = Objects.requireNonNull(door, "door");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.maxAttempts = Objects.requireNonNull(maxAttempts, "maxAttempts");
+        this.holders = Objects.requireNonNull(holders, "holders");
+        this.sameAddress = Objects.requireNonNull(sameAddress, "sameAddress");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.logger = Objects.requireNonNull(logger, "logger");
     }
@@ -86,6 +95,12 @@ public final class ConnectionListener implements Listener {
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             return;
         }
+        if (isHeldElsewhere(event.getUniqueId(), event.getAddress())) {
+            event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    messages.render(Audience.empty(), Keys.KICK_ALREADY_ONLINE));
+            return;
+        }
         try {
             sessions.open(event.getUniqueId(), waiting(new PlayerName(event.getName())));
         } catch (RuntimeException unreachable) {
@@ -96,6 +111,17 @@ public final class ConnectionListener implements Listener {
             event.disallow(
                     AsyncPlayerPreLoginEvent.Result.KICK_OTHER, messages.render(Audience.empty(), Keys.KICK_STORAGE));
         }
+    }
+
+    /**
+     * One connection per name: a second one would open the session again, and the first connection's login
+     * would let the second one in. The operator may let a reconnect through from the same address, for a
+     * player whose first connection hung.
+     */
+    private boolean isHeldElsewhere(UUID id, InetAddress from) {
+        Optional<InetAddress> holder = holders.apply(id);
+        return holder.isPresent()
+                && !(sameAddress.getAsBoolean() && holder.get().equals(from));
     }
 
     /**

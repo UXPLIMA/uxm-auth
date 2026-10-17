@@ -81,7 +81,11 @@ public final class ScreenAnswers {
     private CompletableFuture<Void> login(Guest guest, Answer answer) {
         String typed = orEmpty(answer.text(AuthScreens.PASSWORD));
         Audience reader = guest.audience();
-        return guest.after(logIn.run(guest.id(), Password.of(typed), guest.address()), result -> {
+        Password password = Password.of(typed);
+        CompletableFuture<LoginResult> work = guest.opening().isPresent()
+                ? logIn.run(guest.id(), guest.opening().getAsLong(), password, guest.address())
+                : logIn.run(guest.id(), password, guest.address());
+        return guest.after(work, result -> {
             switch (result) {
                 case LoginResult.LoggedIn loggedIn -> letIn(guest, AuthSettings.Moment.LOGGED_IN);
                 case LoginResult.Wrong wrong -> {
@@ -114,36 +118,33 @@ public final class ScreenAnswers {
         }
         String typed = orEmpty(answer.text(AuthScreens.PASSWORD));
         String repeated = passwords.get().confirmOnRegister() ? orEmpty(answer.text(AuthScreens.CONFIRM)) : typed;
-        return guest.after(
-                register.run(
-                        guest.id(),
-                        new PlayerName(guest.name()),
-                        Password.of(typed),
-                        Password.of(repeated),
-                        guest.address()),
-                result -> {
-                    switch (result) {
-                        case RegisterResult.Created created -> letIn(guest, AuthSettings.Moment.REGISTERED);
-                        case RegisterResult.Mismatch mismatch ->
-                            again(reader, messages.render(reader, Keys.REGISTER_MISMATCH));
-                        case RegisterResult.Rejected rejected ->
-                            again(
+        return guest.after(registration(guest, Password.of(typed), Password.of(repeated)), result -> {
+            switch (result) {
+                case RegisterResult.Created created -> letIn(guest, AuthSettings.Moment.REGISTERED);
+                case RegisterResult.Mismatch mismatch -> again(reader, messages.render(reader, Keys.REGISTER_MISMATCH));
+                case RegisterResult.Rejected rejected ->
+                    again(
+                            reader,
+                            PasswordWords.reason(messages, reader, rejected.verdict())
+                                    .orElse(null));
+                case RegisterResult.NameTaken taken ->
+                    again(
+                            reader,
+                            messages.render(
                                     reader,
-                                    PasswordWords.reason(messages, reader, rejected.verdict())
-                                            .orElse(null));
-                        case RegisterResult.NameTaken taken ->
-                            again(
-                                    reader,
-                                    messages.render(
-                                            reader,
-                                            Keys.REGISTER_NAME_TAKEN,
-                                            Text.placeholder(
-                                                    "name", taken.stored().value())));
-                        case RegisterResult.AlreadyRegistered already ->
-                            shower.show(reader, screens.login(reader, null));
-                        case RegisterResult.Gone gone -> {}
-                    }
-                });
+                                    Keys.REGISTER_NAME_TAKEN,
+                                    Text.placeholder("name", taken.stored().value())));
+                case RegisterResult.AlreadyRegistered already -> shower.show(reader, screens.login(reader, null));
+                case RegisterResult.Gone gone -> {}
+            }
+        });
+    }
+
+    private CompletableFuture<RegisterResult> registration(Guest guest, Password typed, Password repeated) {
+        PlayerName name = new PlayerName(guest.name());
+        return guest.opening().isPresent()
+                ? register.run(guest.id(), guest.opening().getAsLong(), name, typed, repeated, guest.address())
+                : register.run(guest.id(), name, typed, repeated, guest.address());
     }
 
     private CompletableFuture<Void> cancel(Guest guest) {

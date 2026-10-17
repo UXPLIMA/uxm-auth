@@ -29,7 +29,7 @@ final class AuthSettingsTest {
     void defaultsMatchThisPlan(@TempDir Path folder) throws IOException {
         PluginSettings.Snapshot settings = settingsFrom(folder, "");
 
-        assertThat(settings.names()).isEqualTo(new AuthSettings.Names("[A-Za-z0-9_]+", 3, 16, List.of()));
+        assertThat(settings.names()).isEqualTo(new AuthSettings.Names("[A-Za-z0-9_]+", 3, 16, List.of(), false));
         assertThat(settings.passwords()).isEqualTo(new AuthSettings.Passwords(6, 64, "\\S+", Set.of(), true, true, 3));
         assertThat(settings.hashing())
                 .isEqualTo(new AuthSettings.HashSettings(HashAlgorithm.ARGON2ID, 65536, 3, 1, 12, 600_000));

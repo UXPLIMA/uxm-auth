@@ -2,6 +2,7 @@ package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -32,6 +33,11 @@ final class ConnectingGuest implements Guest {
     @Override
     public UUID id() {
         return entry.reader().id();
+    }
+
+    @Override
+    public OptionalLong opening() {
+        return OptionalLong.of(entry.opening());
     }
 
     @Override

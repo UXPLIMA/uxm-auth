@@ -28,6 +28,8 @@ import com.uxplima.auth.domain.state.AuthState;
  */
 public final class RegisterAccount {
 
+    private static final long NO_OPENING = -1;
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
@@ -58,12 +60,28 @@ public final class RegisterAccount {
         Objects.requireNonNull(password, "password");
         Objects.requireNonNull(confirm, "confirm");
         Objects.requireNonNull(address, "address");
-        return Wiping.after(() -> attempt(connection, name, password, confirm, address), password, confirm);
+        return Wiping.after(() -> attempt(connection, NO_OPENING, name, password, confirm, address), password, confirm);
+    }
+
+    /**
+     * The same, bound to one opening of the session: when another connection under this id opened it again
+     * since, the answer is gone and no account is made.
+     */
+    public CompletableFuture<RegisterResult> run(
+            UUID connection, long opening, PlayerName name, Password password, Password confirm, String address) {
+        Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(password, "password");
+        Objects.requireNonNull(confirm, "confirm");
+        Objects.requireNonNull(address, "address");
+        return Wiping.after(() -> attempt(connection, opening, name, password, confirm, address), password, confirm);
     }
 
     private CompletableFuture<RegisterResult> attempt(
-            UUID connection, PlayerName name, Password password, Password confirm, String address) {
-        Sessions.Held held = sessions.held(connection).orElse(null);
+            UUID connection, long opening, PlayerName name, Password password, Password confirm, String address) {
+        Sessions.Held held = sessions.held(connection)
+                .filter(found -> opening == NO_OPENING || found.generation() == opening)
+                .orElse(null);
         if (held == null) {
             return CompletableFuture.completedFuture(new RegisterResult.Gone());
         }

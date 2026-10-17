@@ -32,6 +32,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
+import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConfigurationGate;
 import com.uxplima.auth.paper.adapter.inbound.screen.InWorldScreens;
@@ -160,6 +161,8 @@ final class AuthGraph implements AutoCloseable {
                 door,
                 keeper,
                 () -> settings.current().passwords().maxAttempts(),
+                new NameHolders(plugin.getServer(), gate::waitingFrom),
+                () -> settings.current().names().reconnectFromSameAddress(),
                 messages,
                 plugin.getLogger());
         this.login = new LoginCommand(logIn, door, moments, messages, replies);

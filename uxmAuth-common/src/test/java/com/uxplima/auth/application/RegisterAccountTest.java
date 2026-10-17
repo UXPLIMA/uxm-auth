@@ -126,6 +126,27 @@ final class RegisterAccountTest {
                 .contains(new RegisterResult.NameTaken(created.account().name()));
     }
 
+    @Test
+    @DisplayName("a registration bound to an opening another connection replaced is gone, and makes nothing")
+    void aRegistrationForAnEarlierOpeningIsGone() {
+        UUID connection = fixture.unregistered("Steve");
+        long first = fixture.sessions.held(connection).orElseThrow().generation();
+        fixture.sessions.open(connection, fixture.sessions.state(connection).orElseThrow());
+
+        RegisterResult result = useCase()
+                .run(
+                        connection,
+                        first,
+                        new PlayerName("Steve"),
+                        Password.of("hunter22"),
+                        Password.of("hunter22"),
+                        "10.0.0.7")
+                .join();
+
+        assertThat(result).isEqualTo(new RegisterResult.Gone());
+        assertThat(fixture.accounts.findByName(new PlayerName("Steve"))).isEmpty();
+    }
+
     private RegisterResult register(UUID connection, String name, String password, String confirm) {
         return useCase()
                 .run(connection, new PlayerName(name), Password.of(password), Password.of(confirm), "10.0.0.7")

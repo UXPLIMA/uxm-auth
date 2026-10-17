@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.InetAddress;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -38,8 +41,12 @@ final class ConnectionListenerTest {
     @TempDir
     Path folder;
 
+    private static final InetAddress ELSEWHERE = address(10, 0, 0, 9);
+
     private ServerMock server;
     private AuthWorld world;
+    private boolean sameAddress;
+    private final Map<UUID, InetAddress> waitingAtTheDialog = new HashMap<>();
 
     @BeforeEach
     void setUp() {
@@ -56,7 +63,8 @@ final class ConnectionListenerTest {
     @Test
     @DisplayName("a name with an account waits for its password, in any case")
     void aKnownNameWaitsForItsPassword() throws Exception {
-        PlayerMock steve = server.addPlayer("Steve");
+        // Not yet joined: a pre-login comes before the player exists.
+        PlayerMock steve = new PlayerMock(server, "Steve");
         world.registered(steve, "hunter22");
         world.sessions.close(steve.getUniqueId());
 
@@ -65,6 +73,51 @@ final class ConnectionListenerTest {
 
         assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
         assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Registered.class);
+    }
+
+    @Test
+    @DisplayName("a second connection under a name already online is refused, and the first one's session stays")
+    void aSecondConnectionUnderANameOnlineIsRefused() throws Exception {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        long first = world.sessions.held(steve.getUniqueId()).orElseThrow().generation();
+
+        AsyncPlayerPreLoginEvent event = preLogin("Steve", steve.getUniqueId(), ELSEWHERE);
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(world.sessions.held(steve.getUniqueId()).orElseThrow().generation())
+                .isEqualTo(first);
+    }
+
+    @Test
+    @DisplayName("a second connection from the same address is let through only when config.conf allows it")
+    void aSecondConnectionFromTheSameAddressFollowsTheFile() throws Exception {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        InetAddress same = Objects.requireNonNull(steve.getAddress()).getAddress();
+
+        AsyncPlayerPreLoginEvent refused = preLogin("Steve", steve.getUniqueId(), same);
+        listener(world.accounts).onPreLogin(refused);
+        assertThat(refused.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+
+        sameAddress = true;
+        AsyncPlayerPreLoginEvent allowed = preLogin("Steve", steve.getUniqueId(), same);
+        listener(world.accounts).onPreLogin(allowed);
+        assertThat(allowed.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.ALLOWED);
+    }
+
+    @Test
+    @DisplayName("a name whose connection waits at the dialog before the world counts as online")
+    void aNameWaitingAtTheDialogIsOnline() throws Exception {
+        UUID id = UUID.randomUUID();
+        waitingAtTheDialog.put(id, ELSEWHERE);
+
+        AsyncPlayerPreLoginEvent event = preLogin("Newcomer", id, InetAddress.getLoopbackAddress());
+        listener(world.accounts).onPreLogin(event);
+
+        assertThat(event.getLoginResult()).isEqualTo(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+        assertThat(world.sessions.state(id)).isEmpty();
     }
 
     @Test
@@ -175,6 +228,8 @@ final class ConnectionListenerTest {
     @Test
     @DisplayName("the quit of a first connection does not close the session a second one under the same id opened")
     void aSecondConnectionIsNotLetInByTheFirstOnesQuit() throws Exception {
+        // Only a reconnect from the same address, with the operator's leave, can open a second connection.
+        sameAddress = true;
         PlayerMock steve = server.addPlayer("Steve");
         world.registered(steve, "hunter22");
         ConnectionListener listener = listener(world.accounts);
@@ -185,7 +240,10 @@ final class ConnectionListenerTest {
                 state -> new AuthState.Authenticated(
                         ((AuthState.Registered) state).account(), com.uxplima.auth.domain.state.AuthMethod.PASSWORD));
 
-        listener.onPreLogin(preLogin("Steve", steve.getUniqueId()));
+        listener.onPreLogin(preLogin(
+                "Steve",
+                steve.getUniqueId(),
+                Objects.requireNonNull(steve.getAddress()).getAddress()));
         listener.onQuit(new PlayerQuitEvent(steve, Component.empty(), PlayerQuitEvent.QuitReason.KICKED));
 
         assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Registered.class);
@@ -213,6 +271,8 @@ final class ConnectionListenerTest {
                 world.door,
                 world.keeper,
                 () -> AuthWorld.MAX_ATTEMPTS,
+                new NameHolders(server, id -> Optional.ofNullable(waitingAtTheDialog.get(id))),
+                () -> sameAddress,
                 world.messages,
                 Logger.getLogger("uxmauth-test"));
     }
@@ -220,7 +280,20 @@ final class ConnectionListenerTest {
     /** The event as the server hands it over. The newest constructor needs a live connection, which a test has not. */
     @SuppressWarnings("removal")
     private static AsyncPlayerPreLoginEvent preLogin(String name, UUID id) throws Exception {
-        return new AsyncPlayerPreLoginEvent(name, InetAddress.getLoopbackAddress(), id);
+        return preLogin(name, id, InetAddress.getLoopbackAddress());
+    }
+
+    @SuppressWarnings("removal")
+    private static AsyncPlayerPreLoginEvent preLogin(String name, UUID id, InetAddress from) {
+        return new AsyncPlayerPreLoginEvent(name, from, id);
+    }
+
+    private static InetAddress address(int a, int b, int c, int d) {
+        try {
+            return InetAddress.getByAddress(new byte[] {(byte) a, (byte) b, (byte) c, (byte) d});
+        } catch (java.net.UnknownHostException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     /** A database that is down. */

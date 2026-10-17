@@ -18,8 +18,12 @@ public final class AuthSettings {
 
     private AuthSettings() {}
 
-    /** What a name may be. */
-    public record Names(String pattern, int minLength, int maxLength, List<String> blocked) {
+    /**
+     * What a name may be, and whether a second connection under a name already online may come in from the
+     * address the first one holds.
+     */
+    public record Names(
+            String pattern, int minLength, int maxLength, List<String> blocked, boolean reconnectFromSameAddress) {
         public Names {
             Objects.requireNonNull(pattern, "pattern");
             blocked = List.copyOf(Objects.requireNonNull(blocked, "blocked"));

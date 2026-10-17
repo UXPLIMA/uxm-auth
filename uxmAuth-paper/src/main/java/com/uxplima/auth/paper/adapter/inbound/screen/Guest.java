@@ -1,5 +1,6 @@
 package com.uxplima.auth.paper.adapter.inbound.screen;
 
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -17,6 +18,9 @@ public interface Guest {
 
     /** The connection the session is kept under. */
     UUID id();
+
+    /** The opening of the session this guest answers for, when it is bound to one; empty means the current. */
+    OptionalLong opening();
 
     /** The name the client logged in with. */
     String name();

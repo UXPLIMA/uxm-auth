@@ -30,6 +30,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class LogIn {
 
+    private static final long NO_OPENING = -1;
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
@@ -49,11 +51,24 @@ public final class LogIn {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(password, "password");
         Objects.requireNonNull(address, "address");
-        return Wiping.after(() -> attempt(connection, password, address), password);
+        return Wiping.after(() -> attempt(connection, NO_OPENING, password, address), password);
     }
 
-    private CompletableFuture<LoginResult> attempt(UUID connection, Password password, String address) {
-        Sessions.Held held = sessions.held(connection).orElse(null);
+    /**
+     * The same, bound to one opening of the session: when another connection under this id opened it again
+     * since, the answer is gone and nothing is checked or opened.
+     */
+    public CompletableFuture<LoginResult> run(UUID connection, long opening, Password password, String address) {
+        Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(password, "password");
+        Objects.requireNonNull(address, "address");
+        return Wiping.after(() -> attempt(connection, opening, password, address), password);
+    }
+
+    private CompletableFuture<LoginResult> attempt(UUID connection, long opening, Password password, String address) {
+        Sessions.Held held = sessions.held(connection)
+                .filter(found -> opening == NO_OPENING || found.generation() == opening)
+                .orElse(null);
         if (held == null) {
             return CompletableFuture.completedFuture(new LoginResult.Gone());
         }

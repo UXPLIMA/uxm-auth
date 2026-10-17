@@ -89,6 +89,9 @@ public enum Keys implements MessageKey {
     WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
+    KICK_ALREADY_ONLINE(
+            "kick.already-online",
+            "<body>Someone is already connected under this name. If that was you, wait a moment and join again."),
     KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more."),
     KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
