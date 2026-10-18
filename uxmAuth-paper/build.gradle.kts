@@ -35,6 +35,8 @@ dependencies {
     // The native forms a Bedrock player reads every screen in. Floodgate itself is never a dependency: the
     // library names it only past its own plugin-present guard.
     implementation(libs.uxmlib.bedrock)
+    // The staff info window is a file the operator rewrites, drawn by the menu engine.
+    implementation(libs.uxmlib.menu)
     implementation(libs.configurate.hocon)
     // bStats, so the estate can see how many servers run this and on what. The operator opts out in
     // plugins/bStats/config.yml, which is the switch every bStats plugin shares.

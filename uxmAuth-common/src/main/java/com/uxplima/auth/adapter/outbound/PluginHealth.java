@@ -54,6 +54,22 @@ public final class PluginHealth {
                         : HealthResult.fail("the database did not answer: nobody can register or log in"));
     }
 
+    /**
+     * How many window files were read.
+     *
+     * <p>A warning rather than a failure: a window whose file is gone or did not parse leaves staff the same view
+     * in lines, and the console holds the reason a file did not parse.
+     */
+    public static HealthCheck windows(IntSupplier read) {
+        Objects.requireNonNull(read, "read");
+        return check("windows", () -> {
+            int count = read.getAsInt();
+            return count == 0
+                    ? HealthResult.warn("menus/info.conf was not read: staff read an account in lines")
+                    : HealthResult.ok(count + " read");
+        });
+    }
+
     private static HealthCheck check(String name, Supplier<HealthResult> answer) {
         return new HealthCheck() {
 

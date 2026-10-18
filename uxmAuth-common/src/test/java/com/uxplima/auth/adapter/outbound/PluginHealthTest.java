@@ -40,4 +40,14 @@ final class PluginHealthTest {
         assertThat(result.status()).isEqualTo(HealthStatus.FAIL);
         assertThat(result.message()).contains("log in");
     }
+
+    @Test
+    @DisplayName("the windows read are counted; none is a warning, because staff still read the lines")
+    void windowsAreCounted() {
+        assertThat(PluginHealth.windows(() -> 1).check().status()).isEqualTo(HealthStatus.OK);
+        HealthResult none = PluginHealth.windows(() -> 0).check();
+
+        assertThat(none.status()).isEqualTo(HealthStatus.WARN);
+        assertThat(none.message()).contains("menus/info.conf");
+    }
 }

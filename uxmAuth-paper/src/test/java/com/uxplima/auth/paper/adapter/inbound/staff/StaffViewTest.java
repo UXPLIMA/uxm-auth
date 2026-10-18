@@ -40,6 +40,10 @@ final class StaffViewTest {
     private AuthWorld world;
     private PlayerMock staff;
     private StaffView view;
+    /** The window a player sender was shown. It answers windowOpens, and false leaves the player the lines. */
+    private final List<String> shown = new ArrayList<>();
+
+    private boolean windowOpens;
 
     @BeforeEach
     void setUp() {
@@ -51,7 +55,11 @@ final class StaffViewTest {
                 world.lane,
                 world.replies,
                 world.messages,
-                () -> DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC));
+                () -> DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC),
+                (viewer, account, lines) -> {
+                    shown.add(viewer.getName() + " " + account.account().name().value() + " " + lines.size());
+                    return windowOpens;
+                });
     }
 
     @AfterEach
@@ -126,5 +134,23 @@ final class StaffViewTest {
         steve();
         world.scheduler.settle(view.history(staff, "Steve"));
         assertThat(said()).anySatisfy(line -> assertThat(line).contains("No login of Steve is kept"));
+    }
+
+    @Test
+    @DisplayName("a player is shown the window with the same lines; the console and a player without it read lines")
+    void aPlayerGetsTheWindow() {
+        steve();
+        windowOpens = true;
+        world.scheduler.settle(view.info(staff, "Steve"));
+        assertThat(shown).containsExactly("Staff Steve 6");
+        assertThat(said()).isEmpty();
+
+        windowOpens = false;
+        world.scheduler.settle(view.info(staff, "Steve"));
+        assertThat(said()).hasSize(6);
+
+        shown.clear();
+        world.scheduler.settle(view.info(server.getConsoleSender(), "Steve"));
+        assertThat(shown).as("the console has no window").isEmpty();
     }
 }

@@ -1,5 +1,6 @@
 package com.uxplima.auth.application.staff;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -52,6 +53,23 @@ public final class AccountInfo {
             recent = List.copyOf(recent);
             Objects.requireNonNull(address, "address");
             alts = List.copyOf(alts);
+        }
+
+        /** The newest login the history keeps, else the one the account row last wrote, else none. */
+        public Optional<Instant> lastLogin() {
+            return recent.stream()
+                    .findFirst()
+                    .map(LoginHistory.Entry::at)
+                    .or(() -> Optional.ofNullable(account.lastLoginAt()));
+        }
+
+        /** Where that login came from, or empty when no address of it is kept. */
+        public Optional<String> lastAddress() {
+            return recent.stream()
+                    .findFirst()
+                    .map(LoginHistory.Entry::address)
+                    .or(() -> Optional.ofNullable(account.lastAddress()))
+                    .filter(address -> !address.isEmpty());
         }
     }
 

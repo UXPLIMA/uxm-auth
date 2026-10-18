@@ -157,6 +157,7 @@ final class AuthGraph implements AutoCloseable {
     private final AddressDuty addressDuty;
     final SqlLoginHistory history;
     final StaffView staff;
+    final StaffGraph staffing;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -460,7 +461,11 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
-        this.staff = new StaffView(
+        this.staffing = new StaffGraph(
+                plugin,
+                scheduler,
+                messages,
+                styler,
                 new AccountInfo(
                         accounts,
                         history,
@@ -469,8 +474,9 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().staff().info()),
                 lane,
                 replies,
-                messages,
-                () -> settings.current().staff().dates().withZone(ZoneId.systemDefault()));
+                () -> settings.current().staff().dates().withZone(ZoneId.systemDefault()),
+                id -> bedrock.player(id).isPresent());
+        this.staff = staffing.view;
         this.recover =
                 mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);
@@ -513,6 +519,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(addressDuty, plugin);
         plugin.getServer().getPluginManager().registerEvents(gate, plugin);
         filters.install();
+        staffing.start();
         for (Player online : plugin.getServer().getOnlinePlayers()) {
             // A player who was online before this enable has no session yet. They are asked again, which is
             // the safe answer for a plugin that was just started: nobody is let in unchecked.
@@ -532,6 +539,7 @@ final class AuthGraph implements AutoCloseable {
             plugin.getLogger().warning("Could not close the country file: " + unclosable.getMessage());
         }
         events.close();
+        staffing.close();
         filters.uninstall();
         hellos.close();
         web.close();

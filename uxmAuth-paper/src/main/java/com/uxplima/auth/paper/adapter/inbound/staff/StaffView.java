@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -26,8 +27,8 @@ import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 
 /**
- * {@code /uxmauth info} and {@code /uxmauth history}: an account as staff read it, in lines of the catalogue. The
- * tables are read on the lane, and the lines are sent on the sender's own thread.
+ * {@code /uxmauth info} and {@code /uxmauth history}: an account as staff read it, in lines of the catalogue, or in
+ * a window for a player. The tables are read on the lane, and the answer is given on the sender's own thread.
  */
 public final class StaffView implements Staff {
 
@@ -36,15 +37,25 @@ public final class StaffView implements Staff {
     private final Replies replies;
     private final Messages messages;
     private final Supplier<DateTimeFormatter> dates;
+    private final InfoWindow window;
 
-    /** @param dates how a date reads to staff, in the zone it is shown in */
+    /**
+     * @param dates how a date reads to staff, in the zone it is shown in
+     * @param window what a player is shown instead of the lines
+     */
     public StaffView(
-            AccountInfo info, HashingLane lane, Replies replies, Messages messages, Supplier<DateTimeFormatter> dates) {
+            AccountInfo info,
+            HashingLane lane,
+            Replies replies,
+            Messages messages,
+            Supplier<DateTimeFormatter> dates,
+            InfoWindow window) {
         this.info = Objects.requireNonNull(info, "info");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.replies = Objects.requireNonNull(replies, "replies");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.dates = Objects.requireNonNull(dates, "dates");
+        this.window = Objects.requireNonNull(window, "window");
     }
 
     @Override
@@ -56,7 +67,11 @@ public final class StaffView implements Staff {
                 messages.send(sender, Keys.STAFF_UNKNOWN, Text.placeholder("name", name));
                 return;
             }
-            lines(sender, view.get()).forEach(sender::sendMessage);
+            List<Component> lines = lines(sender, view.get());
+            if (sender instanceof Player player && window.show(player, view.get(), lines)) {
+                return;
+            }
+            lines.forEach(sender::sendMessage);
         });
     }
 
@@ -108,19 +123,15 @@ public final class StaffView implements Staff {
 
     /** The newest login the history keeps, else the one the account row last wrote, else none. */
     private Component lastLogin(CommandSender sender, AccountInfo.View view) {
-        Account account = view.account();
-        Optional<LoginHistory.Entry> newest = view.recent().stream().findFirst();
-        Instant at = newest.map(LoginHistory.Entry::at).orElse(account.lastLoginAt());
-        if (at == null) {
+        Optional<Instant> at = view.lastLogin();
+        if (at.isEmpty()) {
             return messages.render(sender, Keys.INFO_NEVER);
         }
-        String address = newest.map(LoginHistory.Entry::address)
-                .orElseGet(() -> Optional.ofNullable(account.lastAddress()).orElse(""));
         return messages.render(
                 sender,
                 Keys.INFO_LAST_LOGIN,
-                Text.placeholder("date", date(at)),
-                Text.placeholder("address", address),
+                Text.placeholder("date", date(at.get())),
+                Text.placeholder("address", view.lastAddress().orElse("")),
                 Text.placeholder("logins", String.valueOf(view.logins())));
     }
 
@@ -150,7 +161,8 @@ public final class StaffView implements Staff {
         return dates.get().format(at);
     }
 
-    private static Keys kind(AccountKind kind) {
+    /** The word of a kind of account, which the lines and the menu both read. */
+    static Keys kind(AccountKind kind) {
         return switch (kind) {
             case CRACKED -> Keys.INFO_KIND_CRACKED;
             case PREMIUM -> Keys.INFO_KIND_PREMIUM;

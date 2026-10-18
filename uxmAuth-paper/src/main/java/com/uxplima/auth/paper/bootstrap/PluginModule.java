@@ -151,10 +151,16 @@ final class PluginModule {
      * says so. Every check is read only, which is why the branch runs the whole list on the lane.
      */
     private java.util.List<com.uxplima.uxmlib.health.HealthCheck> healthChecks() {
-        return java.util.List.of(PluginHealth.languages(() -> foundLocales().size()), PluginHealth.storage(() -> {
-            Database open = database;
-            return open != null && open.ping();
-        }));
+        return java.util.List.of(
+                PluginHealth.languages(() -> foundLocales().size()),
+                PluginHealth.storage(() -> {
+                    Database open = database;
+                    return open != null && open.ping();
+                }),
+                PluginHealth.windows(() -> {
+                    AuthGraph graph = auth;
+                    return graph == null ? 0 : graph.staffing.windowsRead();
+                }));
     }
 
     /**
@@ -385,6 +391,10 @@ final class PluginModule {
         screens.reload();
         styler().reload(loadTheme());
         messages.reload(styledCatalog());
+        AuthGraph graph = auth;
+        if (graph != null) {
+            graph.staffing.readWindows();
+        }
     }
 
     /**
@@ -435,6 +445,7 @@ final class PluginModule {
         mergeShippedScreens(dataFolder);
         saveIfAbsent(dataFolder, "commands.conf");
         saveIfAbsent(dataFolder, "passwords/common.txt");
+        saveIfAbsent(dataFolder, "menus/info.conf");
         saveSharedTheme(dataFolder);
         // The language files are discovered in the jar rather than named in a list here. A plugin gains a
         // language by gaining a file, and a list is the one place that gets forgotten when it does.
