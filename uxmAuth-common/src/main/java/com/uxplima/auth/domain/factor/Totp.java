@@ -50,6 +50,16 @@ public final class Totp {
         this.window = window;
     }
 
+    /** How long a code is. */
+    public int digits() {
+        return digits;
+    }
+
+    /** How long one code lasts, in seconds. */
+    public long periodSeconds() {
+        return period;
+    }
+
     /** A new secret from this generator; a server passes a secure one. */
     public static byte[] newSecret(RandomGenerator random) {
         byte[] secret = new byte[SECRET_BYTES];

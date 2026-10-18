@@ -32,6 +32,8 @@ dependencies {
     implementation(libs.uxmlib.redis)
     implementation(libs.lettuce.core)
     implementation(libs.maxmind.db)
+    // The QR code of the second factor's link. Shaded and relocated by each platform module.
+    implementation(libs.zxing.core)
 
     // Adventure is compileOnly on purpose. Paper and Velocity each ship it, and a shaded
     // copy would break the serializers the platform uses on its own components.
