@@ -85,10 +85,10 @@ public enum Keys implements MessageKey {
     JOIN_LOGIN_TITLE("join.login-title", "<value>Welcome back"),
     JOIN_LOGIN_SUBTITLE("join.login-subtitle", "<body>Log in with <value>/login"),
     JOIN_CODE_TITLE("join.code-title", "<value>One more step"),
-    JOIN_CODE_SUBTITLE("join.code-subtitle", "<body>Type the code from your app with <value>/2fa"),
+    JOIN_CODE_SUBTITLE("join.code-subtitle", "<body>Type your login code with <value>/2fa"),
     REMINDER_REGISTER("reminder.register", "<body>Register with <value>/register <password> <password>"),
     REMINDER_LOGIN("reminder.login", "<body>Log in with <value>/login <password>"),
-    REMINDER_CODE("reminder.code", "<body>Type the code from your app with <value>/2fa <code>"),
+    REMINDER_CODE("reminder.code", "<body>Type your login code with <value>/2fa <code>"),
     WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
@@ -259,7 +259,7 @@ public enum Keys implements MessageKey {
                     + " <value>/2fa <code><body>."),
     FACTOR_LOGIN_WRONG(
             "factor.login-wrong",
-            "<etag:'ERROR'> <body>That is neither the code your app shows now nor a backup code. Tries left:"
+            "<etag:'ERROR'> <body>That is not the app's code now, the mailed code or a backup code. Tries left:"
                     + " <value><left><body>."),
     FACTOR_NOTHING_ASKED("factor.nothing-asked", "<etag:'ERROR'> <body>No code is asked of you now."),
     EMAIL_USAGE(
