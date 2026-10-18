@@ -5,6 +5,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.state.AuthMethod;
@@ -36,6 +38,16 @@ public final class ProxySessions {
 
     private final Map<UUID, Session> sessions = new ConcurrentHashMap<>();
     private final Map<UUID, Visit> visits = new ConcurrentHashMap<>();
+    private final BiConsumer<UUID, AuthMethod> onLogin;
+
+    public ProxySessions() {
+        this((id, method) -> {});
+    }
+
+    /** @param onLogin told once of each login, whoever decided it: this proxy's door, its waiting world, or a server */
+    public ProxySessions(BiConsumer<UUID, AuthMethod> onLogin) {
+        this.onLogin = Objects.requireNonNull(onLogin, "onLogin");
+    }
 
     /** The player waits for a password, with the door's flags. */
     public void waiting(UUID id, Claim.Waiting flags) {
@@ -86,11 +98,24 @@ public final class ProxySessions {
     private void login(UUID id, AuthMethod method, boolean greeted) {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(method, "method");
-        sessions.compute(
-                id,
-                (key, session) -> session == null
-                        ? new Session(new Claim.LoggedIn(method), greeted, NOTHING, true)
-                        : new Session(new Claim.LoggedIn(method), greeted, session.door(), session.ours()));
+        AtomicBoolean fresh = new AtomicBoolean();
+        sessions.compute(id, (key, session) -> {
+            fresh.set(session == null || !(session.standing() instanceof Claim.LoggedIn));
+            return session == null
+                    ? new Session(new Claim.LoggedIn(method), greeted, NOTHING, true)
+                    : new Session(new Claim.LoggedIn(method), greeted, session.door(), session.ours());
+        });
+        if (fresh.get()) {
+            onLogin.accept(id, method);
+        }
+    }
+
+    /** How the player got in, while they are logged in. */
+    public Optional<AuthMethod> way(UUID id) {
+        Session session = sessions.get(Objects.requireNonNull(id, "id"));
+        return session != null && session.standing() instanceof Claim.LoggedIn in
+                ? Optional.of(in.method())
+                : Optional.empty();
     }
 
     /**

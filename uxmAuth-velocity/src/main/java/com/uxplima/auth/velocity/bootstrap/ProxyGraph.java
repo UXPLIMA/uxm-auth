@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -31,12 +32,14 @@ import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
 import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
+import com.uxplima.auth.api.AuthApiProvider;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.MailedLoginCode;
+import com.uxplima.auth.application.port.AuthNotices;
 import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
@@ -61,12 +64,14 @@ import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.EndedSessions;
 import com.uxplima.auth.velocity.adapter.inbound.HoldListener;
+import com.uxplima.auth.velocity.adapter.inbound.ProxyAuthApi;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.inbound.RemovedAccounts;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
+import com.uxplima.auth.velocity.adapter.outbound.event.VelocityEvents;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -92,6 +97,10 @@ final class ProxyGraph implements AutoCloseable {
     private @Nullable CountryBook countries;
     private @Nullable ScheduledTask countryTask;
     private @Nullable ProxyMail mail;
+    /** The API's Velocity events, fired for what happens at this proxy. */
+    private final VelocityEvents fired;
+    /** Takes the API back from other plugins; null while it is not offered. */
+    private @Nullable Runnable withdraw;
 
     ProxyGraph(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -99,6 +108,17 @@ final class ProxyGraph implements AutoCloseable {
         this.logger = Objects.requireNonNull(logger, "logger");
         this.folder = Objects.requireNonNull(folder, "folder");
         this.waiting = new WaitingWorld(plugin, proxy, logger, folder);
+        this.fired = new VelocityEvents(proxy::getPlayer, new VelocityEvents.Bus() {
+            @Override
+            public CompletableFuture<?> ask(Object event) {
+                return proxy.getEventManager().fire(event);
+            }
+
+            @Override
+            public void tell(Object event) {
+                proxy.getEventManager().fireAndForget(event);
+            }
+        });
     }
 
     /**
@@ -134,7 +154,8 @@ final class ProxyGraph implements AutoCloseable {
                         new SqlLoginHistory(database),
                         current(),
                         task -> proxy.getScheduler().buildTask(plugin, task).schedule(),
-                        clock::instant)
+                        clock::instant,
+                        AuthNotices.onBan(fired::banned))
                 .watching(bans);
         ProxyMail mail = new ProxyMail(proxy, logger, folder, settings, database, failures, words);
         this.mail = mail;
@@ -151,6 +172,7 @@ final class ProxyGraph implements AutoCloseable {
                 remember,
                 accounts,
                 new Steps(secret, secondStep));
+        this.withdraw = AuthApiProvider.offer(new ProxyAuthApi(sessions));
         waiting.open(
                 settings,
                 accounts,
@@ -201,7 +223,8 @@ final class ProxyGraph implements AutoCloseable {
                 codes.step(),
                 codes.mail(),
                 codes.emails(),
-                codes.mailCodes());
+                codes.mailCodes(),
+                fired);
     }
 
     /** How many accounts one address may make, and which addresses many people share. */
@@ -287,7 +310,7 @@ final class ProxyGraph implements AutoCloseable {
             Remember remember,
             SqlAccountRepository accounts,
             Steps steps) {
-        ProxySessions sessions = new ProxySessions();
+        ProxySessions sessions = new ProxySessions(fired::loggedIn);
         Supplier<Optional<Claims>> claims = claims(settings, steps.secret());
         RouteListener routes = routes(sessions, settings, lastServers);
         register(new DoorListener(
@@ -338,6 +361,10 @@ final class ProxyGraph implements AutoCloseable {
             } catch (IOException unclosable) {
                 logger.warn("Could not close the country file: {}", unclosable.getMessage());
             }
+        }
+        if (withdraw != null) {
+            withdraw.run();
+            withdraw = null;
         }
         events.close();
         waiting.close();

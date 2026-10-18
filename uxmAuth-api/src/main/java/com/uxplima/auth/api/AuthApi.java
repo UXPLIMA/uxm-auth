@@ -16,6 +16,10 @@ public interface AuthApi {
     /** How the player got in; empty while they are not logged in. */
     Optional<LoginWay> method(UUID player);
 
-    /** The kind of account the player is logged in to; empty while they are not logged in. */
+    /**
+     * The kind of account the player is logged in to; empty while they are not logged in. A proxy knows the kind
+     * the way in proves: a password or a registration is cracked, Mojang's word premium, Floodgate's Bedrock; after
+     * a remembered session, staff, or a server's report it answers empty.
+     */
     Optional<AccountType> kind(UUID player);
 }

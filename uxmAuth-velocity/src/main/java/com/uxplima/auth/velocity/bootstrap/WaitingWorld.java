@@ -30,6 +30,7 @@ import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.Factors;
@@ -116,7 +117,7 @@ final class WaitingWorld implements AutoCloseable {
         LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
         LimboVisits reach = new LimboVisits((id, address) -> forced(id, address));
-        guards.events().listen(reach);
+        guards.bulletins().listen(reach);
         LimboWait wait = new LimboWait(
                 LimboWorld.open(limboApi, folder, settings.current().network(), metas(labels), logger),
                 network::waitsAtTheProxy,
@@ -138,13 +139,14 @@ final class WaitingWorld implements AutoCloseable {
             LogIn.Failures failures,
             RegisterAccount.Cap cap,
             BreachedPasswords breaches,
-            NetworkEvents events,
+            NetworkEvents bulletins,
             RememberedSessions remembered,
             Factors factors,
             SecondStep secondStep,
             FactorCheck.MailedCode mailedCode,
             Emails emails,
-            MailCodes mailCodes) {}
+            MailCodes mailCodes,
+            AuthEvents events) {}
 
     private LimboLogin passwords(
             PluginSettings settings,
@@ -159,7 +161,7 @@ final class WaitingWorld implements AutoCloseable {
         Hashing hashing = boot.hashers();
         Sessions sessions = new Sessions();
         Clock clock = Clock.systemUTC();
-        this.force = new ForceLogin(accounts, sessions, guards.events(), clock);
+        this.force = new ForceLogin(accounts, sessions, guards.bulletins(), clock);
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), clock::instant);
         return new LimboLogin(
@@ -176,7 +178,8 @@ final class WaitingWorld implements AutoCloseable {
                         guards.failures(),
                         () -> settings.current().passwordPolicy(),
                         captchas,
-                        guards.secondStep()),
+                        guards.secondStep(),
+                        guards.events()),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -186,7 +189,8 @@ final class WaitingWorld implements AutoCloseable {
                         clock,
                         guards.cap(),
                         guards.breaches(),
-                        captchas::blocksRegistration),
+                        captchas::blocksRegistration,
+                        guards.events()),
                 change(settings, accounts, new Hashers(hashing, hashingLane), sessions, guards),
                 captchas,
                 sessions,
@@ -216,7 +220,7 @@ final class WaitingWorld implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 guards.breaches(),
                 guards.remembered(),
-                guards.events());
+                guards.bulletins());
         return new LimboRecovery(recover, sessions, words);
     }
 
@@ -244,7 +248,7 @@ final class WaitingWorld implements AutoCloseable {
                 hashers.lane(),
                 sessions,
                 () -> settings.current().passwordPolicy(),
-                guards.events(),
+                guards.bulletins(),
                 guards.remembered(),
                 guards.breaches());
     }
