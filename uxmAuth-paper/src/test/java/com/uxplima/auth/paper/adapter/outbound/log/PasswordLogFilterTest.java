@@ -52,6 +52,28 @@ final class PasswordLogFilterTest {
     }
 
     @Test
+    @DisplayName("a password is hidden however the line is spaced, and inside a command that runs another")
+    void aPasswordIsHiddenWhateverTheSpacing() {
+        PasswordMask staff = new PasswordMask(
+                () -> Set.of("login"),
+                () -> new PasswordMask.Branches(Set.of("uxmauth", "auth"), Set.of("setpassword")));
+
+        assertThat(staff.mask("Notch issued server command: /uxmauth  setpassword Steve hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /uxmauth\tsetpassword Steve hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /execute as @s run uxmauth setpassword Steve hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /minecraft:execute run auth:auth setpassword S hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /execute run login hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /login  hunter2")).doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /execute run uxmauth info Steve"))
+                .isEqualTo("Notch issued server command: /execute run uxmauth info Steve");
+    }
+
+    @Test
     @DisplayName("a line that is not one of these commands is left as it was")
     void anUnrelatedLineIsUntouched() {
         assertThat(mask.mask("Notch issued server command: /spawn")).isEqualTo("Notch issued server command: /spawn");

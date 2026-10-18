@@ -1,5 +1,7 @@
 package com.uxplima.auth.paper.adapter.outbound.log;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -51,7 +53,14 @@ public final class PasswordMask {
         this.branches = Objects.requireNonNull(branches, "branches");
     }
 
-    /** The line with a password command's arguments hidden, or the line itself. */
+    /**
+     * The line with a password command's arguments hidden, or the line itself.
+     *
+     * <p>The command is read word by word, with any run of whitespace between two words, and a password command is
+     * looked for at every word: a line spaced twice still logs a password even when the server refuses to run it,
+     * and {@code /execute ... run login} carries one as much as {@code /login}. Everything after the word that
+     * opens the password is hidden.
+     */
     public String mask(String line) {
         Objects.requireNonNull(line, "line");
         int issued = line.indexOf(ISSUED);
@@ -59,26 +68,51 @@ public final class PasswordMask {
             return line;
         }
         int start = issued + ISSUED.length();
-        int space = line.indexOf(' ', start);
-        if (space < 0) {
-            return line;
-        }
-        String label = line.substring(start, space).toLowerCase(Locale.ROOT);
-        String bare = label.substring(label.indexOf(':') + 1);
-        if (labels.get().contains(bare)) {
-            return line.substring(0, space) + " " + HIDDEN;
-        }
+        List<int[]> words = words(line, start);
+        Set<String> commands = labels.get();
         Branches carrying = branches.get();
-        return carrying.labels().contains(bare) ? branch(line, space, carrying.words()) : line;
+        for (int at = 0; at + 1 < words.size(); at++) {
+            String bare = bare(line, words.get(at));
+            if (commands.contains(bare)) {
+                return hiddenAfter(line, words.get(at));
+            }
+            if (carrying.labels().contains(bare) && carrying.words().contains(word(line, words.get(at + 1)))) {
+                return at + 2 < words.size() ? hiddenAfter(line, words.get(at + 1)) : line;
+            }
+        }
+        return line;
     }
 
-    /** The line with what follows a password-carrying branch hidden, or the line itself for any other branch. */
-    private static String branch(String line, int space, Set<String> words) {
-        int next = line.indexOf(' ', space + 1);
-        if (next < 0) {
-            return line;
+    /** The start and end of every word from {@code from} on, a word being a run of anything but whitespace. */
+    private static List<int[]> words(String line, int from) {
+        List<int[]> found = new ArrayList<>();
+        int at = from;
+        while (at < line.length()) {
+            while (at < line.length() && Character.isWhitespace(line.charAt(at))) {
+                at++;
+            }
+            int begin = at;
+            while (at < line.length() && !Character.isWhitespace(line.charAt(at))) {
+                at++;
+            }
+            if (at > begin) {
+                found.add(new int[] {begin, at});
+            }
         }
-        String word = line.substring(space + 1, next).toLowerCase(Locale.ROOT);
-        return words.contains(word) ? line.substring(0, next) + " " + HIDDEN : line;
+        return found;
+    }
+
+    private static String word(String line, int[] span) {
+        return line.substring(span[0], span[1]).toLowerCase(Locale.ROOT);
+    }
+
+    /** The word without a namespace, as {@code /authme:login} is {@code login}. */
+    private static String bare(String line, int[] span) {
+        String word = word(line, span);
+        return word.substring(word.indexOf(':') + 1);
+    }
+
+    private static String hiddenAfter(String line, int[] span) {
+        return line.substring(0, span[1]) + " " + HIDDEN;
     }
 }
