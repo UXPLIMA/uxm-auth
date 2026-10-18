@@ -138,6 +138,7 @@ final class AuthGraph implements AutoCloseable {
     final ClaimCommand claim;
     final PremiumCommand premium;
     final SessionCommand session;
+    final FactorGraph factors;
     final CaptchaCommand captchaCommand;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
@@ -380,6 +381,17 @@ final class AuthGraph implements AutoCloseable {
                 new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
+        this.factors = new FactorGraph(
+                plugin,
+                settings,
+                database,
+                sessions,
+                bans::failed,
+                id -> bedrock.player(id).isPresent(),
+                scheduler,
+                replies,
+                moments,
+                messages);
         this.session = new SessionCommand(
                 remember,
                 remembering,
@@ -425,6 +437,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
+        plugin.getServer().getPluginManager().registerEvents(factors.guard, plugin);
         plugin.getServer().getPluginManager().registerEvents(gate, plugin);
         filters.install();
         for (Player online : plugin.getServer().getOnlinePlayers()) {

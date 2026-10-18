@@ -102,4 +102,20 @@ final class TotpTest {
         assertThatThrownBy(() -> new Totp(6, Duration.ofSeconds(30), -1)).hasMessageContaining("window");
         assertThatThrownBy(() -> new Totp(6, Duration.ofSeconds(30), 5)).hasMessageContaining("window");
     }
+
+    @Test
+    @DisplayName("two settings of the same shape are the same, and the shape reads back")
+    void theShapeIsAValue() {
+        Totp totp = new Totp(8, Duration.ofSeconds(60), 2);
+
+        assertThat(totp)
+                .isEqualTo(new Totp(8, Duration.ofSeconds(60), 2))
+                .hasSameHashCodeAs(new Totp(8, Duration.ofSeconds(60), 2));
+        assertThat(totp).isNotEqualTo(new Totp(7, Duration.ofSeconds(60), 2));
+        assertThat(totp).isNotEqualTo(new Totp(8, Duration.ofSeconds(30), 2));
+        assertThat(totp).isNotEqualTo(new Totp(8, Duration.ofSeconds(60), 1));
+        assertThat(totp.digits()).isEqualTo(8);
+        assertThat(totp.periodSeconds()).isEqualTo(60);
+        assertThat(totp.toString()).contains("8").contains("60").contains("2");
+    }
 }

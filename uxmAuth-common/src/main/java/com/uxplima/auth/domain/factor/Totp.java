@@ -60,6 +60,21 @@ public final class Totp {
         return period;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Totp that && digits == that.digits && period == that.period && window == that.window;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(digits, period, window);
+    }
+
+    @Override
+    public String toString() {
+        return "Totp[digits=" + digits + ", period=" + period + "s, window=" + window + "]";
+    }
+
     /** A new secret from this generator; a server passes a secure one. */
     public static byte[] newSecret(RandomGenerator random) {
         byte[] secret = new byte[SECRET_BYTES];

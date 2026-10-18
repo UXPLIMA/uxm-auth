@@ -289,6 +289,34 @@ public final class AuthWorld implements AutoCloseable {
         return opening == null ? java.util.OptionalLong.empty() : java.util.OptionalLong.of(opening);
     }
 
+    /** The setup of the app in this world, with no map and no form. */
+    public com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup factorSetup() {
+        com.uxplima.auth.application.factor.SetUpTotp.Settings settings =
+                new com.uxplima.auth.application.factor.SetUpTotp.Settings(
+                        "Minecraft",
+                        "{player}",
+                        new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1),
+                        Duration.ofMinutes(10));
+        com.uxplima.auth.application.factor.SetUpTotp setUp = new com.uxplima.auth.application.factor.SetUpTotp(
+                new com.uxplima.auth.adapter.outbound.SqlFactors(
+                        database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock),
+                () -> settings,
+                bans::failed,
+                new java.util.SplittableRandom(1),
+                clock::instant);
+        return new com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup(
+                setUp,
+                sessions,
+                () -> settings,
+                com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup.Hand.NONE,
+                (player, key, digits, answer) -> {},
+                id -> false,
+                scheduler::async,
+                replies,
+                moments,
+                messages);
+    }
+
     public boolean isAuthenticated(Player player) {
         return sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated;
     }

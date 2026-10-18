@@ -64,6 +64,9 @@ permissions:
   uxmauth.session:
     description: Choose whether a join from the same address skips the password
     default: true
+  uxmauth.2fa:
+    description: Turn a code from an authenticator app after the password on and off
+    default: true
   uxmauth.changepassword:
     description: Change your own password
     default: true

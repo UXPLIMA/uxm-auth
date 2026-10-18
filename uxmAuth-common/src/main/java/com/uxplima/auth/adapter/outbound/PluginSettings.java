@@ -67,6 +67,7 @@ public final class PluginSettings {
             AuthSettings.Ownership ownership,
             AuthSettings.Network network,
             ProtectionSettings protection,
+            SecondFactorSettings secondFactor,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -80,6 +81,7 @@ public final class PluginSettings {
             Objects.requireNonNull(hold, "hold");
             Objects.requireNonNull(timeouts, "timeouts");
             Objects.requireNonNull(protection, "protection");
+            Objects.requireNonNull(secondFactor, "secondFactor");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -231,6 +233,7 @@ public final class PluginSettings {
                 SettingsReader.ownership(config),
                 SettingsReader.network(config),
                 ProtectionReader.protection(config),
+                SecondFactorSettings.read(config),
                 lists,
                 common(lists));
     }

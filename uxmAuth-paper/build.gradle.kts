@@ -52,6 +52,8 @@ dependencies {
     testImplementation(libs.paper.api)
     testImplementation(libs.mockbukkit)
     testImplementation(libs.archunit.junit)
+    // Test only: a test reads the QR code on the map back, as a phone does.
+    testImplementation(libs.zxing.core)
     // The guards that ask the library which skill and content plugins it reads. A plugin cut from this
     // template takes uxmlib-integration as soon as it reads an operator's line, and these guards travel
     // with the template so it never starts without them. Test only: nothing of it reaches the jar.

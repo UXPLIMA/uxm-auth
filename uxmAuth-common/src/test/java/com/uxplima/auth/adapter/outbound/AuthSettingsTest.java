@@ -14,6 +14,8 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
+import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.network.AfterLogin;
 import com.uxplima.auth.domain.network.Balance;
@@ -589,6 +591,29 @@ final class AuthSettingsTest {
         assertThatThrownBy(() -> settingsFrom(folder, "protection { captcha { length = 9 } }\n"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("protection.captcha");
+    }
+
+    @Test
+    @DisplayName("the app's name, line, code shape and setup time are read, with the defaults every app speaks")
+    void theSecondFactorIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").secondFactor().setup())
+                .isEqualTo(new SetUpTotp.Settings(
+                        "Minecraft", "{player}", new Totp(6, Duration.ofSeconds(30), 1), Duration.ofMinutes(10)));
+
+        assertThat(settingsFrom(
+                                folder,
+                                "second-factor { issuer = \"Uxplima\", label = \"mc {player}\", digits = 8,"
+                                        + " period-seconds = 60, window-steps = 2, setup-minutes = 3 }\n")
+                        .secondFactor()
+                        .setup())
+                .isEqualTo(new SetUpTotp.Settings(
+                        "Uxplima", "mc {player}", new Totp(8, Duration.ofSeconds(60), 2), Duration.ofMinutes(3)));
+        assertThatThrownBy(() -> settingsFrom(folder, "second-factor { digits = 5 }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("second-factor");
+        assertThatThrownBy(() -> settingsFrom(folder, "second-factor { issuer = \"\" }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("second-factor.issuer");
     }
 
     @Test

@@ -204,6 +204,34 @@ public enum Keys implements MessageKey {
             "session.on",
             "<good>From this address you skip the password for <value><minutes><good> minutes after each login."),
     SESSION_OFF("session.off", "<good>You will be asked your password at every join."),
+    FACTOR_USAGE(
+            "factor.usage",
+            "<body>Use <value>/2fa setup<body> to ask a code from an authenticator app after your password, or"
+                    + " <value>/2fa off <code><body> to stop."),
+    FACTOR_SECRET(
+            "factor.secret",
+            "<body>Add an account in your authenticator app with this key: <value><secret><body>. Click it to copy."),
+    FACTOR_LINK("factor.link", "<body>Or open this link on the phone: <value><link><body>. Click it to copy."),
+    FACTOR_MAP("factor.map", "<body>Or scan the QR code on the map in your hand."),
+    FACTOR_NO_ROOM(
+            "factor.no-room",
+            "<body>Empty a slot of your hotbar and run <value>/2fa setup<body> again to get the QR code on a map."),
+    FACTOR_CONFIRM(
+            "factor.confirm",
+            "<body>Then type <value>/2fa confirm <code><body> with the code the app shows. This waits"
+                    + " <value><minutes><body> minutes."),
+    FACTOR_ON("factor.on", "<good>From now on your account asks a code from your app after the password."),
+    FACTOR_OFF("factor.off", "<good>Your account no longer asks a code from an app."),
+    FACTOR_WRONG("factor.wrong", "<etag:'ERROR'> <body>That is not the code your app shows now."),
+    FACTOR_NOTHING_STARTED(
+            "factor.nothing-started",
+            "<etag:'ERROR'> <body>No setup is waiting. Start one with <value>/2fa setup<body>."),
+    FACTOR_ALREADY_ON(
+            "factor.already-on",
+            "<etag:'ERROR'> <body>Your account asks a code from an app already. Turn it off first with"
+                    + " <value>/2fa off <code><body>."),
+    FACTOR_NOT_ON("factor.not-on", "<etag:'ERROR'> <body>Your account asks no code from an app."),
+    FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(
             "session.not-chosen",
@@ -275,6 +303,12 @@ public enum Keys implements MessageKey {
     SCREEN_CAPTCHA_CODE("screen.captcha.code", "Code"),
     SCREEN_CAPTCHA_SUBMIT("screen.captcha.submit", "Continue"),
     SCREEN_CAPTCHA_CANCEL("screen.captcha.cancel", "Leave"),
+    SCREEN_FACTOR_TITLE("screen.factor.title", "<value>Authenticator app"),
+    SCREEN_FACTOR_BODY(
+            "screen.factor.body",
+            "<body>Add an account in your authenticator app with the key below, then type its code."),
+    SCREEN_FACTOR_KEY("screen.factor.key", "Key"),
+    SCREEN_FACTOR_CODE("screen.factor.code", "Code from the app"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

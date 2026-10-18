@@ -10,7 +10,7 @@ import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 
 /**
- * Every label a player may type for one of the password commands: each name, alias and word for one language
+ * Every label a player may type for one of the password and code commands: each name, alias and word for one language
  * that {@code commands.conf} gives them, in lower case.
  *
  * <p>The hold lets these through for a waiting player, and the log filter hides what follows them.
@@ -18,8 +18,8 @@ import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 public final class PlayerCommandLabels {
 
     /**
-     * The commands a waiting player uses: the password commands, the claim on a name they cannot log in to, and
-     * the answer to a captcha.
+     * The commands a waiting player uses: the password commands, the claim on a name they cannot log in to, the
+     * answer to a captcha, and the second factor, whose codes the log must not keep either.
      */
     static final List<Class<?>> COMMANDS = List.of(
             LoginCommand.class,
@@ -27,7 +27,8 @@ public final class PlayerCommandLabels {
             ChangePasswordCommand.class,
             LogoutCommand.class,
             ClaimCommand.class,
-            CaptchaCommand.class);
+            CaptchaCommand.class,
+            TwoFactorCommand.class);
 
     private PlayerCommandLabels() {}
 

@@ -25,7 +25,17 @@ final class PlayerCommandLabelsTest {
         }
 
         assertThat(PlayerCommandLabels.of(ConfiguredCommands.load(file)))
-                .contains("login", "l", "register", "reg", "changepassword", "logout", "giris", "kayit")
+                .contains(
+                        "login",
+                        "l",
+                        "register",
+                        "reg",
+                        "changepassword",
+                        "logout",
+                        "giris",
+                        "kayit",
+                        "2fa",
+                        "dogrulama")
                 .doesNotContain("uxmauth", "auth");
     }
 
