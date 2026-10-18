@@ -35,6 +35,14 @@ public final class WebsiteAccounts implements AccountRepository {
         this.clock = clock;
     }
 
+    /** The plugin's accounts, with the website's table beside them while it is on. */
+    public static AccountRepository beside(
+            AccountRepository accounts, Database database, WebsiteTable website, Clock clock) {
+        return Objects.requireNonNull(website, "website").enabled()
+                ? over(accounts, database, website, clock)
+                : accounts;
+    }
+
     /** The accounts with the website's table beside them, the table made first if it is missing. */
     public static WebsiteAccounts over(
             AccountRepository accounts, Database database, WebsiteTable website, Clock clock) {
@@ -91,13 +99,24 @@ public final class WebsiteAccounts implements AccountRepository {
         return Optional.empty();
     }
 
+    /**
+     * Whether the website keeps this account. Only a password account is the website's: a premium or Bedrock one is
+     * proved elsewhere, so a website row under its name is somebody else's and gives it nothing.
+     */
+    private static boolean mirrored(Account account) {
+        return account.kind() == AccountKind.CRACKED && account.password() != null;
+    }
+
     private static Account withTheWebsites(Account account, Optional<WebsiteRows.Row> row) {
+        if (!mirrored(account)) {
+            return account;
+        }
         return row.map(found -> account.withPassword(new PasswordHash(found.password())))
                 .orElse(account);
     }
 
     private Optional<Account> withTheWebsites(Optional<Account> account) {
-        return account.map(found -> withTheWebsites(found, rows.find(found.name())));
+        return account.map(found -> mirrored(found) ? withTheWebsites(found, rows.find(found.name())) : found);
     }
 
     @Override
@@ -110,25 +129,33 @@ public final class WebsiteAccounts implements AccountRepository {
         return withTheWebsites(accounts.findByPremiumId(Objects.requireNonNull(premiumId, "premiumId")));
     }
 
+    /**
+     * Stores a new account. A name the website holds is taken, even when it took it a moment ago: the plugin's row is
+     * taken back, and the website's row is never written over by a registration.
+     */
     @Override
     public Insert insert(Account account) {
         Insert result = accounts.insert(Objects.requireNonNull(account, "account"));
-        if (result instanceof Inserted) {
-            toTheWebsite(account);
+        if (result instanceof Inserted && !added(account)) {
+            accounts.delete(account.id());
+            return new NameTaken(
+                    rows.find(account.name()).flatMap(WebsiteAccounts::nameOf).orElse(account.name()));
         }
         return result;
     }
 
+    /** Gives a password account its website row. False when the website took the name first. */
+    private boolean added(Account account) {
+        PasswordHash password = account.password();
+        return password == null || !mirrored(account) || rows.add(account, password);
+    }
+
+    /** Writes every field, for staff tools; the website's row is this account's, since the plugin holds its name. */
     @Override
     public void update(Account account) {
         accounts.update(Objects.requireNonNull(account, "account"));
-        toTheWebsite(account);
-    }
-
-    /** A premium account with no password has nothing the website could check, so it gets no row. */
-    private void toTheWebsite(Account account) {
         PasswordHash password = account.password();
-        if (password != null) {
+        if (password != null && mirrored(account)) {
             rows.write(account, password);
         }
     }
@@ -136,10 +163,10 @@ public final class WebsiteAccounts implements AccountRepository {
     @Override
     public void recordLogin(UUID id, Instant at, String address) {
         accounts.recordLogin(id, at, address);
-        accounts.findById(id).ifPresent(account -> {
+        accounts.findById(id).filter(WebsiteAccounts::mirrored).ifPresent(account -> {
             // An account the plugin held before the table was turned on reaches the website here.
             if (rows.find(account.name()).isEmpty()) {
-                toTheWebsite(account);
+                added(account);
             }
             rows.recordLogin(account.name(), at, address);
         });
@@ -148,12 +175,13 @@ public final class WebsiteAccounts implements AccountRepository {
     @Override
     public boolean replacePassword(UUID id, @Nullable PasswordHash expected, PasswordHash fresh) {
         Objects.requireNonNull(fresh, "fresh");
-        Optional<Account> account = accounts.findById(Objects.requireNonNull(id, "id"));
+        Optional<Account> account =
+                accounts.findById(Objects.requireNonNull(id, "id")).filter(WebsiteAccounts::mirrored);
         Optional<WebsiteRows.Row> row = account.flatMap(found -> rows.find(found.name()));
         if (account.isEmpty() || row.isEmpty()) {
             boolean replaced = accounts.replacePassword(id, expected, fresh);
             if (replaced) {
-                account.ifPresent(found -> rows.write(found, fresh));
+                account.ifPresent(found -> added(found.withPassword(fresh)));
             }
             return replaced;
         }
@@ -171,8 +199,15 @@ public final class WebsiteAccounts implements AccountRepository {
 
     @Override
     public Insert rename(UUID id, PlayerName to, Instant at) {
-        Optional<Account> before = accounts.findById(Objects.requireNonNull(id, "id"));
-        Insert result = accounts.rename(id, Objects.requireNonNull(to, "to"), at);
+        Optional<Account> before =
+                accounts.findById(Objects.requireNonNull(id, "id")).filter(WebsiteAccounts::mirrored);
+        Optional<WebsiteRows.Row> theirs =
+                before.isPresent() ? rows.find(Objects.requireNonNull(to, "to")) : Optional.empty();
+        if (theirs.isPresent()
+                && !theirs.get().name().equalsIgnoreCase(before.get().name().value())) {
+            return new NameTaken(nameOf(theirs.get()).orElse(to));
+        }
+        Insert result = accounts.rename(id, to, at);
         if (result instanceof Inserted) {
             before.ifPresent(account -> rows.rename(account.name(), to));
         }
@@ -198,7 +233,7 @@ public final class WebsiteAccounts implements AccountRepository {
     public void delete(UUID id) {
         Optional<Account> gone = accounts.findById(Objects.requireNonNull(id, "id"));
         accounts.delete(id);
-        gone.ifPresent(account -> rows.delete(account.name()));
+        gone.filter(WebsiteAccounts::mirrored).ifPresent(account -> rows.delete(account.name()));
     }
 
     @Override

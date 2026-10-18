@@ -28,6 +28,7 @@ import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
 import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
@@ -39,6 +40,7 @@ import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.MailedLoginCode;
+import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.AuthNotices;
 import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.LastServers;
@@ -132,7 +134,8 @@ final class ProxyGraph implements AutoCloseable {
             return;
         }
         Clock clock = Clock.systemUTC();
-        SqlAccountRepository accounts = new SqlAccountRepository(database);
+        AccountRepository accounts = WebsiteAccounts.beside(
+                new SqlAccountRepository(database), database, settings.current().websiteTable(), clock);
         ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
         NetworkSecret secret = secret(settings);
         // Sealed with the secret every member shares, so a code set up on any server reads here.
@@ -200,7 +203,7 @@ final class ProxyGraph implements AutoCloseable {
     /** What guards the waiting world's own logins and registrations. */
     private WaitingWorld.Guards guards(
             PluginSettings settings,
-            SqlAccountRepository accounts,
+            AccountRepository accounts,
             Remember remember,
             LogIn.Failures failures,
             Clock clock,
@@ -228,7 +231,7 @@ final class ProxyGraph implements AutoCloseable {
     }
 
     /** How many accounts one address may make, and which addresses many people share. */
-    private static AccountCap cap(PluginSettings settings, SqlAccountRepository accounts, Clock clock) {
+    private static AccountCap cap(PluginSettings settings, AccountRepository accounts, Clock clock) {
         return new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -275,7 +278,7 @@ final class ProxyGraph implements AutoCloseable {
         return book;
     }
 
-    private ProxyDoor door(PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
+    private ProxyDoor door(PluginSettings settings, AccountRepository accounts, SqlDisputes disputes, Clock clock) {
         UuidScheme scheme = settings.current().ownership().uuidScheme();
         return new ProxyDoor(
                 atTheDoor(settings, accounts, disputes, clock),
@@ -308,7 +311,7 @@ final class ProxyGraph implements AutoCloseable {
             Clock clock,
             LastServers lastServers,
             Remember remember,
-            SqlAccountRepository accounts,
+            AccountRepository accounts,
             Steps steps) {
         ProxySessions sessions = new ProxySessions(fired::loggedIn);
         Supplier<Optional<Claims>> claims = claims(settings, steps.secret());
@@ -424,7 +427,7 @@ final class ProxyGraph implements AutoCloseable {
 
     /** The decision at the pre-login: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(
-            PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
+            PluginSettings settings, AccountRepository accounts, SqlDisputes disputes, Clock clock) {
         return new AtTheDoor(
                 accounts,
                 () -> settings.current().namePolicy(),

@@ -1,6 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -288,6 +289,122 @@ final class WebsiteAccountsTest {
         PasswordHash fresh = hashing.hash(Password.of("fresh777"));
         assertThat(accounts.replacePassword(alex.id(), alex.password(), fresh)).isTrue();
         assertThat(sitePassword("alex")).contains(fresh.encoded());
+    }
+
+    private void madeOnTheWebsite(String name, String realName, String password) {
+        database()
+                .inTransaction(sql -> sql.update(
+                        "INSERT INTO authme (username, realname, password, regdate) VALUES (?, ?, ?, ?)", statement -> {
+                            statement.setString(1, name);
+                            statement.setString(2, realName);
+                            statement.setString(3, password);
+                            statement.setLong(4, NOW.toEpochMilli());
+                        }));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"sqlite", "h2"})
+    @DisplayName("a website row under a premium or Bedrock player's name gives that account no password, and"
+            + " removing or renaming the account leaves the website's row alone")
+    void aPaidAccountTakesNothingFromTheWebsite(String engine) {
+        open(engine);
+        Hashing hashing = hashing(WebsiteTable.Hash.SHA256);
+        WebsiteAccounts accounts = accounts(WebsiteTable.Hash.SHA256);
+        Account notch = new Account(
+                UUID.randomUUID(),
+                new PlayerName("Notch"),
+                AccountKind.PREMIUM,
+                UUID.randomUUID(),
+                null,
+                NOW,
+                "a",
+                null,
+                null);
+        Account bedrock = new Account(
+                UUID.randomUUID(), new PlayerName(".Herobrine"), AccountKind.BEDROCK, null, null, NOW, "a", null, null);
+        accounts.insert(notch);
+        accounts.insert(bedrock);
+        String planted = hashing.hash(Password.of("planted1")).encoded();
+        madeOnTheWebsite("notch", "Notch", planted);
+        madeOnTheWebsite(".herobrine", ".Herobrine", planted);
+
+        assertThat(accounts.findByName(new PlayerName("Notch")).orElseThrow().password())
+                .isNull();
+        assertThat(accounts.findById(notch.id()).orElseThrow().password()).isNull();
+        assertThat(accounts.findByPremiumId(java.util.Objects.requireNonNull(notch.premiumId()))
+                        .orElseThrow()
+                        .password())
+                .isNull();
+        assertThat(accounts.findByName(new PlayerName(".Herobrine"))
+                        .orElseThrow()
+                        .password())
+                .isNull();
+
+        accounts.recordLogin(notch.id(), NOW, "198.51.100.9");
+        accounts.rename(bedrock.id(), new PlayerName(".Steve"), NOW);
+        accounts.delete(notch.id());
+        assertThat(sitePassword("notch")).contains(planted);
+        assertThat(sitePassword(".herobrine")).contains(planted);
+        assertThat(sitePassword(".steve")).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"sqlite", "h2"})
+    @DisplayName("a registration in game under a name the website took meanwhile is refused, and the website's"
+            + " password stays")
+    void aRegistrationNeverOverwritesTheWebsite(String engine) {
+        open(engine);
+        Hashing hashing = hashing(WebsiteTable.Hash.SHA256);
+        WebsiteAccounts accounts = accounts(WebsiteTable.Hash.SHA256);
+        String theirs = hashing.hash(Password.of("webpass1")).encoded();
+        madeOnTheWebsite("steve", "STEVE", theirs);
+
+        assertThat(accounts.insert(steve(hashing)))
+                .as("named as the website wrote it")
+                .isEqualTo(new AccountRepository.NameTaken(new PlayerName("STEVE")));
+        assertThat(sitePassword("steve")).contains(theirs);
+        assertThat(new SqlAccountRepository(database()).findByName(new PlayerName("Steve")))
+                .isEmpty();
+        WebsiteRows website =
+                new WebsiteRows(database(), new WebsiteTable(true, "authme", WebsiteTable.Hash.SHA256, COLUMNS));
+        assertThat(website.add(steve(hashing), hashing.hash(Password.of("racing1"))))
+                .as("the website took the name between the look and the write")
+                .isFalse();
+        assertThat(sitePassword("steve")).contains(theirs);
+
+        Account alex = new Account(
+                UuidScheme.offline(new PlayerName("Alex")),
+                new PlayerName("Alex"),
+                AccountKind.CRACKED,
+                null,
+                hashing.hash(Password.of("alexpass1")),
+                NOW,
+                "a",
+                null,
+                null);
+        accounts.insert(alex);
+        madeOnTheWebsite("bob", "Bob", theirs);
+        assertThat(accounts.rename(alex.id(), new PlayerName("Bob"), NOW))
+                .isEqualTo(new AccountRepository.NameTaken(new PlayerName("Bob")));
+        assertThat(sitePassword("alex")).isPresent();
+        assertThat(sitePassword("bob")).contains(theirs);
+    }
+
+    @org.junit.jupiter.api.Test
+    @DisplayName("while the table is off the plugin's accounts are used alone, and no table is made")
+    void offLeavesTheAccountsAlone() {
+        open("sqlite");
+        SqlAccountRepository own = new SqlAccountRepository(database());
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+
+        assertThat(WebsiteAccounts.beside(
+                        own, database(), new WebsiteTable(false, "authme", WebsiteTable.Hash.SHA256, COLUMNS), clock))
+                .isSameAs(own);
+        assertThatThrownBy(() -> sitePassword("steve")).as("no table was made").isInstanceOf(RuntimeException.class);
+        assertThat(WebsiteAccounts.beside(
+                        own, database(), new WebsiteTable(true, "authme", WebsiteTable.Hash.SHA256, COLUMNS), clock))
+                .isInstanceOf(WebsiteAccounts.class);
+        assertThat(sitePassword("steve")).isEmpty();
     }
 
     @ParameterizedTest(name = "{0}")

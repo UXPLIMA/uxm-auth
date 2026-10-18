@@ -32,6 +32,7 @@ import com.uxplima.auth.adapter.outbound.SqlEmails;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
 import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
@@ -236,7 +237,10 @@ final class AuthGraph implements AutoCloseable {
         this.lane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
         this.channelReports = new ChannelReports(plugin, () -> claims(settings), Clock.systemUTC());
         Hashing hashing = boot.hashers().observed(timings::start, spent -> timings.record(Timings.Kind.HASHING, spent));
-        AccountRepository accounts = new TimedAccounts(new SqlAccountRepository(database), timings);
+        AccountRepository accounts = new TimedAccounts(
+                WebsiteAccounts.beside(
+                        new SqlAccountRepository(database), database, boot.websiteTable(), Clock.systemUTC()),
+                timings);
         SqlRememberedSessions remembered = new SqlRememberedSessions(database);
         this.history = new SqlLoginHistory(database);
         Remember remember = new Remember(

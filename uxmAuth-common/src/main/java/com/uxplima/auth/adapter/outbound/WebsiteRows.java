@@ -8,6 +8,7 @@ import java.util.Optional;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.uxmlib.storage.StorageException;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.storage.sql.DeleteBuilder;
 import com.uxplima.uxmlib.storage.sql.Dialect;
@@ -112,7 +113,20 @@ final class WebsiteRows {
                 .where(columns.name(), key(account.name()))
                 .build());
         if (changed == 0) {
+            add(account, password);
+        }
+    }
+
+    /** Makes the account's row. False when the website holds the name already, and its row is left as it is. */
+    boolean add(Account account, PasswordHash password) {
+        try {
             sql.update(inserted(account, password).build());
+            return true;
+        } catch (StorageException clash) {
+            if (find(account.name()).isPresent()) {
+                return false;
+            }
+            throw clash;
         }
     }
 

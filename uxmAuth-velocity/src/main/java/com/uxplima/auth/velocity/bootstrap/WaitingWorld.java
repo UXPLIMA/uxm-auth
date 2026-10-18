@@ -17,7 +17,6 @@ import java.util.function.Supplier;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.CommandFile;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
-import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
@@ -30,6 +29,7 @@ import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.Emails;
@@ -81,11 +81,7 @@ final class WaitingWorld implements AutoCloseable {
 
     /** Hold every player who waits for the proxy's password in the world, when the settings ask for it. */
     void open(
-            PluginSettings settings,
-            SqlAccountRepository accounts,
-            Messages words,
-            ProxySessions network,
-            Guards guards) {
+            PluginSettings settings, AccountRepository accounts, Messages words, ProxySessions network, Guards guards) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
         }
@@ -110,7 +106,7 @@ final class WaitingWorld implements AutoCloseable {
     private void hold(
             Object limboApi,
             PluginSettings settings,
-            SqlAccountRepository accounts,
+            AccountRepository accounts,
             Messages words,
             ProxySessions network,
             Guards guards) {
@@ -150,7 +146,7 @@ final class WaitingWorld implements AutoCloseable {
 
     private LimboLogin passwords(
             PluginSettings settings,
-            SqlAccountRepository accounts,
+            AccountRepository accounts,
             Messages words,
             LimboLogin.Words labels,
             Guards guards) {
@@ -205,7 +201,7 @@ final class WaitingWorld implements AutoCloseable {
     /** A forgotten password, by a code mailed to the linked address; the new one is hashed on the lane. */
     private static LimboRecovery recovery(
             PluginSettings settings,
-            SqlAccountRepository accounts,
+            AccountRepository accounts,
             Sessions sessions,
             Messages words,
             Guards guards,
@@ -226,7 +222,7 @@ final class WaitingWorld implements AutoCloseable {
 
     /** The code of the second step, checked on the hashing lane: the factor table is read, backup codes hashed. */
     private static LimboLogin.CodeCheck codes(
-            PluginSettings settings, SqlAccountRepository accounts, Sessions sessions, Guards guards, Hashers hashers) {
+            PluginSettings settings, AccountRepository accounts, Sessions sessions, Guards guards, Hashers hashers) {
         FactorCheck check = new FactorCheck(
                 guards.factors(),
                 hashers.hashing(),
@@ -241,7 +237,7 @@ final class WaitingWorld implements AutoCloseable {
     private record Hashers(Hashing hashing, HashingLane lane) {}
 
     private static ChangePassword change(
-            PluginSettings settings, SqlAccountRepository accounts, Hashers hashers, Sessions sessions, Guards guards) {
+            PluginSettings settings, AccountRepository accounts, Hashers hashers, Sessions sessions, Guards guards) {
         return new ChangePassword(
                 accounts,
                 hashers.hashing(),
