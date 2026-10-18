@@ -24,6 +24,12 @@ public sealed interface PasswordVerdict {
     /** A character the operator's pattern does not allow. */
     record BadCharacters() implements PasswordVerdict {}
 
+    /** The password is on the operator's list of common ones. */
+    record Common() implements PasswordVerdict {}
+
+    /** The password is known from a breach, as haveibeenpwned counts it. */
+    record Breached() implements PasswordVerdict {}
+
     /** A required kind of character is missing. */
     record Missing(Set<CharClass> classes) implements PasswordVerdict {
         public Missing {

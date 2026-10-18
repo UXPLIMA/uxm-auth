@@ -1,5 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -16,6 +18,7 @@ import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHasher;
 import com.uxplima.auth.domain.hash.Pbkdf2Hasher;
 import com.uxplima.auth.domain.name.NamePolicy;
+import com.uxplima.auth.domain.password.CommonPasswords;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.uxmlib.config.HoconConfig;
 import com.uxplima.uxmlib.text.language.LanguageSettings;
@@ -63,7 +66,9 @@ public final class PluginSettings {
             AuthSettings.Premium premium,
             AuthSettings.Ownership ownership,
             AuthSettings.Network network,
-            ProtectionSettings protection) {
+            ProtectionSettings protection,
+            AuthSettings.PasswordLists passwordLists,
+            CommonPasswords common) {
 
         public Snapshot {
             Objects.requireNonNull(language, "language");
@@ -80,6 +85,8 @@ public final class PluginSettings {
             Objects.requireNonNull(premium, "premium");
             Objects.requireNonNull(ownership, "ownership");
             Objects.requireNonNull(network, "network");
+            Objects.requireNonNull(passwordLists, "passwordLists");
+            Objects.requireNonNull(common, "common");
             if (hashing.algorithm() == HashAlgorithm.BCRYPT && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
                 throw new IllegalArgumentException("passwords.max-length is " + passwords.maxLength()
                         + ", and bcrypt reads only the first " + AuthSettings.BCRYPT_BYTES
@@ -87,7 +94,7 @@ public final class PluginSettings {
             }
             // Built once here, so a value the domain refuses is refused when the file is read.
             namePolicyOf(names);
-            passwordPolicyOf(passwords, hashing);
+            passwordPolicyOf(passwords, hashing, common);
             hashersOf(hashing);
         }
 
@@ -102,7 +109,7 @@ public final class PluginSettings {
 
         /** The password rules. Under bcrypt they also refuse a password past its 72 bytes. */
         public PasswordPolicy passwordPolicy() {
-            return passwordPolicyOf(passwords, hashing);
+            return passwordPolicyOf(passwords, hashing, common);
         }
 
         /** The current algorithm for new hashes, and all four for reading old ones. */
@@ -116,14 +123,15 @@ public final class PluginSettings {
         }
 
         private static PasswordPolicy passwordPolicyOf(
-                AuthSettings.Passwords passwords, AuthSettings.HashSettings hashing) {
+                AuthSettings.Passwords passwords, AuthSettings.HashSettings hashing, CommonPasswords common) {
             int maxBytes = hashing.algorithm() == HashAlgorithm.BCRYPT ? AuthSettings.BCRYPT_BYTES : 0;
             return new PasswordPolicy(
                     passwords.minLength(),
                     passwords.maxLength(),
                     Pattern.compile(passwords.allowed()),
                     passwords.required(),
-                    maxBytes);
+                    maxBytes,
+                    common);
         }
 
         private static Hashing hashersOf(AuthSettings.HashSettings hashing) {
@@ -207,6 +215,7 @@ public final class PluginSettings {
 
     private Snapshot read() {
         HoconConfig config = HoconConfig.load(file);
+        AuthSettings.PasswordLists lists = SettingsReader.passwordLists(config);
         return new Snapshot(
                 language(config),
                 storage(config),
@@ -221,7 +230,23 @@ public final class PluginSettings {
                 SettingsReader.premium(config),
                 SettingsReader.ownership(config),
                 SettingsReader.network(config),
-                ProtectionReader.protection(config));
+                ProtectionReader.protection(config),
+                lists,
+                common(lists));
+    }
+
+    /** The common passwords, read from beside this file at every load; a file that is not there lists none. */
+    private CommonPasswords common(AuthSettings.PasswordLists lists) {
+        Path folder = file.toAbsolutePath().getParent();
+        Path list = folder == null ? Path.of(lists.commonFile()) : folder.resolve(lists.commonFile());
+        if (!Files.isRegularFile(list)) {
+            return CommonPasswords.none();
+        }
+        try {
+            return CommonPasswords.of(Files.readAllLines(list, StandardCharsets.UTF_8));
+        } catch (IOException unreadable) {
+            throw new IllegalArgumentException("passwords.common-file " + list + " cannot be read", unreadable);
+        }
     }
 
     /**

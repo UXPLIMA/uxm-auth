@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.Hashing;
@@ -43,6 +44,7 @@ public final class RegisterAccount {
     private final Supplier<PasswordPolicy> policy;
     private final Clock clock;
     private final Cap cap;
+    private final BreachedPasswords breaches;
 
     public RegisterAccount(
             AccountRepository accounts,
@@ -63,6 +65,19 @@ public final class RegisterAccount {
             Supplier<PasswordPolicy> policy,
             Clock clock,
             Cap cap) {
+        this(accounts, hashing, lane, sessions, policy, clock, cap, BreachedPasswords.NONE);
+    }
+
+    /** @param breaches whether a password is known from a breach, asked on the lane before the hash */
+    public RegisterAccount(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Supplier<PasswordPolicy> policy,
+            Clock clock,
+            Cap cap,
+            BreachedPasswords breaches) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -70,6 +85,7 @@ public final class RegisterAccount {
         this.policy = Objects.requireNonNull(policy, "policy");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.cap = Objects.requireNonNull(cap, "cap");
+        this.breaches = Objects.requireNonNull(breaches, "breaches");
     }
 
     /** Both passwords are wiped once the answer is known, whatever it is. */
@@ -117,10 +133,15 @@ public final class RegisterAccount {
         }
         long generation = held.generation();
         boolean unverified = unregistered.unverified();
-        String host = held.host();
-        return lane.submit(() -> cap.full(address, host)
-                ? new RegisterResult.TooManyAccounts()
-                : store(connection, generation, name, hashing.hash(password), address, unverified));
+        return lane.submit(() -> {
+            if (cap.full(address, held.host())) {
+                return new RegisterResult.TooManyAccounts();
+            }
+            if (breaches.breached(password)) {
+                return new RegisterResult.Rejected(new PasswordVerdict.Breached());
+            }
+            return store(connection, generation, name, hashing.hash(password), address, unverified);
+        });
     }
 
     private RegisterResult store(

@@ -484,6 +484,43 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName(
+            "the common-password file is read beside the config, again at every reload, and the breach check is off")
+    void commonPasswordsAreRead(@TempDir Path folder) throws IOException {
+        Path file = folder.resolve("config.conf");
+        Files.writeString(file, "passwords { common-file = \"lists/weak.txt\" }\n", StandardCharsets.UTF_8);
+        Files.createDirectories(folder.resolve("lists"));
+        Files.writeString(folder.resolve("lists/weak.txt"), "# weak\npassword\nletmein\n", StandardCharsets.UTF_8);
+        PluginSettings settings = new PluginSettings(file);
+
+        assertThat(settings.current().passwordLists().breachCheck()).isFalse();
+        assertThat(settings.current().passwordPolicy().check(com.uxplima.auth.domain.password.Password.of("LetMeIn")))
+                .isEqualTo(new com.uxplima.auth.domain.password.PasswordVerdict.Common());
+
+        Files.writeString(folder.resolve("lists/weak.txt"), "dragon123\n", StandardCharsets.UTF_8);
+        settings.reload();
+
+        assertThat(settings.current().passwordPolicy().check(com.uxplima.auth.domain.password.Password.of("letmein")))
+                .isEqualTo(new com.uxplima.auth.domain.password.PasswordVerdict.Accepted());
+        assertThat(settings.current().passwordPolicy().check(com.uxplima.auth.domain.password.Password.of("Dragon123")))
+                .isEqualTo(new com.uxplima.auth.domain.password.PasswordVerdict.Common());
+        assertThat(settingsFrom(folder, "passwords { breach-check = true }\n")
+                        .passwordLists()
+                        .breachCheck())
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("a common-password file that is not there is no list, and the shipped one is used by the shipped file")
+    void aMissingListIsNone(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").passwordLists().commonFile()).isEqualTo("passwords/common.txt");
+        assertThat(settingsFrom(folder, "")
+                        .passwordPolicy()
+                        .check(com.uxplima.auth.domain.password.Password.of("password")))
+                .isEqualTo(new com.uxplima.auth.domain.password.PasswordVerdict.Accepted());
+    }
+
+    @Test
     @DisplayName("countries are off by default, and the operator's mode, list, licence and refresh are read")
     void countriesAreRead(@TempDir Path folder) throws IOException {
         com.uxplima.auth.adapter.outbound.geo.GeoSettings shipped =

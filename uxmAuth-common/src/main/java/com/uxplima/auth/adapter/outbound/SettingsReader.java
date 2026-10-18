@@ -57,6 +57,13 @@ final class SettingsReader {
                 config.getInt("passwords.max-attempts", 3));
     }
 
+    static AuthSettings.PasswordLists passwordLists(HoconConfig config) {
+        return new AuthSettings.PasswordLists(
+                config.getString("passwords.common-file", "passwords/common.txt")
+                        .strip(),
+                config.getBoolean("passwords.breach-check", false));
+    }
+
     static AuthSettings.HashSettings hashing(HoconConfig config) {
         return new AuthSettings.HashSettings(
                 algorithm(config.getString("hashing.algorithm", "argon2id")),

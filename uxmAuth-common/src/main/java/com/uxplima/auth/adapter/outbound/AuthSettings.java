@@ -205,6 +205,18 @@ public final class AuthSettings {
     /** A point a player stands on, and the way they face there. */
     public record Spot(double x, double y, double z, float yaw, float pitch) {}
 
+    /**
+     * The lists a password is checked against beyond the rules.
+     *
+     * @param commonFile the file of passwords too common to keep, beside config.conf
+     * @param breachCheck whether haveibeenpwned is asked, by the first five characters of the password's SHA-1
+     */
+    public record PasswordLists(String commonFile, boolean breachCheck) {
+        public PasswordLists {
+            Objects.requireNonNull(commonFile, "commonFile");
+        }
+    }
+
     /** What a password may be, which confirmations are asked, and how many wrong ones a player gets. */
     public record Passwords(
             int minLength,

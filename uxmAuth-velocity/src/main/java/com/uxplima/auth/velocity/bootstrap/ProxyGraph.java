@@ -17,6 +17,7 @@ import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
@@ -112,13 +113,24 @@ final class ProxyGraph implements AutoCloseable {
         Admission admission = admission(settings, bans, watchCountries(settings, clock), clock);
         ProxySessions sessions = listen(
                 door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
+        waiting.open(settings, accounts, words, sessions, guards(settings, accounts, remember, bans, clock));
+        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+    }
+
+    /** What guards the waiting world's own logins and registrations. */
+    private WaitingWorld.Guards guards(
+            PluginSettings settings, SqlAccountRepository accounts, Remember remember, AddressBans bans, Clock clock) {
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
-        waiting.open(settings, accounts, words, sessions, new WaitingWorld.Guards(remember, bans::failed, cap::full));
-        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+        PwnedPasswords breaches = new PwnedPasswords(
+                web,
+                PwnedPasswords.SERVICE,
+                () -> settings.current().passwordLists().breachCheck(),
+                logger::warn);
+        return new WaitingWorld.Guards(remember, bans::failed, cap::full, breaches);
     }
 
     /** The door's rules, in order: the country, a banned address, then too many connections from one. */

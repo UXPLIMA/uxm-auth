@@ -19,6 +19,7 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -111,7 +112,7 @@ final class WaitingWorld implements AutoCloseable {
      * What guards the waiting world's door: the remembered sessions, where a wrong password counts, and the
      * limit on the accounts one address makes.
      */
-    record Guards(Remember remember, LogIn.Failures failures, RegisterAccount.Cap cap) {}
+    record Guards(Remember remember, LogIn.Failures failures, RegisterAccount.Cap cap, BreachedPasswords breaches) {}
 
     /** The labels of /login and /register, as commands.conf names them. */
     private record Labels(Set<String> login, Set<String> register) {}
@@ -138,7 +139,8 @@ final class WaitingWorld implements AutoCloseable {
                         sessions,
                         () -> settings.current().passwordPolicy(),
                         clock,
-                        guards.cap()),
+                        guards.cap(),
+                        guards.breaches()),
                 sessions,
                 words,
                 labels::login,

@@ -203,6 +203,40 @@ final class RegisterAccountTest {
         assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Unregistered.class);
     }
 
+    @Test
+    @DisplayName("a password known from a breach is refused before it is hashed, and no account is made")
+    void aBreachedPasswordIsRefused() {
+        UUID connection = fixture.unregistered("Steve");
+        RegisterAccount checked = new RegisterAccount(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                fixture.clock,
+                (address, host) -> false,
+                password -> password.sameAs(Password.of("hunter22")));
+
+        assertThat(checked.run(
+                                connection,
+                                new PlayerName("Steve"),
+                                Password.of("hunter22"),
+                                Password.of("hunter22"),
+                                "10.0.0.7")
+                        .join())
+                .isEqualTo(
+                        new RegisterResult.Rejected(new com.uxplima.auth.domain.password.PasswordVerdict.Breached()));
+        assertThat(fixture.accounts.writes()).isZero();
+        assertThat(checked.run(
+                                connection,
+                                new PlayerName("Steve"),
+                                Password.of("fresh777"),
+                                Password.of("fresh777"),
+                                "10.0.0.7")
+                        .join())
+                .isInstanceOf(RegisterResult.Created.class);
+    }
+
     private RegisterResult register(UUID connection, String name, String password, String confirm) {
         return useCase()
                 .run(connection, new PlayerName(name), Password.of(password), Password.of(confirm), "10.0.0.7")

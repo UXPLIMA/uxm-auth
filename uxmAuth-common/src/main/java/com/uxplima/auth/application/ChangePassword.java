@@ -8,6 +8,7 @@ import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.account.Account;
@@ -31,6 +32,7 @@ public final class ChangePassword {
     private final Supplier<PasswordPolicy> policy;
     private final NetworkEvents events;
     private final RememberedSessions remembered;
+    private final BreachedPasswords breaches;
 
     public ChangePassword(
             AccountRepository accounts,
@@ -40,6 +42,19 @@ public final class ChangePassword {
             Supplier<PasswordPolicy> policy,
             NetworkEvents events,
             RememberedSessions remembered) {
+        this(accounts, hashing, lane, sessions, policy, events, remembered, BreachedPasswords.NONE);
+    }
+
+    /** @param breaches whether a new password is known from a breach, asked on the lane before the hash */
+    public ChangePassword(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Supplier<PasswordPolicy> policy,
+            NetworkEvents events,
+            RememberedSessions remembered,
+            BreachedPasswords breaches) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -47,6 +62,7 @@ public final class ChangePassword {
         this.policy = Objects.requireNonNull(policy, "policy");
         this.events = Objects.requireNonNull(events, "events");
         this.remembered = Objects.requireNonNull(remembered, "remembered");
+        this.breaches = Objects.requireNonNull(breaches, "breaches");
     }
 
     /** Both passwords are wiped once the answer is known, whatever it is. */
@@ -97,6 +113,9 @@ public final class ChangePassword {
         PasswordHash stored = current == null ? null : current.password();
         if (current == null || (old != null && (stored == null || wrong(old, stored)))) {
             return new ChangeResult.WrongOld();
+        }
+        if (breaches.breached(fresh)) {
+            return new ChangeResult.Rejected(new PasswordVerdict.Breached());
         }
         PasswordHash hash = hashing.hash(fresh);
         if (!sessions.isOpen(connection, generation)) {

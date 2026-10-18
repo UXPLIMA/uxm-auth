@@ -35,6 +35,8 @@ public final class PasswordWords {
                     case PasswordVerdict.TooLongForTheHash forTheHash ->
                         messages.render(reader, Keys.PASSWORD_TOO_LONG_FOR_THE_HASH);
                     case PasswordVerdict.BadCharacters bad -> messages.render(reader, Keys.PASSWORD_BAD_CHARACTERS);
+                    case PasswordVerdict.Common common -> messages.render(reader, Keys.PASSWORD_COMMON);
+                    case PasswordVerdict.Breached breached -> messages.render(reader, Keys.PASSWORD_BREACHED);
                     case PasswordVerdict.Missing missing ->
                         messages.render(
                                 reader,

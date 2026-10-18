@@ -149,6 +149,34 @@ final class ChangePasswordTest {
     }
 
     @Test
+    @DisplayName("a new password known from a breach is refused after the old one was checked, and nothing changes")
+    void aBreachedPasswordIsRefused() {
+        UUID connection = loggedIn("Steve", "hunter22");
+        java.util.List<String> asked = new java.util.ArrayList<>();
+        ChangePassword useCase = new ChangePassword(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                events,
+                fixture.remembered,
+                password -> {
+                    asked.add("asked");
+                    return true;
+                });
+
+        assertThat(useCase.run(connection, Password.of("wrong123"), Password.of("fresh777"))
+                        .join())
+                .isEqualTo(new ChangeResult.WrongOld());
+        assertThat(asked).isEmpty();
+        assertThat(useCase.run(connection, Password.of("hunter22"), Password.of("fresh777"))
+                        .join())
+                .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.Breached()));
+        assertThat(login(connection, "hunter22")).isTrue();
+    }
+
+    @Test
     @DisplayName("a replace still needs a login")
     void aReplaceNeedsALogin() {
         UUID connection = fixture.registered("Steve", "hunter22");

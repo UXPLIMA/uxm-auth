@@ -11,17 +11,24 @@ import java.util.regex.Pattern;
  *
  * <p>{@code maxBytes} is the limit the current hash reads, zero when it reads everything. It is set by the
  * settings when BCrypt is the current algorithm, and it is counted in UTF-8 bytes because that is what BCrypt
- * counts.
+ * counts. {@code common} lists the passwords too common to keep.
  */
-public record PasswordPolicy(int minLength, int maxLength, Pattern allowed, Set<CharClass> required, int maxBytes) {
+public record PasswordPolicy(
+        int minLength, int maxLength, Pattern allowed, Set<CharClass> required, int maxBytes, CommonPasswords common) {
 
     public PasswordPolicy {
         Objects.requireNonNull(allowed, "allowed");
+        Objects.requireNonNull(common, "common");
         Objects.requireNonNull(required, "required");
         required = required.isEmpty() ? Set.of() : Set.copyOf(EnumSet.copyOf(required));
         if (minLength < 1 || maxLength < minLength || maxBytes < 0) {
             throw new IllegalArgumentException("the lengths must be positive and the maximum at least the minimum");
         }
+    }
+
+    /** The rules with no list of common passwords. */
+    public PasswordPolicy(int minLength, int maxLength, Pattern allowed, Set<CharClass> required, int maxBytes) {
+        this(minLength, maxLength, allowed, required, maxBytes, CommonPasswords.none());
     }
 
     /** What the policy says about one password. */
@@ -46,15 +53,21 @@ public record PasswordPolicy(int minLength, int maxLength, Pattern allowed, Set<
         } finally {
             java.util.Arrays.fill(chars, '\0');
         }
-        if (maxBytes > 0) {
-            byte[] bytes = password.utf8();
-            int count = bytes.length;
-            java.util.Arrays.fill(bytes, (byte) 0);
-            if (count > maxBytes) {
-                return new PasswordVerdict.TooLongForTheHash(maxBytes);
-            }
+        if (!fitsTheHash(password)) {
+            return new PasswordVerdict.TooLongForTheHash(maxBytes);
         }
-        return new PasswordVerdict.Accepted();
+        return common.contains(password) ? new PasswordVerdict.Common() : new PasswordVerdict.Accepted();
+    }
+
+    /** Whether the hash reads the whole password, counted in the UTF-8 bytes BCrypt counts. */
+    private boolean fitsTheHash(Password password) {
+        if (maxBytes == 0) {
+            return true;
+        }
+        byte[] bytes = password.utf8();
+        int count = bytes.length;
+        java.util.Arrays.fill(bytes, (byte) 0);
+        return count <= maxBytes;
     }
 
     private Set<CharClass> missing(char[] chars) {

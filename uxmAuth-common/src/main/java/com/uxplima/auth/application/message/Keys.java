@@ -220,6 +220,11 @@ public enum Keys implements MessageKey {
     PASSWORD_TOO_LONG_FOR_THE_HASH(
             "password.too-long-for-the-hash",
             "<etag:'ERROR'> <body>That password is too long to keep whole. Use fewer letters outside the English alphabet."),
+    PASSWORD_COMMON(
+            "password.common", "<etag:'ERROR'> <body>That password is one of the most common ones. Choose another."),
+    PASSWORD_BREACHED(
+            "password.breached",
+            "<etag:'ERROR'> <body>That password is known from a data breach somewhere else. Choose another."),
     PASSWORD_BAD_CHARACTERS(
             "password.bad-characters",
             "<etag:'ERROR'> <body>That password holds a character this server does not allow."),

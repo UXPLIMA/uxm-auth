@@ -422,6 +422,7 @@ final class PluginModule {
         saveIfAbsent(dataFolder, "screens.conf");
         mergeShippedScreens(dataFolder);
         saveIfAbsent(dataFolder, "commands.conf");
+        saveIfAbsent(dataFolder, "passwords/common.txt");
         saveSharedTheme(dataFolder);
         // The language files are discovered in the jar rather than named in a list here. A plugin gains a
         // language by gaining a file, and a list is the one place that gets forgotten when it does.

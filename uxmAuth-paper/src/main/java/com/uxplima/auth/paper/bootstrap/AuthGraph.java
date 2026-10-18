@@ -20,6 +20,7 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
@@ -243,8 +244,20 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().accounts(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
+        PwnedPasswords breaches = new PwnedPasswords(
+                web,
+                PwnedPasswords.SERVICE,
+                () -> settings.current().passwordLists().breachCheck(),
+                plugin.getLogger()::warning);
         RegisterAccount registering = new RegisterAccount(
-                accounts, hashing, lane, sessions, () -> settings.current().passwordPolicy(), clock, cap::full);
+                accounts,
+                hashing,
+                lane,
+                sessions,
+                () -> settings.current().passwordPolicy(),
+                clock,
+                cap::full,
+                breaches);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
                 registering,
@@ -343,7 +356,8 @@ final class AuthGraph implements AutoCloseable {
                         sessions,
                         () -> settings.current().passwordPolicy(),
                         events,
-                        remembered),
+                        remembered,
+                        breaches),
                 moments,
                 () -> settings.current().passwords(),
                 messages,
