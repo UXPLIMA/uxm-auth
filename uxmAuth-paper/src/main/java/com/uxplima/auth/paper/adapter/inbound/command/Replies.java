@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.application.lane.LaneFullException;
@@ -34,33 +35,46 @@ public final class Replies {
 
     /** Hands the answer to {@code then} on the player's thread, and answers when that has run. */
     public <T> CompletableFuture<Void> on(Player player, CompletableFuture<T> answer, Consumer<T> then) {
+        return on((CommandSender) player, answer, then);
+    }
+
+    /**
+     * Hands the answer to {@code then} on the sender's thread, a player's own or the global one for the console,
+     * and answers when that has run.
+     */
+    public <T> CompletableFuture<Void> on(CommandSender sender, CompletableFuture<T> answer, Consumer<T> then) {
         CompletableFuture<Void> done = new CompletableFuture<>();
         CompletableFuture<Void> unused = answer.handle((result, failure) -> {
-            scheduler.entity(player, () -> {
+            Runnable task = () -> {
                 try {
                     if (failure == null) {
                         then.accept(result);
                     } else {
-                        fail(player, failure);
+                        fail(sender, failure);
                     }
                 } finally {
                     done.complete(null);
                 }
-            });
+            };
+            if (sender instanceof Player player) {
+                scheduler.entity(player, task);
+            } else {
+                scheduler.global(task);
+            }
             return null;
         });
         return done;
     }
 
-    private void fail(Player player, Throwable failure) {
+    private void fail(CommandSender sender, Throwable failure) {
         Throwable cause = failure instanceof CompletionException wrapped && wrapped.getCause() != null
                 ? wrapped.getCause()
                 : failure;
         if (cause instanceof LaneFullException) {
-            messages.send(player, Keys.BUSY);
+            messages.send(sender, Keys.BUSY);
             return;
         }
-        logger.log(Level.WARNING, "A command of " + player.getName() + " failed", cause);
-        messages.send(player, Keys.COMMAND_INTERNAL_ERROR);
+        logger.log(Level.WARNING, "A command of " + sender.getName() + " failed", cause);
+        messages.send(sender, Keys.COMMAND_INTERNAL_ERROR);
     }
 }

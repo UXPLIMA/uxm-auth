@@ -35,6 +35,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.listener.LanguageListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConnectingLocales;
+import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
 import com.uxplima.uxmlib.command.annotation.CommandMessages;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
@@ -241,7 +242,7 @@ final class PluginModule {
         graph.start();
         registerPlayerCommands(graph, commands, resolvers, scheduler);
 
-        registerAdminCommand(commands, resolvers, scheduler, messages, choices);
+        registerAdminCommand(commands, resolvers, scheduler, messages, choices, graph.staff);
     }
 
     private void registerAdminCommand(
@@ -249,7 +250,8 @@ final class PluginModule {
             ParamResolvers resolvers,
             Scheduler scheduler,
             Messages messages,
-            LanguageChoices choices) {
+            LanguageChoices choices,
+            Staff staff) {
         if (commands.isEnabled(AdminCommand.KEY, "uxmauth")) {
             AnnotatedCommands.register(
                     plugin,
@@ -259,7 +261,8 @@ final class PluginModule {
                             plugin.getPluginMeta().getVersion(),
                             scheduler,
                             this::healthChecks,
-                            choices),
+                            choices,
+                            staff),
                     resolvers,
                     scheduler);
         }

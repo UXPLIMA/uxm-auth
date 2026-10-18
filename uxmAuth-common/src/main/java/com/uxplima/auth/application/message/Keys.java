@@ -335,6 +335,37 @@ public enum Keys implements MessageKey {
     RECOVER_TOO_MANY_ATTEMPTS(
             "recover.too-many-attempts",
             "<etag:'ERROR'> <body>The tries for that code are spent. Ask a new one with" + " <value>/recover<body>."),
+    STAFF_UNKNOWN("staff.unknown", "<etag:'ERROR'> <body>No account is under <value><name><body>."),
+    INFO_HEADER("info.header", "<tag:'AUTH'> <value><name><body>, <value><kind><body>."),
+    INFO_KIND_CRACKED("info.kind.cracked", "a password account"),
+    INFO_KIND_PREMIUM("info.kind.premium", "a premium account"),
+    INFO_KIND_BEDROCK("info.kind.bedrock", "a Bedrock account"),
+    INFO_REGISTERED("info.registered", "<body>Registered <value><date><body> from <value><address><body>."),
+    INFO_LAST_LOGIN(
+            "info.last-login",
+            "<body>Last login <value><date><body> from <value><address><body>, <value><logins><body>"
+                    + " logins kept in all."),
+    INFO_NEVER("info.never", "<body>No login is kept yet."),
+    INFO_FACTORS(
+            "info.factors",
+            "<body>App: <value><app><body>. Backup codes left: <value><codes><body>. Code by mail:"
+                    + " <value><mail><body>."),
+    INFO_ON("info.on", "on"),
+    INFO_OFF("info.off", "off"),
+    INFO_ADDRESS("info.address", "<body>Mail address: <value><address><body>."),
+    INFO_NO_ADDRESS("info.no-address", "<body>No mail address is linked."),
+    INFO_ALTS("info.alts", "<body>Other accounts on its addresses: <value><alts><body>."),
+    INFO_NO_ALTS("info.no-alts", "<body>No other account was seen on its addresses."),
+    HISTORY_HEADER("history.header", "<tag:'AUTH'> <body>The latest logins of <value><name><body>:"),
+    HISTORY_LINE("history.line", "<body><value><date><body> from <value><address><body>, by <value><method><body>."),
+    HISTORY_EMPTY("history.empty", "<body>No login of <value><name><body> is kept."),
+    METHOD_PASSWORD("method.password", "password"),
+    METHOD_REGISTERED("method.registered", "registration"),
+    METHOD_PREMIUM("method.premium", "premium"),
+    METHOD_BEDROCK("method.bedrock", "Bedrock"),
+    METHOD_SESSION("method.session", "session"),
+    METHOD_FORCED("method.forced", "staff"),
+    METHOD_NETWORK("method.network", "network"),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(
             "session.not-chosen",

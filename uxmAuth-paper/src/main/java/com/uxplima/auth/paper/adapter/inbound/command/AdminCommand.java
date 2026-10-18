@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import org.bukkit.entity.Player;
@@ -13,6 +14,7 @@ import net.kyori.adventure.text.JoinConfiguration;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.PlayerNames;
 import com.uxplima.uxmlib.command.annotation.SuggestUsing;
@@ -47,6 +49,7 @@ public final class AdminCommand {
     private final Supplier<List<HealthCheck>> health;
     private final LanguageChoices choices;
     private final LanguageOfAnotherPlayer another;
+    private final Staff staff;
 
     public AdminCommand(
             PluginSettings settings,
@@ -55,12 +58,25 @@ public final class AdminCommand {
             Scheduler scheduler,
             Supplier<List<HealthCheck>> health,
             LanguageChoices choices) {
+        this(settings, messages, version, scheduler, health, choices, Staff.NONE);
+    }
+
+    /** @param staff what staff read of an account and do to it */
+    public AdminCommand(
+            PluginSettings settings,
+            Messages messages,
+            String version,
+            Scheduler scheduler,
+            Supplier<List<HealthCheck>> health,
+            LanguageChoices choices,
+            Staff staff) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.version = Objects.requireNonNull(version, "version");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.health = Objects.requireNonNull(health, "health");
         this.choices = Objects.requireNonNull(choices, "choices");
+        this.staff = Objects.requireNonNull(staff, "staff");
         this.another = new LanguageOfAnotherPlayer(
                 messages, choices, () -> settings.current().language().forcedLocale());
     }
@@ -113,6 +129,20 @@ public final class AdminCommand {
     public void doctor(Sender sender) {
         messages.send(sender.bukkit(), Keys.DOCTOR_HEADER);
         scheduler.async(() -> say(sender, HealthReport.run(health.get())));
+    }
+
+    /** Everything staff read of one account: its dates, logins, factors, address and the other accounts. */
+    @FromConfig(value = "info", fallbackName = "info", description = "Read what is known of an account")
+    @Permission("uxmauth.admin.info")
+    public void info(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = staff.info(sender.bukkit(), player);
+    }
+
+    /** The latest logins of one account, with the time, the address and the way in of each. */
+    @FromConfig(value = "history", fallbackName = "history", description = "Read the latest logins of an account")
+    @Permission("uxmauth.admin.history")
+    public void history(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = staff.history(sender.bukkit(), player);
     }
 
     /** One line per check, and a closing line that says whether anything needs an operator. */

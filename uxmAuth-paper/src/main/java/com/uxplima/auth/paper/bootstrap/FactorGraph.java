@@ -62,6 +62,8 @@ final class FactorGraph {
     /** Holds a player whose node requires the app until it is on. */
     final SetupDuty duty;
 
+    final SqlFactors factors;
+
     private final FactorSetup setup;
     private final MailToggle mailToggle;
     private final Sessions sessions;
@@ -87,8 +89,7 @@ final class FactorGraph {
         this.messages = messages;
         Path folder = plugin.getDataFolder().toPath();
         AuthSettings.Network network = settings.current().network();
-        SqlFactors factors =
-                new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
+        this.factors = new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
         this.secondStep = new SecondStep(
                 factors, mail.emails, () -> settings.current().secondFactor().step(), mail::loginMailed);
         FactorCheck check = new FactorCheck(

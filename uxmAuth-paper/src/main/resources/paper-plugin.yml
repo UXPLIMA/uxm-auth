@@ -91,6 +91,12 @@ permissions:
   uxmauth.admin.reload:
     description: Read the configuration again
     default: op
+  uxmauth.admin.info:
+    description: Read what is known of an account, and the other accounts on its addresses
+    default: op
+  uxmauth.admin.history:
+    description: Read the latest logins of an account
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

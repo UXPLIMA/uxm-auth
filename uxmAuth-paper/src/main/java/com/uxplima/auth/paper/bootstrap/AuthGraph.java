@@ -7,6 +7,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -56,6 +57,7 @@ import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
+import com.uxplima.auth.application.staff.AccountInfo;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
@@ -105,6 +107,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
+import com.uxplima.auth.paper.adapter.inbound.staff.StaffView;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.adapter.outbound.captcha.CaptchaMap;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
@@ -153,6 +156,7 @@ final class AuthGraph implements AutoCloseable {
     final EmailCommand email;
     private final AddressDuty addressDuty;
     final SqlLoginHistory history;
+    final StaffView staff;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -456,6 +460,17 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
+        this.staff = new StaffView(
+                new AccountInfo(
+                        accounts,
+                        history,
+                        factors.factors,
+                        mail.emails,
+                        () -> settings.current().staff().info()),
+                lane,
+                replies,
+                messages,
+                () -> settings.current().staff().dates().withZone(ZoneId.systemDefault()));
         this.recover =
                 mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);

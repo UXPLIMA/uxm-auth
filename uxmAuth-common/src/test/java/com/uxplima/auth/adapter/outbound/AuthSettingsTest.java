@@ -736,6 +736,23 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("staff read ten recent logins, twenty other accounts and dates as year-month-day hour:minute by"
+            + " default, and a pattern that is no date is refused by name")
+    void staffViewIsRead(@TempDir Path folder) throws IOException {
+        StaffSettings shipped = settingsFrom(folder, "").staff();
+        assertThat(shipped.info()).isEqualTo(new com.uxplima.auth.application.staff.AccountInfo.Settings(10, 20));
+        assertThat(shipped.dates().format(java.time.LocalDateTime.of(2026, 10, 18, 9, 5)))
+                .isEqualTo("2026-10-18 09:05");
+        StaffSettings written = settingsFrom(
+                        folder, "staff { recent-logins = 3, alts-shown = 5, date-format = \"dd.MM.yyyy\" }\n")
+                .staff();
+        assertThat(written.info()).isEqualTo(new com.uxplima.auth.application.staff.AccountInfo.Settings(3, 5));
+        assertThat(written.dates().format(java.time.LocalDate.of(2026, 10, 18))).isEqualTo("18.10.2026");
+        assertThatThrownBy(() -> settingsFrom(folder, "staff { date-format = \"{{nope\" }\n"))
+                .hasMessageContaining("staff.date-format");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

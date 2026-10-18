@@ -454,6 +454,16 @@ public final class AuthWorld implements AutoCloseable {
     /** Every login in this world. */
     public final com.uxplima.auth.adapter.outbound.SqlLoginHistory history;
 
+    /** What staff read of an account in this world: ten recent logins, twenty other accounts. */
+    public com.uxplima.auth.application.staff.AccountInfo accountInfo() {
+        return new com.uxplima.auth.application.staff.AccountInfo(
+                accounts,
+                history,
+                factors,
+                emails,
+                () -> new com.uxplima.auth.application.staff.AccountInfo.Settings(10, 20));
+    }
+
     /** The players held for an address in this world. */
     public final com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups addressOwed;
 
