@@ -79,6 +79,38 @@ final class SecretSealTest {
     }
 
     @Test
+    @DisplayName("a seal that also opens an older key reads what the older one sealed, and seals only with its own")
+    void anOlderKeyStillOpens() throws Exception {
+        SecretSeal alone = SecretSeal.fromKeyFile(folder.resolve("factor.key"), new SplittableRandom(1));
+        String sealedAlone = alone.seal(SECRET);
+        SecretSeal network = SecretSeal.fromPassphrase("network secret");
+
+        SecretSeal both = network.openingAlso(alone);
+
+        assertThat(both.open(sealedAlone)).isEqualTo(SECRET);
+        String sealedNow = both.seal(SECRET);
+        assertThat(network.open(sealedNow)).isEqualTo(SECRET);
+        assertThatThrownBy(() -> alone.open(sealedNow)).isInstanceOf(SecretSeal.Unreadable.class);
+        assertThatThrownBy(() -> network.open(sealedAlone)).isInstanceOf(SecretSeal.Unreadable.class);
+        assertThatThrownBy(() -> both.open(SecretSeal.fromPassphrase("another").seal(SECRET)))
+                .isInstanceOf(SecretSeal.Unreadable.class);
+        SecretSeal newest = SecretSeal.fromPassphrase("rotated").openingAlso(both);
+        assertThat(newest.open(sealedAlone)).as("a key two steps back").isEqualTo(SECRET);
+    }
+
+    @Test
+    @DisplayName("a key file is read only where one is, and reading makes none")
+    void aKeyFileIsReadOnlyWhereOneIs() throws Exception {
+        Path file = folder.resolve("factor.key");
+
+        assertThat(SecretSeal.readKeyFile(file)).isEmpty();
+        assertThat(file).doesNotExist();
+        String sealed = SecretSeal.fromKeyFile(file, new SplittableRandom(1)).seal(SECRET);
+        assertThat(SecretSeal.readKeyFile(file))
+                .hasValueSatisfying(read -> assertThat(read.open(sealed)).isEqualTo(SECRET));
+    }
+
+    @Test
     @DisplayName("an empty passphrase is no key")
     void anEmptyPassphraseIsRefused() {
         assertThatThrownBy(() -> SecretSeal.fromPassphrase(" ")).isInstanceOf(IllegalArgumentException.class);

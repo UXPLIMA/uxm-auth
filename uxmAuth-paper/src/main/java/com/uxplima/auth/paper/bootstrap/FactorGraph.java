@@ -50,7 +50,9 @@ final class FactorGraph {
             MomentRunner moments,
             Messages messages) {
         Path folder = plugin.getDataFolder().toPath();
-        SqlFactors factors = new SqlFactors(database, seal(settings.current().network(), folder), Clock.systemUTC());
+        AuthSettings.Network network = settings.current().network();
+        SqlFactors factors =
+                new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
         SetUpTotp setUp = new SetUpTotp(
                 factors, () -> settings.current().secondFactor().setup(), failures, new SecureRandom(), Instant::now);
         Optional<QrMap> qr = QrMap.open(plugin.getServer(), folder.resolve("qr-map.id"), plugin.getLogger());
@@ -74,11 +76,15 @@ final class FactorGraph {
 
     /**
      * The key secrets are sealed with: on a network the secret every member shares, so any server opens what
-     * another sealed; on a server alone a key made once in the data folder.
+     * another sealed, and the server's own key file too where it ran alone before; on a server alone a key made
+     * once in the data folder.
      */
-    static SecretSeal seal(AuthSettings.Network network, Path folder) {
-        return network.enabled()
-                ? SecretSeal.fromPassphrase(network.secret())
-                : SecretSeal.fromKeyFile(folder.resolve(KEY_FILE), new SecureRandom());
+    static SecretSeal seal(boolean networked, String secret, Path folder) {
+        Path file = folder.resolve(KEY_FILE);
+        if (!networked) {
+            return SecretSeal.fromKeyFile(file, new SecureRandom());
+        }
+        SecretSeal shared = SecretSeal.fromPassphrase(secret);
+        return SecretSeal.readKeyFile(file).map(shared::openingAlso).orElse(shared);
     }
 }

@@ -9,8 +9,11 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.random.RandomGenerator;
 
 import javax.crypto.Cipher;
@@ -40,10 +43,36 @@ public final class SecretSeal {
     }
 
     private final SecretKeySpec key;
+    private final List<SecretKeySpec> older;
     private final SecureRandom nonces = new SecureRandom();
 
     private SecretSeal(byte[] key) {
-        this.key = new SecretKeySpec(key, "AES");
+        this(new SecretKeySpec(key, "AES"), List.of());
+    }
+
+    private SecretSeal(SecretKeySpec key, List<SecretKeySpec> older) {
+        this.key = key;
+        this.older = List.copyOf(older);
+    }
+
+    /**
+     * This key, which also opens what the older one sealed, for a server alone that joined a network: what it
+     * sealed under its own file still opens, and everything sealed from now on is the network's.
+     */
+    public SecretSeal openingAlso(SecretSeal older) {
+        Objects.requireNonNull(older, "older");
+        List<SecretKeySpec> keys = new ArrayList<>(this.older);
+        keys.add(older.key);
+        keys.addAll(older.older);
+        return new SecretSeal(key, keys);
+    }
+
+    /** The key in this file, where there is one; nothing is made. */
+    public static Optional<SecretSeal> readKeyFile(Path file) {
+        Objects.requireNonNull(file, "file");
+        return Files.isRegularFile(file)
+                ? Optional.of(fromKeyFile(file, RandomGenerator.getDefault()))
+                : Optional.empty();
     }
 
     /** The key of a network, derived from the secret every member shares. */
@@ -114,16 +143,31 @@ public final class SecretSeal {
         }
     }
 
-    /** The secret a sealed text holds, when this key sealed it and nobody changed it. */
+    /** The secret a sealed text holds, when this key or an older one it opens sealed it and nobody changed it. */
     public byte[] open(String sealed) {
         Objects.requireNonNull(sealed, "sealed");
+        try {
+            return open(sealed, key);
+        } catch (Unreadable notThisKey) {
+            for (SecretKeySpec before : older) {
+                try {
+                    return open(sealed, before);
+                } catch (Unreadable notThisOneEither) {
+                    notThisKey.addSuppressed(notThisOneEither);
+                }
+            }
+            throw notThisKey;
+        }
+    }
+
+    private static byte[] open(String sealed, SecretKeySpec under) {
         try {
             byte[] all = Base64.getDecoder().decode(sealed);
             if (all.length <= NONCE_BYTES) {
                 throw new IllegalArgumentException("too short");
             }
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, all, 0, NONCE_BYTES));
+            cipher.init(Cipher.DECRYPT_MODE, under, new GCMParameterSpec(TAG_BITS, all, 0, NONCE_BYTES));
             return cipher.doFinal(all, NONCE_BYTES, all.length - NONCE_BYTES);
         } catch (GeneralSecurityException | IllegalArgumentException unreadable) {
             throw new Unreadable("A sealed second-factor secret does not open under this server's key", unreadable);
