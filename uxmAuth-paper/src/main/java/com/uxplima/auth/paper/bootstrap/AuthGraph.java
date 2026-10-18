@@ -40,6 +40,7 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
@@ -99,6 +100,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.PermissionDefaults;
 import com.uxplima.auth.paper.adapter.inbound.screen.PlayerGuest;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenAnswers;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
+import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
@@ -242,7 +244,8 @@ final class AuthGraph implements AutoCloseable {
                 messages,
                 styler,
                 () -> hellos.installed() && claims.takesClaims(),
-                () -> settings.current().protection().sessions().mode() == Remember.Mode.CHOSEN);
+                () -> settings.current().protection().sessions().mode() == Remember.Mode.CHOSEN,
+                () -> settings.current().mail().enabled());
         this.bedrock = BedrockLink.on(plugin.getServer(), plugin.getLogger());
         // A form's answer goes where a dialog's does; the listener that takes them is built further down.
         AtomicReference<FormAnswers> formAnswers = new AtomicReference<>((player, action, answer) -> {});
@@ -316,6 +319,7 @@ final class AuthGraph implements AutoCloseable {
                 events,
                 remembered,
                 breaches);
+        RecoverPassword recovering = mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
                 registering,
@@ -329,7 +333,8 @@ final class AuthGraph implements AutoCloseable {
                 sessions::chose,
                 change,
                 captcha,
-                factors.screen);
+                factors.screen,
+                new ScreenRecovery(recovering, sessions, screens, shower, messages));
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
@@ -438,16 +443,8 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
-        this.recover = mail.recover(
-                sessions,
-                accounts,
-                hashing,
-                remembered,
-                events,
-                breaches,
-                id -> bedrock.player(id).isPresent(),
-                replies,
-                moments);
+        this.recover =
+                mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }

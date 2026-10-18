@@ -197,6 +197,87 @@ final class AuthScreensTest {
     }
 
     @Test
+    @DisplayName("while mail can send a recovery code, the login screen offers \"forgot password\" before leave")
+    void theLoginScreenOffersRecovery() {
+        AuthScreens screens = new AuthScreens(
+                () -> withForgot(shipped(false)),
+                () -> passwords(true),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> true,
+                () -> false,
+                () -> true);
+
+        assertThat(screens.offersRecovery()).isTrue();
+        assertThat(screens.login(steve, null).buttons())
+                .extracting(DialogSpec.Button::action)
+                .containsExactly("login", "forgot", "cancel");
+    }
+
+    @Test
+    @DisplayName("with mail off, the label empty, or the pad, there is no \"forgot password\"")
+    void noRecoveryButtonWhereItCannotWork() {
+        AuthScreens mailOff = new AuthScreens(
+                () -> withForgot(shipped(false)),
+                () -> passwords(true),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> false,
+                () -> false);
+        AuthScreens unlabelled = new AuthScreens(
+                () -> shipped(false),
+                () -> passwords(true),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> false,
+                () -> true);
+
+        assertThat(mailOff.offersRecovery()).isFalse();
+        assertThat(mailOff.login(steve, null).buttons())
+                .extracting(DialogSpec.Button::action)
+                .containsExactly("login", "cancel");
+        assertThat(unlabelled.offersRecovery()).isFalse();
+        assertThat(unlabelled.login(steve, null).buttons())
+                .extracting(DialogSpec.Button::action)
+                .containsExactly("login", "cancel");
+        ScreenSettings labelled = withForgot(shipped(false));
+        ScreenSettings pad = new ScreenSettings(
+                labelled.waitingRoom(),
+                labelled.cancel(),
+                labelled.canClose(),
+                true,
+                labelled.rules(),
+                labelled.register(),
+                labelled.login(),
+                labelled.pin());
+        assertThat(new AuthScreens(
+                                () -> pad,
+                                () -> passwords(true),
+                                messages,
+                                new Styler(Theme.defaults()),
+                                () -> false,
+                                () -> false,
+                                () -> true)
+                        .offersRecovery())
+                .as("the pad has no room for it")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("the recovery screen asks the code and a new password under its reason, and its other button goes"
+            + " back to the login")
+    void theRecoveryScreen() {
+        DialogSpec spec = screens(shipped(false), passwords(true))
+                .recover(steve, net.kyori.adventure.text.Component.text("A code went out"));
+
+        assertThat(spec.body()).extracting(AuthScreensTest::plain).first().isEqualTo("A code went out");
+        assertThat(spec.inputs()).extracting(DialogSpec.Input::key).containsExactly("code", "password");
+        assertThat(spec.buttons()).extracting(DialogSpec.Button::action).containsExactly("recover", "back");
+    }
+
+    @Test
     @DisplayName("while sessions are by choice, login, register and the pad carry a \"remember me\" box")
     void theScreensAskToRemember() {
         AuthScreens screens = new AuthScreens(
@@ -265,6 +346,18 @@ final class AuthScreensTest {
                 screen("register", "password", "confirm", "accept", "remember", "submit", "cancel"),
                 screen("login", "password", "remember", "submit", "cancel"),
                 screen("pin", "erase", "enter", "remember", "cancel"));
+    }
+
+    private static ScreenSettings withForgot(ScreenSettings settings) {
+        return new ScreenSettings(
+                settings.waitingRoom(),
+                settings.cancel(),
+                settings.canClose(),
+                settings.pinPad(),
+                settings.rules(),
+                settings.register(),
+                screen("login", "password", "submit", "forgot", "cancel"),
+                settings.pin());
     }
 
     private static ScreenSettings withClaim(ScreenSettings settings) {

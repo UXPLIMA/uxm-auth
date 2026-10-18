@@ -37,10 +37,11 @@ public final class BedrockForms implements ScreenShower {
     }
 
     @Override
-    public void show(Audience who, DialogSpec spec) {
+    public void show(Audience who, DialogSpec shown) {
         if (!(who instanceof Player player)) {
             return;
         }
+        DialogSpec spec = withoutRecovery(shown);
         String title = PLAIN.serialize(spec.title());
         String content =
                 String.join("\n", spec.body().stream().map(PLAIN::serialize).toList());
@@ -61,6 +62,19 @@ public final class BedrockForms implements ScreenShower {
                 widgets(spec),
                 values -> answers.answer(player, submit, new Filled(values)),
                 () -> answers.answer(player, AuthScreens.CANCEL, new Filled(Map.of())));
+    }
+
+    /**
+     * The screen without "forgot password". A Bedrock form shows in the world, where /recover is typed and answered
+     * with a form of its own, and the button would turn the login into a list of buttons with no password field.
+     */
+    private static DialogSpec withoutRecovery(DialogSpec spec) {
+        List<DialogSpec.Button> kept = spec.buttons().stream()
+                .filter(button -> !AuthScreens.FORGOT.equals(button.action()))
+                .toList();
+        return kept.size() == spec.buttons().size()
+                ? spec
+                : new DialogSpec(spec.title(), spec.body(), spec.inputs(), kept, spec.canClose());
     }
 
     @Override

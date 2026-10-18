@@ -22,7 +22,8 @@ public record ScreenSettings(
         String loginWorld,
         Screen replace,
         Screen captcha,
-        Screen code) {
+        Screen code,
+        Screen recover) {
 
     /** The world a waiting player is moved to while the waiting room is the login world, unless the file names one. */
     public static final String LOGIN_WORLD = "uxmauth_login";
@@ -30,11 +31,12 @@ public record ScreenSettings(
     /** The labels each screen carries, in the order the file writes them. */
     static final Map<String, List<String>> LABELS = Map.of(
             "register", List.of("password", "confirm", "accept", "remember", "submit", "cancel"),
-            "login", List.of("password", "remember", "submit", "claim", "cancel"),
+            "login", List.of("password", "remember", "submit", "claim", "forgot", "cancel"),
             "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"),
             "replace", List.of("password", "confirm", "submit", "cancel"),
             "captcha", List.of("code", "submit", "cancel"),
-            "code", List.of("code", "submit", "cancel"));
+            "code", List.of("code", "submit", "cancel"),
+            "recover", List.of("code", "password", "submit", "cancel"));
 
     public ScreenSettings {
         Objects.requireNonNull(loginWorld, "loginWorld");
@@ -50,6 +52,37 @@ public record ScreenSettings(
         Objects.requireNonNull(replace, "replace");
         Objects.requireNonNull(captcha, "captcha");
         Objects.requireNonNull(code, "code");
+        Objects.requireNonNull(recover, "recover");
+    }
+
+    /** The screens with the shipped screen for a forgotten password. */
+    public ScreenSettings(
+            WaitingRoom waitingRoom,
+            Cancel cancel,
+            boolean canClose,
+            boolean pinPad,
+            Rules rules,
+            Screen register,
+            Screen login,
+            Screen pin,
+            String loginWorld,
+            Screen replace,
+            Screen captcha,
+            Screen code) {
+        this(
+                waitingRoom,
+                cancel,
+                canClose,
+                pinPad,
+                rules,
+                register,
+                login,
+                pin,
+                loginWorld,
+                replace,
+                captcha,
+                code,
+                shipped("recover"));
     }
 
     /** The screens with the shipped screen for the code of the second step. */

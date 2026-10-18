@@ -392,6 +392,7 @@ public enum Keys implements MessageKey {
     SCREEN_LOGIN_REMEMBER("screen.login.remember", "Remember me on this address"),
     SCREEN_LOGIN_SUBMIT("screen.login.submit", "Log in"),
     SCREEN_LOGIN_CLAIM("screen.login.claim", "This name is mine"),
+    SCREEN_LOGIN_FORGOT("screen.login.forgot", "Forgot password"),
     SCREEN_LOGIN_CANCEL("screen.login.cancel", "Leave"),
     SCREEN_REPLACE_TITLE("screen.replace.title", "<value>A new password"),
     SCREEN_REPLACE_BODY(
@@ -436,6 +437,8 @@ public enum Keys implements MessageKey {
     SCREEN_RECOVER_BODY("screen.recover.body", "<body>Type the code that went to your address and a new password."),
     SCREEN_RECOVER_CODE("screen.recover.code", "Code"),
     SCREEN_RECOVER_PASSWORD("screen.recover.password", "New password"),
+    SCREEN_RECOVER_SUBMIT("screen.recover.submit", "Set password"),
+    SCREEN_RECOVER_CANCEL("screen.recover.cancel", "Back"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

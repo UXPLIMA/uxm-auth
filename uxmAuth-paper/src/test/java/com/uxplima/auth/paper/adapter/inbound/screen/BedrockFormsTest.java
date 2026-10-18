@@ -77,6 +77,33 @@ final class BedrockFormsTest {
     }
 
     @Test
+    @DisplayName("\"forgot password\" stays off the Bedrock login form, which keeps its password field; a Bedrock"
+            + " player types /recover, since the form shows in the world")
+    void theLoginFormLeavesRecoveryToTheCommand() {
+        AuthScreens recovering = new AuthScreens(
+                () -> settings,
+                () -> world.passwords,
+                world.messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> false,
+                () -> true);
+        assertThat(recovering.login(steve, null).buttons())
+                .extracting(DialogSpec.Button::action)
+                .contains(AuthScreens.FORGOT);
+
+        bedrockForms().show(steve, recovering.login(steve, null));
+
+        assertThat(forms.widgets)
+                .singleElement()
+                .isInstanceOfSatisfying(
+                        BedrockWidget.Input.class,
+                        input -> assertThat(input.name()).isEqualTo(AuthScreens.PASSWORD));
+        forms.submit.accept(Map.of(AuthScreens.PASSWORD, "hunter22"));
+        assertThat(answered).containsExactly(AuthScreens.LOGIN);
+    }
+
+    @Test
     @DisplayName("while sessions are by choice, the login form has a \"remember me\" toggle and its tick comes back")
     void theLoginFormCarriesTheRememberToggle() {
         AuthScreens asking = new AuthScreens(

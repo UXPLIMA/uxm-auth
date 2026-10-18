@@ -403,23 +403,22 @@ public final class AuthWorld implements AutoCloseable {
             com.uxplima.auth.paper.adapter.inbound.mail.Recovery.Form form,
             java.util.function.Predicate<java.util.UUID> bedrock) {
         return new com.uxplima.auth.paper.adapter.inbound.mail.Recovery(
-                new com.uxplima.auth.application.mail.RecoverPassword(
-                        sessions,
-                        emails,
-                        mailCodes(),
-                        accounts,
-                        hashing,
-                        lane,
-                        () -> policy,
-                        com.uxplima.auth.application.port.BreachedPasswords.NONE,
-                        remembered,
-                        new LocalEvents()),
+                recoverPassword(), sessions, form, bedrock, replies, moments, messages);
+    }
+
+    /** A forgotten password in this world: a code by mail, then the code and a new password. */
+    public com.uxplima.auth.application.mail.RecoverPassword recoverPassword() {
+        return new com.uxplima.auth.application.mail.RecoverPassword(
                 sessions,
-                form,
-                bedrock,
-                replies,
-                moments,
-                messages);
+                emails,
+                mailCodes(),
+                accounts,
+                hashing,
+                lane,
+                () -> policy,
+                com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                remembered,
+                new LocalEvents());
     }
 
     /** {@code /email} in this world, with these forms for a Bedrock player. */

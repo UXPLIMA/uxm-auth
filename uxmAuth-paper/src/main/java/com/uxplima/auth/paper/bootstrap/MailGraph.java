@@ -145,18 +145,15 @@ final class MailGraph implements AutoCloseable {
                 () -> settings.current().email().required());
     }
 
-    /** {@code /recover}, for a player at the login. */
-    RecoverCommand recover(
+    /** A forgotten password: a code to the linked address, then the code and a new password. */
+    RecoverPassword recoverPassword(
             Sessions sessions,
             AccountRepository accounts,
             Hashing hashing,
             RememberedSessions remembered,
             NetworkEvents events,
-            BreachedPasswords breaches,
-            Predicate<UUID> bedrock,
-            Replies replies,
-            MomentRunner moments) {
-        RecoverPassword recover = new RecoverPassword(
+            BreachedPasswords breaches) {
+        return new RecoverPassword(
                 sessions,
                 emails,
                 codes,
@@ -167,6 +164,15 @@ final class MailGraph implements AutoCloseable {
                 breaches,
                 remembered,
                 events);
+    }
+
+    /** {@code /recover}, for a player at the login. */
+    RecoverCommand recover(
+            RecoverPassword recover,
+            Sessions sessions,
+            Predicate<UUID> bedrock,
+            Replies replies,
+            MomentRunner moments) {
         return new RecoverCommand(new Recovery(
                 recover,
                 sessions,

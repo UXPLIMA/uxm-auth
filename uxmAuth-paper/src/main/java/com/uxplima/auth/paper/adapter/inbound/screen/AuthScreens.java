@@ -55,6 +55,12 @@ public final class AuthScreens {
     /** The action of "this name is mine" on the login screen. */
     public static final String CLAIM = "claim";
 
+    /** "Forgot password" on the login screen, the press that sets a new one, and the way back to the login. */
+    public static final String FORGOT = "forgot";
+
+    public static final String RECOVER = "recover";
+    public static final String BACK = "back";
+
     /** The keys the answers come back under. */
     public static final String PASSWORD = "password";
 
@@ -75,6 +81,7 @@ public final class AuthScreens {
     private final Styler styler;
     private final BooleanSupplier claimable;
     private final BooleanSupplier remembering;
+    private final BooleanSupplier recoverable;
 
     public AuthScreens(
             Supplier<ScreenSettings> screens,
@@ -102,12 +109,25 @@ public final class AuthScreens {
             Styler styler,
             BooleanSupplier claimable,
             BooleanSupplier remembering) {
+        this(screens, passwords, messages, styler, claimable, remembering, () -> false);
+    }
+
+    /** @param recoverable whether mail can send a recovery code now, which puts "forgot password" on the login */
+    public AuthScreens(
+            Supplier<ScreenSettings> screens,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            Styler styler,
+            BooleanSupplier claimable,
+            BooleanSupplier remembering,
+            BooleanSupplier recoverable) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.styler = Objects.requireNonNull(styler, "styler");
         this.claimable = Objects.requireNonNull(claimable, "claimable");
         this.remembering = Objects.requireNonNull(remembering, "remembering");
+        this.recoverable = Objects.requireNonNull(recoverable, "recoverable");
     }
 
     /** The register screen, with the reason the last answer was refused as its first line. */
@@ -182,6 +202,25 @@ public final class AuthScreens {
                 body,
                 List.of(new DialogSpec.TextInput(CODE, text(reader, screen.label(CODE)), LONGEST_CODE)),
                 buttons(reader, screen, FACTOR),
+                settings.canClose());
+    }
+
+    /** The screen of a forgotten password: the mailed code and a new password, under why it is shown. */
+    public DialogSpec recover(Audience reader, @Nullable Component reason) {
+        Objects.requireNonNull(reader, "reader");
+        ScreenSettings settings = screens.get();
+        ScreenSettings.Screen screen = settings.recover();
+        List<Component> body = start(reason);
+        screen.body().forEach(line -> body.add(text(reader, line)));
+        return new DialogSpec(
+                text(reader, screen.title()),
+                body,
+                List.of(
+                        new DialogSpec.TextInput(CODE, text(reader, screen.label(CODE)), LONGEST_CODE),
+                        password(reader, screen, PASSWORD)),
+                List.of(
+                        new DialogSpec.Button(text(reader, screen.label("submit")), RECOVER),
+                        new DialogSpec.Button(text(reader, screen.label(CANCEL)), BACK)),
                 settings.canClose());
     }
 
@@ -291,6 +330,17 @@ public final class AuthScreens {
                 && !settings.login().label(CLAIM).isEmpty();
     }
 
+    /**
+     * Whether the login screen carries "forgot password" now: mail can send the code, the operator labels the
+     * button, and the screen is not the pad. A press is honoured only while this holds, whatever a client sends.
+     */
+    public boolean offersRecovery() {
+        ScreenSettings settings = screens.get();
+        return recoverable.getAsBoolean()
+                && !settings.pinPad()
+                && !settings.login().label(FORGOT).isEmpty();
+    }
+
     /** Whether the screens ask "remember me" now; a tick is honoured only while this holds. */
     public boolean asksToRemember() {
         return remembering.getAsBoolean();
@@ -305,16 +355,18 @@ public final class AuthScreens {
         return Optional.of(new DialogSpec.Toggle(REMEMBER, text(reader, label)));
     }
 
-    /** Log in, "this name is mine" while the screen offers it, and leave. */
+    /** Log in, "this name is mine" and "forgot password" while the screen offers them, and leave. */
     private List<DialogSpec.Button> loginButtons(Audience reader, ScreenSettings.Screen screen) {
-        String claim = screen.label(CLAIM);
-        if (!offersClaim()) {
-            return buttons(reader, screen, LOGIN);
+        List<DialogSpec.Button> buttons = new ArrayList<>();
+        buttons.add(new DialogSpec.Button(text(reader, screen.label("submit")), LOGIN));
+        if (offersClaim()) {
+            buttons.add(new DialogSpec.Button(text(reader, screen.label(CLAIM)), CLAIM));
         }
-        return List.of(
-                new DialogSpec.Button(text(reader, screen.label("submit")), LOGIN),
-                new DialogSpec.Button(text(reader, claim), CLAIM),
-                new DialogSpec.Button(text(reader, screen.label(CANCEL)), CANCEL));
+        if (offersRecovery()) {
+            buttons.add(new DialogSpec.Button(text(reader, screen.label(FORGOT)), FORGOT));
+        }
+        buttons.add(new DialogSpec.Button(text(reader, screen.label(CANCEL)), CANCEL));
+        return List.copyOf(buttons);
     }
 
     private List<DialogSpec.Button> buttons(Audience reader, ScreenSettings.Screen screen, String submit) {

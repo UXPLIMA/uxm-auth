@@ -45,6 +45,7 @@ public final class ScreenAnswers {
     private static final String REGISTER_PERMISSION = "uxmauth.register";
     private static final String CLAIM_PERMISSION = "uxmauth.claim";
     private static final String CAPTCHA_PERMISSION = "uxmauth.captcha";
+    private static final String RECOVER_PERMISSION = "uxmauth.recover";
 
     private final AuthScreens screens;
     private final RegisterAccount register;
@@ -59,6 +60,7 @@ public final class ScreenAnswers {
     private final Replacer replacer;
     private final CaptchaScreen captcha;
     private final FactorOffer factor;
+    private final RecoveryOffer recovery;
     private final TimeWords times;
     private final PinPad pad = new PinPad();
 
@@ -141,7 +143,7 @@ public final class ScreenAnswers {
                 choices,
                 (Replacer) (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()),
                 new CaptchaScreen(Captchas.off(), screens, shower, messages, CaptchaScreen.Hand.NONE),
-                FactorOffer.NONE);
+                new Offers(FactorOffer.NONE, RecoveryOffer.NONE));
     }
 
     /**
@@ -231,9 +233,50 @@ public final class ScreenAnswers {
                 registering,
                 claims,
                 choices,
+                change,
+                captcha,
+                factor,
+                RecoveryOffer.NONE);
+    }
+
+    /** @param recovery "forgot password" on the login screen, for a server whose mail can send the code */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices,
+            ChangePassword change,
+            CaptchaScreen captcha,
+            FactorOffer factor,
+            RecoveryOffer recovery) {
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
                 (Replacer) Objects.requireNonNull(change, "change")::replaceWeak,
                 captcha,
-                factor);
+                new Offers(factor, recovery));
+    }
+
+    /** What the screen hands on: the code of the second step, and a forgotten password. */
+    private record Offers(FactorOffer factor, RecoveryOffer recovery) {
+        Offers {
+            Objects.requireNonNull(factor, "factor");
+            Objects.requireNonNull(recovery, "recovery");
+        }
     }
 
     private ScreenAnswers(
@@ -249,7 +292,7 @@ public final class ScreenAnswers {
             Choices choices,
             Replacer replacer,
             CaptchaScreen captcha,
-            FactorOffer factor) {
+            Offers offers) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -262,7 +305,8 @@ public final class ScreenAnswers {
         this.choices = Objects.requireNonNull(choices, "choices");
         this.replacer = Objects.requireNonNull(replacer, "replacer");
         this.captcha = Objects.requireNonNull(captcha, "captcha");
-        this.factor = Objects.requireNonNull(factor, "factor");
+        this.factor = offers.factor();
+        this.recovery = offers.recovery();
         this.times = new TimeWords(messages);
     }
 
@@ -304,6 +348,24 @@ public final class ScreenAnswers {
                 guest.may(CLAIM_PERMISSION) && screens.offersClaim()
                         ? claim(guest)
                         : CompletableFuture.completedFuture(null);
+            default -> recovery(guest, action, answer);
+        };
+    }
+
+    /** "Forgot password", the code and a new password, and the way back, while the login screen offers them. */
+    private CompletableFuture<Void> recovery(Guest guest, String action, Answer answer) {
+        if (!guest.may(RECOVER_PERMISSION) || !screens.offersRecovery()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return switch (action) {
+            case AuthScreens.FORGOT -> recovery.forgot(guest);
+            case AuthScreens.RECOVER ->
+                recovery.recover(
+                        guest, orEmpty(answer.text(AuthScreens.CODE)), orEmpty(answer.text(AuthScreens.PASSWORD)));
+            case AuthScreens.BACK -> {
+                shower.show(guest.audience(), screens.login(guest.audience(), null));
+                yield CompletableFuture.completedFuture(null);
+            }
             default -> CompletableFuture.completedFuture(null);
         };
     }
