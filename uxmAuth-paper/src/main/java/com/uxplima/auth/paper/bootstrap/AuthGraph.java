@@ -238,7 +238,14 @@ final class AuthGraph implements AutoCloseable {
         Welcomes welcomes = new Welcomes();
         Notices notices = new Notices(messages);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
-        LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);
+        LogIn logIn = new LogIn(
+                accounts,
+                hashing,
+                lane,
+                sessions,
+                clock,
+                bans::failed,
+                () -> settings.current().passwordPolicy());
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -258,6 +265,16 @@ final class AuthGraph implements AutoCloseable {
                 clock,
                 cap::full,
                 breaches);
+        this.events = bulletins(settings, plugin.getLogger());
+        ChangePassword change = new ChangePassword(
+                accounts,
+                hashing,
+                lane,
+                sessions,
+                () -> settings.current().passwordPolicy(),
+                events,
+                remembered,
+                breaches);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
                 registering,
@@ -268,7 +285,8 @@ final class AuthGraph implements AutoCloseable {
                 shower,
                 id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered,
                 claims::claim,
-                sessions::chose);
+                sessions::chose,
+                change::replace);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
@@ -347,21 +365,8 @@ final class AuthGraph implements AutoCloseable {
         this.login = new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies);
         this.register = new RegisterCommand(
                 registering, door, joins::openingOf, () -> settings.current().passwords(), messages, replies);
-        this.events = bulletins(settings, plugin.getLogger());
         this.changePassword = new ChangePasswordCommand(
-                new ChangePassword(
-                        accounts,
-                        hashing,
-                        lane,
-                        sessions,
-                        () -> settings.current().passwordPolicy(),
-                        events,
-                        remembered,
-                        breaches),
-                moments,
-                () -> settings.current().passwords(),
-                messages,
-                replies);
+                change, door, moments, () -> settings.current().passwords(), messages, replies);
         LogOut logOut =
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), remembered);
         this.logout = new LogoutCommand(logOut, door, moments, messages);

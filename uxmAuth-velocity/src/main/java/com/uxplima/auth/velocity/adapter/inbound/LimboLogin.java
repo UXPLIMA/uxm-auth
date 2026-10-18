@@ -15,6 +15,8 @@ import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.TimeWords;
+import com.uxplima.auth.application.ChangePassword;
+import com.uxplima.auth.application.ChangeResult;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.ReadTheName;
@@ -62,33 +64,45 @@ public final class LimboLogin {
         }
     }
 
+    /** The words of /login, /register and /changepassword, as commands.conf names them. */
+    public record Words(
+            Supplier<Set<String>> loginLabels,
+            Supplier<Set<String>> registerLabels,
+            Supplier<Set<String>> changeLabels) {
+        public Words {
+            Objects.requireNonNull(loginLabels, "loginLabels");
+            Objects.requireNonNull(registerLabels, "registerLabels");
+            Objects.requireNonNull(changeLabels, "changeLabels");
+        }
+    }
+
     private final ReadTheName names;
     private final LogIn logIn;
     private final RegisterAccount register;
+    private final ChangePassword change;
     private final Sessions sessions;
     private final Messages messages;
     private final TimeWords times;
-    private final Supplier<Set<String>> loginWords;
-    private final Supplier<Set<String>> registerWords;
+    private final Words words;
     private final BooleanSupplier asksTwice;
 
     public LimboLogin(
             ReadTheName names,
             LogIn logIn,
             RegisterAccount register,
+            ChangePassword change,
             Sessions sessions,
             Messages messages,
-            Supplier<Set<String>> loginWords,
-            Supplier<Set<String>> registerWords,
+            Words words,
             BooleanSupplier asksTwice) {
         this.names = Objects.requireNonNull(names, "names");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.register = Objects.requireNonNull(register, "register");
+        this.change = Objects.requireNonNull(change, "change");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.times = new TimeWords(messages);
-        this.loginWords = Objects.requireNonNull(loginWords, "loginWords");
-        this.registerWords = Objects.requireNonNull(registerWords, "registerWords");
+        this.words = Objects.requireNonNull(words, "words");
         this.asksTwice = Objects.requireNonNull(asksTwice, "asksTwice");
     }
 
@@ -123,16 +137,19 @@ public final class LimboLogin {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(line, "line");
         Objects.requireNonNull(address, "address");
-        List<String> words =
+        List<String> typed =
                 line.startsWith("/") ? Arrays.asList(line.substring(1).strip().split("\\s+")) : List.of();
-        String label = words.isEmpty() ? "" : words.getFirst().toLowerCase(Locale.ROOT);
-        List<String> rest = words.isEmpty() ? List.of() : words.subList(1, words.size());
-        if (loginWords.get().contains(label) && rest.size() == 1) {
+        String label = typed.isEmpty() ? "" : typed.getFirst().toLowerCase(Locale.ROOT);
+        List<String> rest = typed.isEmpty() ? List.of() : typed.subList(1, typed.size());
+        if (words.loginLabels().get().contains(label) && rest.size() == 1) {
             return logIn.run(id, Password.of(rest.getFirst()), address)
                     .thenApply(result -> loggedIn(reader, id, result));
         }
-        if (registerWords.get().contains(label) && !rest.isEmpty()) {
+        if (words.registerLabels().get().contains(label) && !rest.isEmpty()) {
             return registered(reader, id, name, rest, address);
+        }
+        if (words.changeLabels().get().contains(label) && replacing(id)) {
+            return replaced(reader, id, rest);
         }
         return CompletableFuture.completedFuture(new Outcome.Stay(reminder(reader, id)));
     }
@@ -154,6 +171,27 @@ public final class LimboLogin {
                 .thenApply(result -> registered(reader, id, result));
     }
 
+    private CompletableFuture<Outcome> replaced(Audience reader, UUID id, List<String> passwords) {
+        if (passwords.size() < 2) {
+            return CompletableFuture.completedFuture(new Outcome.Stay(messages.render(reader, Keys.CHANGE_NEEDS_BOTH)));
+        }
+        return change.run(id, Password.of(passwords.getFirst()), Password.of(passwords.get(1)))
+                .thenApply(result -> replaced(reader, id, result));
+    }
+
+    private Outcome replaced(Audience reader, UUID id, ChangeResult result) {
+        return switch (result) {
+            case ChangeResult.Replaced replaced -> new Outcome.In(AuthMethod.PASSWORD);
+            case ChangeResult.Changed changed -> new Outcome.In(AuthMethod.PASSWORD);
+            case ChangeResult.WrongOld wrong -> new Outcome.Stay(messages.render(reader, Keys.CHANGE_WRONG_OLD));
+            case ChangeResult.Rejected rejected ->
+                new Outcome.Stay(PasswordWords.reason(messages, reader, rejected.verdict())
+                        .orElseGet(() -> reminder(reader, id)));
+            case ChangeResult.NotLoggedIn notYet -> new Outcome.Stay(reminder(reader, id));
+            case ChangeResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
+        };
+    }
+
     private Outcome loggedIn(Audience reader, UUID id, LoginResult result) {
         return switch (result) {
             case LoginResult.LoggedIn in -> new Outcome.In(AuthMethod.PASSWORD);
@@ -165,6 +203,10 @@ public final class LimboLogin {
                 new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
             case LoginResult.Banned banned ->
                 new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            case LoginResult.MustReplace mustReplace ->
+                new Outcome.Stay(PasswordWords.reason(messages, reader, mustReplace.why())
+                        .map(why -> why.append(Component.newline()).append(reminder(reader, id)))
+                        .orElseGet(() -> reminder(reader, id)));
             case LoginResult.NotRegistered notRegistered ->
                 new Outcome.Stay(messages.render(reader, Keys.LOGIN_NOT_REGISTERED));
             case LoginResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
@@ -191,10 +233,20 @@ public final class LimboLogin {
         };
     }
 
-    /** What the player should type now: /register before an account, /login after. */
+    /**
+     * What the player should type now: /register before an account, /login after, and /changepassword once a
+     * right password the rules outgrew holds them.
+     */
     public Component reminder(Audience reader, UUID id) {
         Objects.requireNonNull(reader, "reader");
+        if (replacing(id)) {
+            return messages.render(reader, Keys.LOGIN_MUST_REPLACE);
+        }
         return messages.render(reader, registered(id) ? Keys.REMINDER_LOGIN : Keys.REMINDER_REGISTER);
+    }
+
+    private boolean replacing(UUID id) {
+        return sessions.state(id).filter(AuthState.Replacing.class::isInstance).isPresent();
     }
 
     /** Whether the waiting player has an account. */

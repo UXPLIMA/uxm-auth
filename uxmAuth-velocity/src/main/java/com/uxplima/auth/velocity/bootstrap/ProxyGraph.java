@@ -100,8 +100,9 @@ final class ProxyGraph implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         SqlAccountRepository accounts = new SqlAccountRepository(database);
         ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
+        SqlRememberedSessions remembered = new SqlRememberedSessions(database, clock);
         Remember remember = new Remember(
-                new SqlRememberedSessions(database, clock),
+                remembered,
                 () -> settings.current().protection().sessions(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
@@ -113,13 +114,19 @@ final class ProxyGraph implements AutoCloseable {
         Admission admission = admission(settings, bans, watchCountries(settings, clock), clock);
         ProxySessions sessions = listen(
                 door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
-        waiting.open(settings, accounts, words, sessions, guards(settings, accounts, remember, bans, clock));
+        waiting.open(
+                settings, accounts, words, sessions, guards(settings, accounts, remember, bans, clock, remembered));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
     /** What guards the waiting world's own logins and registrations. */
     private WaitingWorld.Guards guards(
-            PluginSettings settings, SqlAccountRepository accounts, Remember remember, AddressBans bans, Clock clock) {
+            PluginSettings settings,
+            SqlAccountRepository accounts,
+            Remember remember,
+            AddressBans bans,
+            Clock clock,
+            SqlRememberedSessions remembered) {
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -130,7 +137,7 @@ final class ProxyGraph implements AutoCloseable {
                 PwnedPasswords.SERVICE,
                 () -> settings.current().passwordLists().breachCheck(),
                 logger::warn);
-        return new WaitingWorld.Guards(remember, bans::failed, cap::full, breaches);
+        return new WaitingWorld.Guards(remember, bans::failed, cap::full, breaches, events, remembered);
     }
 
     /** The door's rules, in order: the country, a banned address, then too many connections from one. */

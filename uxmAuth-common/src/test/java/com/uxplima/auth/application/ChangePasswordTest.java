@@ -15,6 +15,7 @@ import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.testing.AuthFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -174,6 +175,40 @@ final class ChangePasswordTest {
                         .join())
                 .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.Breached()));
         assertThat(login(connection, "hunter22")).isTrue();
+    }
+
+    @Test
+    @DisplayName(
+            "a player held to replace a weak password is let in by a new one that passes, and not by one that fails")
+    void aReplacementLetsIn() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.domain.account.Account account =
+                ((AuthState.Registered) fixture.sessions.state(connection).orElseThrow()).account();
+        fixture.sessions.update(
+                connection, state -> new AuthState.Replacing(account, new PasswordVerdict.TooShort(10)));
+        ChangePassword useCase = new ChangePassword(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                events,
+                fixture.remembered);
+
+        assertThat(useCase.replace(connection, Password.of("abc")).join())
+                .isEqualTo(new ChangeResult.Rejected(new PasswordVerdict.TooShort(6)));
+        assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Replacing.class);
+
+        assertThat(useCase.replace(connection, Password.of("fresh7777")).join()).isEqualTo(new ChangeResult.Replaced());
+
+        assertThat(fixture.sessions.state(connection))
+                .hasValueSatisfying(state -> assertThat(state)
+                        .isInstanceOfSatisfying(
+                                AuthState.Authenticated.class,
+                                in -> assertThat(in.method())
+                                        .isEqualTo(com.uxplima.auth.domain.state.AuthMethod.PASSWORD)));
+        assertThat(fixture.accounts.findById(account.id()).orElseThrow().password())
+                .isNotEqualTo(account.password());
     }
 
     @Test

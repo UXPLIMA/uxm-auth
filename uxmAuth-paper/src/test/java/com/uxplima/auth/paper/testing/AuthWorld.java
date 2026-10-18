@@ -86,7 +86,9 @@ public final class AuthWorld implements AutoCloseable {
     public final MainThreadScheduler scheduler = new MainThreadScheduler();
     public final HashingLane lane = new HashingLane(1, 1, 16);
     public final Hashing hashing = new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4)));
-    public final PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 0);
+    /** Today's password rules in this world; a test makes them stricter. */
+    public PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 0);
+
     public final Clock clock = Clock.fixed(Instant.ofEpochMilli(1_760_000_000_000L), ZoneOffset.UTC);
     public final Database database;
     public final SqlAccountRepository accounts;
@@ -192,7 +194,7 @@ public final class AuthWorld implements AutoCloseable {
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock, cap::full);
         this.bans =
                 new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
-        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);
+        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed, () -> policy);
         this.change =
                 new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered);
         this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS, remembered);

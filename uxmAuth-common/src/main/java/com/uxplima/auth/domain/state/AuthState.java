@@ -4,6 +4,7 @@ import java.util.Objects;
 
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.password.PasswordVerdict;
 
 /** Where one connection stands. Only {@link Authenticated} is let past the waiting room. */
 public sealed interface AuthState {
@@ -25,6 +26,17 @@ public sealed interface AuthState {
         public Registered {
             Objects.requireNonNull(account, "account");
             Objects.requireNonNull(attempts, "attempts");
+        }
+    }
+
+    /**
+     * The password was right, but today's rules refuse it: the player stays held until they set a new one, and
+     * reads why.
+     */
+    record Replacing(Account account, PasswordVerdict why) implements AuthState {
+        public Replacing {
+            Objects.requireNonNull(account, "account");
+            Objects.requireNonNull(why, "why");
         }
     }
 

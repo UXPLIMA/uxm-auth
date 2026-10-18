@@ -208,6 +208,10 @@ public enum Keys implements MessageKey {
     SESSION_NOT_CHOSEN(
             "session.not-chosen",
             "<etag:'ERROR'> <body>This server decides sessions for everyone, so there is nothing to choose."),
+    LOGIN_MUST_REPLACE(
+            "login.must-replace",
+            "<body>Your password was right, but it no longer meets this server's rules. Set a new one with"
+                    + " <value>/changepassword <current> <new><body> to come in."),
     LOGOUT_NOT_LOGGED_IN("logout.not-logged-in", "<etag:'ERROR'> <body>You are not logged in."),
     LOGOUT_SESSIONS_ENDED(
             "logout.sessions-ended",
@@ -253,6 +257,14 @@ public enum Keys implements MessageKey {
     SCREEN_LOGIN_SUBMIT("screen.login.submit", "Log in"),
     SCREEN_LOGIN_CLAIM("screen.login.claim", "This name is mine"),
     SCREEN_LOGIN_CANCEL("screen.login.cancel", "Leave"),
+    SCREEN_REPLACE_TITLE("screen.replace.title", "<value>A new password"),
+    SCREEN_REPLACE_BODY(
+            "screen.replace.body",
+            "<body>Your password was right, but it no longer meets this server's rules. Choose a new one to come in."),
+    SCREEN_REPLACE_PASSWORD("screen.replace.password", "New password"),
+    SCREEN_REPLACE_CONFIRM("screen.replace.confirm", "The same password again"),
+    SCREEN_REPLACE_SUBMIT("screen.replace.submit", "Save and come in"),
+    SCREEN_REPLACE_CANCEL("screen.replace.cancel", "Leave"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

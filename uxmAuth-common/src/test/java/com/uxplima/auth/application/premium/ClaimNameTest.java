@@ -11,6 +11,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.premium.Decision;
 import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
@@ -71,6 +72,18 @@ final class ClaimNameTest {
         assertThat(claim.claim(connection, HERE)).isEqualTo(ClaimName.Result.ASKED);
 
         assertThat(door.decide("Notch", HERE, "h")).isEqualTo(new Decision.Handshake());
+        assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("a player held to replace a weak password proved it, so their request is the owner's")
+    void aPlayerHeldToReplaceIsTheOwner() {
+        UUID connection = fixture.registered("Notch", "hunter22");
+        Account account = fixture.accounts.findByName(new PlayerName("Notch")).orElseThrow();
+        fixture.sessions.open(connection, new AuthState.Replacing(account, new PasswordVerdict.TooShort(10)));
+
+        assertThat(claim.claim(connection, HERE)).isEqualTo(ClaimName.Result.ASKED);
+
         assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isTrue();
     }
 

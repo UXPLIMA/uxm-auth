@@ -13,6 +13,7 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.adapter.outbound.TimeWords;
+import com.uxplima.auth.application.ChangeResult;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.RegisterAccount;
@@ -52,6 +53,7 @@ public final class ScreenAnswers {
     private final Predicate<UUID> registering;
     private final Claims claims;
     private final Choices choices;
+    private final Replacer replacer;
     private final TimeWords times;
     private final PinPad pad = new PinPad();
 
@@ -59,6 +61,12 @@ public final class ScreenAnswers {
     @FunctionalInterface
     public interface Choices {
         void chose(UUID connection, boolean remember);
+    }
+
+    /** A new password in place of a weak one, for the connection with this id. */
+    @FunctionalInterface
+    public interface Replacer {
+        CompletableFuture<ChangeResult> replace(UUID connection, Password fresh);
     }
 
     /** "This name is mine" for the connection with this id, made from this address. */
@@ -115,6 +123,33 @@ public final class ScreenAnswers {
             Predicate<UUID> registering,
             Claims claims,
             Choices choices) {
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
+                (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()));
+    }
+
+    /** @param replacer what saves a new password in place of a weak one */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices,
+            Replacer replacer) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -125,6 +160,7 @@ public final class ScreenAnswers {
         this.registering = Objects.requireNonNull(registering, "registering");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.choices = Objects.requireNonNull(choices, "choices");
+        this.replacer = Objects.requireNonNull(replacer, "replacer");
         this.times = new TimeWords(messages);
     }
 
@@ -152,6 +188,8 @@ public final class ScreenAnswers {
                 guest.may(LOGIN_PERMISSION) ? login(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.REGISTER ->
                 guest.may(REGISTER_PERMISSION) ? register(guest, answer) : CompletableFuture.completedFuture(null);
+            case AuthScreens.REPLACE ->
+                guest.may(LOGIN_PERMISSION) ? replace(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.CANCEL -> cancel(guest);
             case AuthScreens.CLAIM ->
                 guest.may(CLAIM_PERMISSION) && screens.offersClaim()
@@ -225,6 +263,7 @@ public final class ScreenAnswers {
                 guest.fire(AuthSettings.Moment.BANNED);
                 guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
             }
+            case LoginResult.MustReplace mustReplace -> shower.show(reader, screens.replace(reader, mustReplace.why()));
             case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
             case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
             case LoginResult.Gone gone -> {}
@@ -265,6 +304,32 @@ public final class ScreenAnswers {
                 again(reader, messages.render(reader, Keys.REGISTER_TOO_MANY_ACCOUNTS));
             case RegisterResult.AlreadyRegistered already -> shower.show(reader, screens.login(reader, null));
             case RegisterResult.Gone gone -> {}
+        }
+    }
+
+    /** A new password, typed twice, in place of the weak one the login was held up by. */
+    private CompletableFuture<Void> replace(Guest guest, Answer answer) {
+        Audience reader = guest.audience();
+        Password fresh = Password.of(orEmpty(answer.text(AuthScreens.PASSWORD)));
+        try (Password repeated = Password.of(orEmpty(answer.text(AuthScreens.CONFIRM)))) {
+            if (!fresh.sameAs(repeated)) {
+                fresh.close();
+                shower.show(reader, screens.replace(reader, messages.render(reader, Keys.REGISTER_MISMATCH)));
+                return CompletableFuture.completedFuture(null);
+            }
+        }
+        return guest.after(replacer.replace(guest.id(), fresh), result -> replaced(guest, result));
+    }
+
+    private void replaced(Guest guest, ChangeResult result) {
+        Audience reader = guest.audience();
+        switch (result) {
+            case ChangeResult.Replaced replaced -> letIn(guest, AuthSettings.Moment.LOGGED_IN);
+            case ChangeResult.Rejected rejected -> shower.show(reader, screens.replace(reader, rejected.verdict()));
+            case ChangeResult.Changed changed -> shower.close(reader);
+            case ChangeResult.NotLoggedIn notLoggedIn -> shower.show(reader, screens.login(reader, null));
+            case ChangeResult.WrongOld wrongOld -> shower.show(reader, screens.login(reader, null));
+            case ChangeResult.Gone gone -> {}
         }
     }
 

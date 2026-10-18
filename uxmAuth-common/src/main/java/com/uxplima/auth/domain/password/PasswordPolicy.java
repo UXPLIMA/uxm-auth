@@ -26,6 +26,10 @@ public record PasswordPolicy(
         }
     }
 
+    /** Rules every password passes: a login under them is never held to replace its password. */
+    public static final PasswordPolicy ANY =
+            new PasswordPolicy(1, Integer.MAX_VALUE, Pattern.compile("(?s).*"), Set.of(), 0);
+
     /** The rules with no list of common passwords. */
     public PasswordPolicy(int minLength, int maxLength, Pattern allowed, Set<CharClass> required, int maxBytes) {
         this(minLength, maxLength, allowed, required, maxBytes, CommonPasswords.none());

@@ -16,8 +16,10 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.uxmlib.text.message.MessageKey;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.uxplima.uxmlib.text.style.Styler;
@@ -34,6 +36,9 @@ public final class AuthScreens {
 
     public static final String LOGIN = "login";
     public static final String CANCEL = "cancel";
+
+    /** The action of saving a new password in place of a weak one. */
+    public static final String REPLACE = "replace";
 
     /** The action of "this name is mine" on the login screen. */
     public static final String CLAIM = "claim";
@@ -117,6 +122,30 @@ public final class AuthScreens {
         remember(reader, screen).ifPresent(inputs::add);
         return new DialogSpec(
                 text(reader, screen.title()), body, inputs, buttons(reader, screen, REGISTER), settings.canClose());
+    }
+
+    /**
+     * The screen of a player whose right password no longer meets the rules: a new password, typed twice, with
+     * why on top. It is typed even on a pad server, where the digits are typed as well.
+     */
+    public DialogSpec replace(Audience reader, @Nullable Component reason) {
+        Objects.requireNonNull(reader, "reader");
+        ScreenSettings settings = screens.get();
+        ScreenSettings.Screen screen = settings.replace();
+        List<Component> body = start(reason);
+        screen.body().forEach(line -> body.add(text(reader, line)));
+        return new DialogSpec(
+                text(reader, screen.title()),
+                body,
+                List.of(password(reader, screen, PASSWORD), password(reader, screen, CONFIRM)),
+                buttons(reader, screen, REPLACE),
+                settings.canClose());
+    }
+
+    /** The replace screen with the reason the old password no longer passes on top. */
+    public DialogSpec replace(Audience reader, PasswordVerdict why) {
+        Objects.requireNonNull(why, "why");
+        return replace(reader, PasswordWords.reason(messages, reader, why).orElse(null));
     }
 
     /** The login screen, with the reason the last answer was refused as its first line. */

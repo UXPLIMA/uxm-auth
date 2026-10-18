@@ -19,7 +19,8 @@ public record ScreenSettings(
         Screen register,
         Screen login,
         Screen pin,
-        String loginWorld) {
+        String loginWorld,
+        Screen replace) {
 
     /** The world a waiting player is moved to while the waiting room is the login world, unless the file names one. */
     public static final String LOGIN_WORLD = "uxmauth_login";
@@ -35,6 +36,30 @@ public record ScreenSettings(
         Objects.requireNonNull(register, "register");
         Objects.requireNonNull(login, "login");
         Objects.requireNonNull(pin, "pin");
+        Objects.requireNonNull(replace, "replace");
+    }
+
+    /** The screens with the shipped screen for replacing a weak password. */
+    public ScreenSettings(
+            WaitingRoom waitingRoom,
+            Cancel cancel,
+            boolean canClose,
+            boolean pinPad,
+            Rules rules,
+            Screen register,
+            Screen login,
+            Screen pin,
+            String loginWorld) {
+        this(waitingRoom, cancel, canClose, pinPad, rules, register, login, pin, loginWorld, shippedReplace());
+    }
+
+    /** The screen a player held to replace a weak password reads, as the shipped file writes it. */
+    public static Screen shippedReplace() {
+        Map<String, String> labels = new java.util.LinkedHashMap<>();
+        for (String label : List.of("password", "confirm", "submit", "cancel")) {
+            labels.put(label, "@screen.replace." + label);
+        }
+        return new Screen("@screen.replace.title", List.of("@screen.replace.body"), labels);
     }
 
     /** The screens with the login world under its usual name. */

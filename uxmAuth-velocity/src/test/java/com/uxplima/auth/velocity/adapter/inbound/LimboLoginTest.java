@@ -3,15 +3,20 @@ package com.uxplima.auth.velocity.adapter.inbound;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
+import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
+import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.velocity.testing.ProxyWorld;
 import org.junit.jupiter.api.AfterEach;
@@ -163,6 +168,44 @@ final class LimboLoginTest {
                         LimboLogin.Outcome.Out.class,
                         out -> assertThat(plain(out.reason())).contains("5m"));
         assertThat(hosts).containsExactly("127.0.0.1@mc.tcpshield.com");
+    }
+
+    @Test
+    @DisplayName("a right password the rules outgrew holds the player until /changepassword sets a new one")
+    void aWeakPasswordIsReplacedInTheWaitingWorld() throws Exception {
+        LimboLogin first = world.limboLogin(true);
+        first.arrive(READER, STEVE, NAME, NONE);
+        said(first, "/register hunter22 hunter22");
+        first.leave(STEVE);
+        world.policy = new PasswordPolicy(10, 64, Pattern.compile("\\S+"), Set.of(), 0);
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/login hunter22"))).contains("10").contains("/changepassword");
+        assertThat(plain(login.reminder(READER, STEVE))).contains("/changepassword");
+        assertThat(told(said(login, "/changepassword hunter22"))).contains("old password, then the new");
+        assertThat(told(said(login, "/changepassword wrongpass longenough1"))).contains("wrong");
+        assertThat(told(said(login, "/changepassword hunter22 short1"))).contains("10");
+        assertThat(said(login, "/changepassword hunter22 longenough1"))
+                .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.PASSWORD));
+        assertThat(world.accounts.findByName(NAME))
+                .hasValueSatisfying(account -> assertThat(world.hashing.verify(
+                                Password.of("longenough1"), java.util.Objects.requireNonNull(account.password())))
+                        .isInstanceOf(Verification.Right.class));
+    }
+
+    @Test
+    @DisplayName("/changepassword before a login is answered with what to type")
+    void aChangeBeforeTheLoginIsNotTaken() throws Exception {
+        LimboLogin first = world.limboLogin(true);
+        first.arrive(READER, STEVE, NAME, NONE);
+        said(first, "/register hunter22 hunter22");
+        first.leave(STEVE);
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/changepassword hunter22 longenough1"))).contains("/login");
+        assertThat(told(said(login, "/changepassword hunter22"))).contains("/login");
     }
 
     @Test

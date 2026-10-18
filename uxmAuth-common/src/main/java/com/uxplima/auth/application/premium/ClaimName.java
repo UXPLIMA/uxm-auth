@@ -58,6 +58,11 @@ public final class ClaimName {
                 door.ownerAsks(address, in.account().name());
                 yield Result.ASKED;
             }
+            case AuthState.Replacing replacing -> {
+                // The password was proved; only its strength holds the player up.
+                door.ownerAsks(address, replacing.account().name());
+                yield Result.ASKED;
+            }
             case AuthState.Registered registered ->
                 asked(address, registered.account().name());
             case AuthState.Unregistered unregistered -> asked(address, unregistered.name());

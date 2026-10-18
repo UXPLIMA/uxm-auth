@@ -14,9 +14,12 @@ import java.util.regex.Pattern;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.DoorWords;
+import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
@@ -92,7 +95,9 @@ public final class ProxyWorld implements AutoCloseable {
     public final DoorWords words = new DoorWords(messages);
     public final HashingLane lane = new HashingLane(1, 1, 16);
     public final Hashing hashing = new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4)));
-    public final PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 0);
+    /** Today's password rules in this world; a test makes them stricter. */
+    public PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 0);
+
     public final Sessions sessions = new Sessions();
     public PremiumAnswer web = new PremiumAnswer.Premium(MOJANG, "Notch");
     public NameRule rule = NameRule.AUTOMATIC;
@@ -147,12 +152,22 @@ public final class ProxyWorld implements AutoCloseable {
         NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
         return new LimboLogin(
                 new ReadTheName(accounts, () -> names, () -> 3),
-                new LogIn(accounts, hashing, lane, sessions, clock, failures),
+                new LogIn(accounts, hashing, lane, sessions, clock, failures, () -> policy),
                 new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock, cap),
+                new ChangePassword(
+                        accounts,
+                        hashing,
+                        lane,
+                        sessions,
+                        () -> policy,
+                        new LocalEvents(),
+                        new SqlRememberedSessions(database, clock)),
                 sessions,
                 messages,
-                () -> Set.of("login", "l", "giris"),
-                () -> Set.of("register", "reg"),
+                new LimboLogin.Words(
+                        () -> Set.of("login", "l", "giris"),
+                        () -> Set.of("register", "reg"),
+                        () -> Set.of("changepassword", "cp")),
                 () -> asksTwice);
     }
 

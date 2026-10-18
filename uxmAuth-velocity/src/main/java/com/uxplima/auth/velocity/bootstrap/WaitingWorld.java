@@ -13,6 +13,7 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.CommandFile;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
@@ -20,6 +21,8 @@ import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.BreachedPasswords;
+import com.uxplima.auth.application.port.NetworkEvents;
+import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -96,9 +99,16 @@ final class WaitingWorld implements AutoCloseable {
         Path commands = folder.resolve(COMMANDS);
         Set<String> login = CommandFile.labels(commands, "login");
         Set<String> register = CommandFile.labels(commands, "register");
-        LimboLogin passwords = passwords(settings, accounts, words, new Labels(login, register), guards);
+        Set<String> change = CommandFile.labels(commands, "changepassword");
+        LimboLogin.Words labels = new LimboLogin.Words(() -> login, () -> register, () -> change);
+        LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
         LimboWait wait = new LimboWait(
-                LimboWorld.open(limboApi, folder, settings.current().network(), metas(login, register), logger),
+                LimboWorld.open(
+                        limboApi,
+                        folder,
+                        settings.current().network(),
+                        metas(List.of(login, register, change)),
+                        logger),
                 network::waitsAtTheProxy,
                 (player, exit) -> visit(passwords, network, guards.remember(), player, exit),
                 () -> settings.current().timeouts(),
@@ -109,16 +119,24 @@ final class WaitingWorld implements AutoCloseable {
     }
 
     /**
-     * What guards the waiting world's door: the remembered sessions, where a wrong password counts, and the
-     * limit on the accounts one address makes.
+     * What guards the waiting world's door: the remembered sessions, where a wrong password counts, the limit on
+     * the accounts one address makes, the breach check, and where a changed password ends the account's other
+     * sessions.
      */
-    record Guards(Remember remember, LogIn.Failures failures, RegisterAccount.Cap cap, BreachedPasswords breaches) {}
-
-    /** The labels of /login and /register, as commands.conf names them. */
-    private record Labels(Set<String> login, Set<String> register) {}
+    record Guards(
+            Remember remember,
+            LogIn.Failures failures,
+            RegisterAccount.Cap cap,
+            BreachedPasswords breaches,
+            NetworkEvents events,
+            RememberedSessions remembered) {}
 
     private LimboLogin passwords(
-            PluginSettings settings, SqlAccountRepository accounts, Messages words, Labels labels, Guards guards) {
+            PluginSettings settings,
+            SqlAccountRepository accounts,
+            Messages words,
+            LimboLogin.Words labels,
+            Guards guards) {
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         HashingLane hashingLane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
@@ -131,7 +149,14 @@ final class WaitingWorld implements AutoCloseable {
                         accounts,
                         () -> settings.current().namePolicy(),
                         () -> settings.current().passwords().maxAttempts()),
-                new LogIn(accounts, hashing, hashingLane, sessions, clock, guards.failures()),
+                new LogIn(
+                        accounts,
+                        hashing,
+                        hashingLane,
+                        sessions,
+                        clock,
+                        guards.failures(),
+                        () -> settings.current().passwordPolicy()),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -141,11 +166,27 @@ final class WaitingWorld implements AutoCloseable {
                         clock,
                         guards.cap(),
                         guards.breaches()),
+                change(settings, accounts, new Hashers(hashing, hashingLane), sessions, guards),
                 sessions,
                 words,
-                labels::login,
-                labels::register,
+                labels,
                 () -> settings.current().passwords().confirmOnRegister());
+    }
+
+    /** The hashers of the waiting world and the lane they run on. */
+    private record Hashers(Hashing hashing, HashingLane lane) {}
+
+    private static ChangePassword change(
+            PluginSettings settings, SqlAccountRepository accounts, Hashers hashers, Sessions sessions, Guards guards) {
+        return new ChangePassword(
+                accounts,
+                hashers.hashing(),
+                hashers.lane(),
+                sessions,
+                () -> settings.current().passwordPolicy(),
+                guards.events(),
+                guards.remembered(),
+                guards.breaches());
     }
 
     private static LimboVisit visit(
@@ -163,9 +204,9 @@ final class WaitingWorld implements AutoCloseable {
     }
 
     /** /login and /register as the client must know them to send them, in every word commands.conf gives. */
-    private List<CommandMeta> metas(Set<String> login, Set<String> register) {
+    private List<CommandMeta> metas(List<Set<String>> labels) {
         List<CommandMeta> metas = new ArrayList<>();
-        for (Set<String> words : List.of(login, register)) {
+        for (Set<String> words : labels) {
             List<String> all = List.copyOf(words);
             if (!all.isEmpty()) {
                 metas.add(proxy.getCommandManager()

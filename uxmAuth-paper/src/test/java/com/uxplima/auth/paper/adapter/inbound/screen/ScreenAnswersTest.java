@@ -102,6 +102,50 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("a weak right password brings up the replace screen with why, and a new one there lets the player in")
+    void aWeakPasswordIsReplacedOnTheScreen() {
+        world.registered(steve, "hunter22");
+        world.policy = new com.uxplima.auth.domain.password.PasswordPolicy(
+                10, 64, java.util.regex.Pattern.compile("\\S+"), java.util.Set.of(), 0);
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(shown).hasSize(1);
+        assertThat(shown.get(0).buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.REPLACE);
+        assertThat(plain(shown.get(0).body().get(0)))
+                .isEqualTo(plain(world.messages.render(
+                        steve, Keys.PASSWORD_TOO_SHORT, com.uxplima.uxmlib.text.Text.placeholder("min", "10"))));
+
+        world.scheduler.settle(answers()
+                .answer(
+                        guest(),
+                        AuthScreens.REPLACE,
+                        answer(Map.of("password", "longenough1", "confirm", "other1234567"))));
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(plain(shown.get(1).body().get(0)))
+                .isEqualTo(plain(world.messages.render(steve, Keys.REGISTER_MISMATCH)));
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REPLACE, answer(Map.of("password", "short12", "confirm", "short12"))));
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(shown.get(2).buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.REPLACE);
+        assertThat(plain(shown.get(2).body().get(0)))
+                .isEqualTo(plain(world.messages.render(
+                        steve, Keys.PASSWORD_TOO_SHORT, com.uxplima.uxmlib.text.Text.placeholder("min", "10"))));
+
+        world.scheduler.settle(answers()
+                .answer(
+                        guest(),
+                        AuthScreens.REPLACE,
+                        answer(Map.of("password", "longenough1", "confirm", "longenough1"))));
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+        assertThat(world.fired).contains(AuthSettings.Moment.LOGGED_IN);
+        assertThat(closed).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("a registration with both passwords makes the account")
     void aRegisterAnswerMakesTheAccount() {
         world.unregistered(steve);
@@ -237,6 +281,24 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("a player denied the login command cannot replace a weak password through the screen either")
+    void theReplaceScreenAsksTheLoginPermission() {
+        world.registered(steve, "hunter22");
+        world.policy = new com.uxplima.auth.domain.password.PasswordPolicy(
+                10, 64, java.util.regex.Pattern.compile("\\S+"), java.util.Set.of(), 0);
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        steve.addAttachment(MockBukkit.createMockPlugin("Perms"), "uxmauth.login", false);
+
+        world.scheduler.settle(answers()
+                .answer(
+                        guest(),
+                        AuthScreens.REPLACE,
+                        answer(Map.of("password", "longenough1", "confirm", "longenough1"))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+    }
+
+    @Test
     @DisplayName("a player denied the register command cannot register through the screen either")
     void theRegisterScreenAsksTheCommandsPermission() {
         world.unregistered(steve);
@@ -352,7 +414,8 @@ final class ScreenAnswersTest {
                     claimed.add(id + "@" + address);
                     return claimResult;
                 },
-                world.sessions::chose);
+                world.sessions::chose,
+                world.change::replace);
     }
 
     private Guest guest() {

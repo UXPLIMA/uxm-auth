@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
@@ -19,6 +20,7 @@ import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import org.jspecify.annotations.Nullable;
 
@@ -88,7 +90,8 @@ public final class ChangePassword {
         if (held == null) {
             return CompletableFuture.completedFuture(new ChangeResult.Gone());
         }
-        if (!(held.state() instanceof AuthState.Authenticated authenticated)) {
+        Optional<UUID> owner = owner(held.state());
+        if (owner.isEmpty()) {
             return CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn());
         }
         PasswordVerdict verdict = policy.get().check(fresh);
@@ -96,8 +99,19 @@ public final class ChangePassword {
             return CompletableFuture.completedFuture(new ChangeResult.Rejected(verdict));
         }
         long generation = held.generation();
-        UUID id = authenticated.account().id();
+        UUID id = owner.get();
         return lane.submit(() -> change(connection, generation, id, old, fresh));
+    }
+
+    /** The account a logged-in player, or one held to replace a weak password, may change the password of. */
+    private static Optional<UUID> owner(AuthState state) {
+        return switch (state) {
+            case AuthState.Authenticated in -> Optional.of(in.account().id());
+            case AuthState.Replacing replacing ->
+                Optional.of(replacing.account().id());
+            case AuthState.Registered waiting -> Optional.empty();
+            case AuthState.Unregistered nobody -> Optional.empty();
+        };
     }
 
     /**
@@ -125,15 +139,26 @@ public final class ChangePassword {
             // Changed on another server between the read and this write. That change stands.
             return new ChangeResult.WrongOld();
         }
-        Account updated = current.withPassword(hash);
-        sessions.update(
-                connection,
-                generation,
-                state -> state instanceof AuthState.Authenticated authenticated
-                        ? new AuthState.Authenticated(updated, authenticated.method())
-                        : state);
+        boolean replaced = loggedIn(connection, generation, current.withPassword(hash));
         endOtherSessions(connection, id);
-        return new ChangeResult.Changed();
+        return replaced ? new ChangeResult.Replaced() : new ChangeResult.Changed();
+    }
+
+    /**
+     * The session carries the new hash, and a player held to replace a weak password is now in. Answers whether
+     * they were held.
+     */
+    private boolean loggedIn(UUID connection, long generation, Account updated) {
+        AtomicBoolean replaced = new AtomicBoolean();
+        sessions.update(connection, generation, state -> switch (state) {
+            case AuthState.Authenticated in -> new AuthState.Authenticated(updated, in.method());
+            case AuthState.Replacing replacing -> {
+                replaced.set(true);
+                yield new AuthState.Authenticated(updated, AuthMethod.PASSWORD);
+            }
+            default -> state;
+        });
+        return replaced.get();
     }
 
     /**

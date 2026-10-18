@@ -12,6 +12,7 @@ import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.ChangeResult;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
@@ -32,6 +33,7 @@ public final class ChangePasswordCommand {
     public static final String KEY = "changepassword";
 
     private final ChangePassword change;
+    private final Door door;
     private final MomentRunner moments;
     private final Supplier<AuthSettings.Passwords> passwords;
     private final Messages messages;
@@ -39,11 +41,13 @@ public final class ChangePasswordCommand {
 
     public ChangePasswordCommand(
             ChangePassword change,
+            Door door,
             MomentRunner moments,
             Supplier<AuthSettings.Passwords> passwords,
             Messages messages,
             Replies replies) {
         this.change = Objects.requireNonNull(change, "change");
+        this.door = Objects.requireNonNull(door, "door");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -75,6 +79,7 @@ public final class ChangePasswordCommand {
     private void answer(Player player, ChangeResult result) {
         switch (result) {
             case ChangeResult.Changed changed -> moments.fire(player, AuthSettings.Moment.PASSWORD_CHANGED);
+            case ChangeResult.Replaced replaced -> door.open(player, AuthSettings.Moment.LOGGED_IN);
             case ChangeResult.WrongOld wrongOld -> messages.send(player, Keys.CHANGE_WRONG_OLD);
             case ChangeResult.Rejected rejected ->
                 PasswordWords.reason(messages, player, rejected.verdict()).ifPresent(player::sendMessage);

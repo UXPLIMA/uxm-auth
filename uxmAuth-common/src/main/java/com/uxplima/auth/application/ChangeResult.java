@@ -9,6 +9,9 @@ public sealed interface ChangeResult {
 
     record Changed() implements ChangeResult {}
 
+    /** A weak password was replaced at the login it held up: the player is now logged in. */
+    record Replaced() implements ChangeResult {}
+
     /** The old password was not the one stored. */
     record WrongOld() implements ChangeResult {}
 

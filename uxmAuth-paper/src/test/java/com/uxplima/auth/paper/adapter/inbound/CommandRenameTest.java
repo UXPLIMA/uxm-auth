@@ -131,7 +131,12 @@ final class CommandRenameTest {
                     .isEqualTo("signup");
             assertThat(label(
                             new ChangePasswordCommand(
-                                    world.change, world.moments, () -> world.passwords, world.messages, world.replies),
+                                    world.change,
+                                    world.door,
+                                    world.moments,
+                                    () -> world.passwords,
+                                    world.messages,
+                                    world.replies),
                             resolvers))
                     .isEqualTo("newpass");
             assertThat(label(new LogoutCommand(world.logOut, world.door, world.moments, world.messages), resolvers))

@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
@@ -16,6 +17,8 @@ import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.password.PasswordPolicy;
+import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
@@ -47,6 +50,7 @@ public final class LogIn {
     private final Sessions sessions;
     private final Clock clock;
     private final Failures failures;
+    private final Supplier<PasswordPolicy> policy;
 
     public LogIn(AccountRepository accounts, Hashing hashing, HashingLane lane, Sessions sessions, Clock clock) {
         this(accounts, hashing, lane, sessions, clock, (address, host) -> Optional.empty());
@@ -60,12 +64,25 @@ public final class LogIn {
             Sessions sessions,
             Clock clock,
             Failures failures) {
+        this(accounts, hashing, lane, sessions, clock, failures, () -> PasswordPolicy.ANY);
+    }
+
+    /** @param policy today's rules, which a right password must still pass or be replaced */
+    public LogIn(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Clock clock,
+            Failures failures,
+            Supplier<PasswordPolicy> policy) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.failures = Objects.requireNonNull(failures, "failures");
+        this.policy = Objects.requireNonNull(policy, "policy");
     }
 
     /** The password is wiped once the answer is known, whatever it is. */
@@ -122,6 +139,7 @@ public final class LogIn {
             case null -> new LoginResult.Gone();
             case AuthState.Unregistered unregistered -> new LoginResult.NotRegistered();
             case AuthState.Authenticated authenticated -> new LoginResult.AlreadyLoggedIn();
+            case AuthState.Replacing replacing -> new LoginResult.MustReplace(replacing.why());
             case AuthState.Registered waiting -> new LoginResult.TooManyAttempts();
         };
     }
@@ -139,12 +157,12 @@ public final class LogIn {
         }
         return switch (hashing.verify(password, stored)) {
             case Verification.Wrong wrong -> wrongAnswer(spent.attempts(), address, held.host());
-            case Verification.Right right -> logIn(connection, generation, current, address);
+            case Verification.Right right -> logIn(connection, generation, current, address, password);
             case Verification.RightButRehash rehash -> {
                 Account account = accounts.replacePassword(current.id(), stored, rehash.fresh())
                         ? current.withPassword(rehash.fresh())
                         : current;
-                yield logIn(connection, generation, account, address);
+                yield logIn(connection, generation, account, address, password);
             }
         };
     }
@@ -159,20 +177,23 @@ public final class LogIn {
                 : new LoginResult.Wrong(afterThisOne.left());
     }
 
-    private LoginResult logIn(UUID connection, long generation, Account account, String address) {
+    /** A right password logs in, unless today's rules refuse it: then the player is held to replace it. */
+    private LoginResult logIn(UUID connection, long generation, Account account, String address, Password password) {
         if (!sessions.isOpen(connection, generation)) {
             return new LoginResult.Gone();
         }
         Instant now = clock.instant();
         accounts.recordLogin(account.id(), now, address);
         Account updated = account.loggedIn(now, address);
-        return sessions.update(
-                        connection,
-                        generation,
-                        state -> state instanceof AuthState.Registered
-                                ? new AuthState.Authenticated(updated, AuthMethod.PASSWORD)
-                                : state)
-                .<LoginResult>map(state -> new LoginResult.LoggedIn(updated))
+        PasswordVerdict today = policy.get().check(password);
+        AuthState next = today instanceof PasswordVerdict.Accepted
+                ? new AuthState.Authenticated(updated, AuthMethod.PASSWORD)
+                : new AuthState.Replacing(updated, today);
+        LoginResult answer = today instanceof PasswordVerdict.Accepted
+                ? new LoginResult.LoggedIn(updated)
+                : new LoginResult.MustReplace(today);
+        return sessions.update(connection, generation, state -> state instanceof AuthState.Registered ? next : state)
+                .map(state -> answer)
                 .orElseGet(LoginResult.Gone::new);
     }
 }

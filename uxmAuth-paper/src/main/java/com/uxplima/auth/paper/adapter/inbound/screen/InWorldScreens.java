@@ -73,6 +73,7 @@ public final class InWorldScreens implements ScreenOffer {
             switch (state) {
                 case AuthState.Unregistered unregistered -> shower.show(player, screens.register(player, null));
                 case AuthState.Registered registered -> shower.show(player, screens.login(player, null));
+                case AuthState.Replacing replacing -> shower.show(player, screens.replace(player, replacing.why()));
                 case AuthState.Authenticated authenticated -> {}
             }
         });

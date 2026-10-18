@@ -8,6 +8,7 @@ import java.util.function.Function;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
@@ -87,6 +88,10 @@ public final class LoginCommand {
             case LoginResult.Banned banned -> {
                 moments.fire(player, AuthSettings.Moment.BANNED);
                 player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
+            }
+            case LoginResult.MustReplace mustReplace -> {
+                PasswordWords.reason(messages, player, mustReplace.why()).ifPresent(player::sendMessage);
+                messages.send(player, Keys.LOGIN_MUST_REPLACE);
             }
             case LoginResult.NotRegistered notRegistered -> messages.send(player, Keys.LOGIN_NOT_REGISTERED);
             case LoginResult.AlreadyLoggedIn already -> messages.send(player, Keys.LOGIN_ALREADY);

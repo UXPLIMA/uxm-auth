@@ -256,6 +256,33 @@ final class LogInTest {
                 .isEqualTo(new LoginResult.Banned(java.time.Duration.ofMinutes(5)));
     }
 
+    @Test
+    @DisplayName("a right password that today's rules refuse holds the player until a new one is set")
+    void aWeakRightPasswordMustBeReplaced() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.domain.password.PasswordPolicy stricter = new com.uxplima.auth.domain.password.PasswordPolicy(
+                10, 64, java.util.regex.Pattern.compile("\\S+"), java.util.Set.of(), 0);
+        LogIn strict = new LogIn(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                fixture.clock,
+                (address, host) -> java.util.Optional.empty(),
+                () -> stricter);
+
+        assertThat(strict.run(connection, Password.of("nope1234"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.Wrong(2));
+        assertThat(strict.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isEqualTo(
+                        new LoginResult.MustReplace(new com.uxplima.auth.domain.password.PasswordVerdict.TooShort(10)));
+        assertThat(fixture.sessions.state(connection))
+                .hasValueSatisfying(state -> assertThat(state).isInstanceOf(AuthState.Replacing.class));
+        assertThat(strict.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isEqualTo(
+                        new LoginResult.MustReplace(new com.uxplima.auth.domain.password.PasswordVerdict.TooShort(10)));
+    }
+
     private LoginResult login(UUID connection, String password) {
         return useCase().run(connection, Password.of(password), "10.0.0.7").join();
     }

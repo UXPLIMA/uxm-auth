@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Objects;
 
 import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.password.PasswordVerdict;
 
 /** What a login came to. */
 public sealed interface LoginResult {
@@ -24,6 +25,13 @@ public sealed interface LoginResult {
     record Banned(Duration lasts) implements LoginResult {
         public Banned {
             Objects.requireNonNull(lasts, "lasts");
+        }
+    }
+
+    /** The password was right, but today's rules refuse it, for this reason: a new one must be set first. */
+    record MustReplace(PasswordVerdict why) implements LoginResult {
+        public MustReplace {
+            Objects.requireNonNull(why, "why");
         }
     }
 

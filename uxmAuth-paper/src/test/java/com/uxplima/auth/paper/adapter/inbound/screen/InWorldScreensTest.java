@@ -66,6 +66,27 @@ final class InWorldScreensTest {
     }
 
     @Test
+    @DisplayName("a player held to replace a weak password is shown the replace screen with why on top")
+    void aHeldPlayerIsShownTheReplaceScreen() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        com.uxplima.auth.domain.account.Account account = ((AuthState.Registered)
+                        world.sessions.state(steve.getUniqueId()).orElseThrow())
+                .account();
+
+        offer(ScreenSettings.WaitingRoom.FROZEN)
+                .offer(
+                        steve,
+                        new AuthState.Replacing(
+                                account, new com.uxplima.auth.domain.password.PasswordVerdict.Common()));
+
+        assertThat(shown).singleElement().satisfies(spec -> {
+            assertThat(spec.buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.REPLACE);
+            assertThat(spec.inputs()).extracting(DialogSpec.Input::key).containsExactly("password", "confirm");
+        });
+    }
+
+    @Test
     @DisplayName("dialog mode: a player the dialog sent to the world, too old for it or leaving it, is shown none")
     void dialogModeShowsNothingToThoseItSentToTheWorld() {
         PlayerMock steve = server.addPlayer("Steve");

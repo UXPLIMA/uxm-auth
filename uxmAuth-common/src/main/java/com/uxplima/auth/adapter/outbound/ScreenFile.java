@@ -17,7 +17,8 @@ public final class ScreenFile {
     private static final Map<String, List<String>> LABELS = Map.of(
             "register", List.of("password", "confirm", "accept", "remember", "submit", "cancel"),
             "login", List.of("password", "remember", "submit", "claim", "cancel"),
-            "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"));
+            "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"),
+            "replace", List.of("password", "confirm", "submit", "cancel"));
 
     private final Path file;
     private volatile ScreenSettings current;
@@ -59,7 +60,8 @@ public final class ScreenFile {
                 screen(config, "register"),
                 screen(config, "login"),
                 screen(config, "pin"),
-                config.getString("login-world-name", ScreenSettings.LOGIN_WORLD));
+                config.getString("login-world-name", ScreenSettings.LOGIN_WORLD),
+                screen(config, "replace"));
     }
 
     private static ScreenSettings.Screen screen(HoconConfig config, String name) {

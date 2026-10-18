@@ -138,6 +138,31 @@ final class PlayerCommandsTest {
     }
 
     @Test
+    @DisplayName("a right password today's rules refuse holds the player, says why, and a new one lets them in")
+    void aWeakPasswordIsReplacedAtLogin() {
+        world.registered(steve, "hunter22");
+        world.door.hold(steve);
+        world.scheduler.drain();
+        drain();
+        world.policy = new com.uxplima.auth.domain.password.PasswordPolicy(
+                10, 64, java.util.regex.Pattern.compile("\\S+"), java.util.Set.of(), 0);
+
+        world.scheduler.settle(login().attempt(steve, "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(steve.nextComponentMessage())
+                .isEqualTo(world.messages.render(steve, Keys.PASSWORD_TOO_SHORT, Text.placeholder("min", "10")));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.LOGIN_MUST_REPLACE));
+        assertThat(steve.hasPotionEffect(PotionEffectType.BLINDNESS)).isTrue();
+
+        world.scheduler.settle(changePassword(AuthWorld.shippedPasswords()).attempt(steve, "hunter22", "longenough1"));
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+        assertThat(world.fired).contains(AuthSettings.Moment.LOGGED_IN);
+        assertThat(steve.hasPotionEffect(PotionEffectType.BLINDNESS)).isFalse();
+    }
+
+    @Test
     @DisplayName("a registration with the password twice makes the account and lets the player in")
     void registerMakesTheAccount() {
         world.unregistered(steve);
@@ -313,7 +338,8 @@ final class PlayerCommandsTest {
     }
 
     private ChangePasswordCommand changePassword(AuthSettings.Passwords passwords) {
-        return new ChangePasswordCommand(world.change, world.moments, () -> passwords, world.messages, world.replies);
+        return new ChangePasswordCommand(
+                world.change, world.door, world.moments, () -> passwords, world.messages, world.replies);
     }
 
     private LogoutCommand logout() {
