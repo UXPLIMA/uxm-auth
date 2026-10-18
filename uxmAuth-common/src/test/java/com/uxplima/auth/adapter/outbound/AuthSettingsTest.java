@@ -760,7 +760,11 @@ final class AuthSettingsTest {
         assertThat(shipped.inGame()).isEmpty();
         assertThat(shipped.allowsInGame(StaffAction.UNREGISTER)).isFalse();
         assertThat(shipped.allowsInGame(StaffAction.UNBAN)).isTrue();
-        assertThat(shipped.allowsInGame(StaffAction.FORCE_LOGIN)).isTrue();
+        assertThat(shipped.allowsInGame(StaffAction.FORCE_REGISTER)).isTrue();
+        // Both hand an account to whoever stands at the door or holds the paid name: a staff account somebody
+        // took over must not reach them from the game.
+        assertThat(shipped.allowsInGame(StaffAction.FORCE_LOGIN)).isFalse();
+        assertThat(shipped.allowsInGame(StaffAction.MARK_PREMIUM)).isFalse();
 
         StaffSettings opened = settingsFrom(folder, "staff { in-game = [unregister, resolve] }\n")
                 .staff();

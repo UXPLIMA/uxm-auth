@@ -98,7 +98,7 @@ permissions:
     description: Read the latest logins of an account
     default: op
   uxmauth.admin.forcelogin:
-    description: Let a waiting player in past the login
+    description: Let a waiting player in past the login; from the console only unless staff.in-game opens it
     default: op
   uxmauth.admin.unban:
     description: Lift the ban on an address
@@ -116,7 +116,7 @@ permissions:
     description: Turn off an account's second factor; from the console only unless staff.in-game opens it
     default: op
   uxmauth.admin.markpremium:
-    description: Turn a cracked account premium when Mojang names a paid account under it
+    description: Turn a cracked account premium; from the console only unless staff.in-game opens it
     default: op
   uxmauth.admin.markcracked:
     description: Turn a premium account cracked; from the console only unless staff.in-game opens it

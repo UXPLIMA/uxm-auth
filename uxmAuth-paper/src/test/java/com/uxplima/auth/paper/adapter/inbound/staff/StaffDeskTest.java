@@ -137,10 +137,17 @@ final class StaffDeskTest {
     }
 
     @Test
-    @DisplayName("a forced login reaches the waiting player through the bulletins and lets them in as forced")
+    @DisplayName(
+            "a forced login is refused in game unless opened; opened, it reaches the waiting player and lets them in")
     void aForcedLoginLetsThePlayerIn() {
         PlayerMock steve = server.addPlayer("Steve");
         world.registered(steve, "hunter22");
+        world.scheduler.settle(desk.forceLogin(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .as("a forced login hands the account to whoever waits under the name: console only by default")
+                .isEqualTo(world.messages.render(
+                        staff, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", "forcelogin")));
+        opened.add(StaffAction.FORCE_LOGIN);
 
         world.scheduler.settle(desk.forceLogin(staff, "Steve"));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
@@ -169,6 +176,7 @@ final class StaffDeskTest {
     @Test
     @DisplayName("a forced login of a name with no account says so and asks nobody")
     void anUnknownNameIsSaid() {
+        opened.add(StaffAction.FORCE_LOGIN);
         world.scheduler.settle(desk.forceLogin(staff, "Nobody"));
 
         assertThat(staff.nextComponentMessage())
@@ -345,10 +353,16 @@ final class StaffDeskTest {
     }
 
     @Test
-    @DisplayName("staff mark a paid name premium in game, and its player is sent to join again under the handshake")
+    @DisplayName("marking premium is refused in game unless opened; opened, the player rejoins under the handshake")
     void aMarkedPremiumRejoins() {
         PlayerMock steve = server.addPlayer("Steve");
         world.registered(steve, "hunter22");
+        world.scheduler.settle(desk.markPremium(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .as("marking premium hands the account to the paid owner: console only by default")
+                .isEqualTo(world.messages.render(
+                        staff, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", "markpremium")));
+        opened.add(StaffAction.MARK_PREMIUM);
 
         world.scheduler.settle(desk.markPremium(staff, "Steve"));
         until(() -> !steve.isOnline());

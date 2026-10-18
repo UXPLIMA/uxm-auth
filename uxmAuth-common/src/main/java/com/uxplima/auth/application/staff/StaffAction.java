@@ -7,15 +7,17 @@ import java.util.Optional;
 
 /**
  * What staff can do to an account, each under the key its branch has in commands.conf. A destructive one runs
- * from the console only, unless the operator opens it in game: a hijacked staff account cannot unregister the rest.
+ * from the console only, unless the operator opens it in game: a hijacked staff account cannot unregister the rest,
+ * and cannot hand an account to somebody else either, which a forced login does for whoever waits under the name
+ * and marking premium does for whoever holds the paid name.
  */
 public enum StaffAction {
-    FORCE_LOGIN("forcelogin", false),
+    FORCE_LOGIN("forcelogin", true),
     FORCE_REGISTER("forceregister", false),
     UNREGISTER("unregister", true),
     SET_PASSWORD("setpassword", true),
     DISABLE_2FA("disable2fa", true),
-    MARK_PREMIUM("markpremium", false),
+    MARK_PREMIUM("markpremium", true),
     MARK_CRACKED("markcracked", true),
     UNBAN("unban", false),
     RESOLVE("resolve", true);
