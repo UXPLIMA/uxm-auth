@@ -178,6 +178,35 @@ final class ChangePasswordTest {
     }
 
     @Test
+    @DisplayName("the replacement of a weak password asks no old one, so it is taken only from a player held for it")
+    void aWeakReplacementNeedsTheHold() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.domain.account.Account account =
+                ((AuthState.Registered) fixture.sessions.state(connection).orElseThrow()).account();
+        fixture.sessions.update(
+                connection,
+                state -> new AuthState.Authenticated(account, com.uxplima.auth.domain.state.AuthMethod.PASSWORD));
+        ChangePassword useCase = new ChangePassword(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                events,
+                fixture.remembered);
+
+        assertThat(useCase.replaceWeak(connection, Password.of("fresh7777")).join())
+                .isEqualTo(new ChangeResult.NotLoggedIn());
+        assertThat(fixture.accounts.findById(account.id()).orElseThrow().password())
+                .isEqualTo(account.password());
+
+        fixture.sessions.update(
+                connection, state -> new AuthState.Replacing(account, new PasswordVerdict.TooShort(10)));
+        assertThat(useCase.replaceWeak(connection, Password.of("fresh7777")).join())
+                .isEqualTo(new ChangeResult.Replaced());
+    }
+
+    @Test
     @DisplayName(
             "a player held to replace a weak password is let in by a new one that passes, and not by one that fails")
     void aReplacementLetsIn() {

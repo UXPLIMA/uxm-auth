@@ -286,7 +286,7 @@ final class AuthGraph implements AutoCloseable {
                 id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered,
                 claims::claim,
                 sessions::chose,
-                change::replace);
+                change);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,

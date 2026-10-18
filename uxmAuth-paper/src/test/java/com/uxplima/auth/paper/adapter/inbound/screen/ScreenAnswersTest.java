@@ -146,6 +146,27 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("a logged-in player cannot set a new password through the replace action, which asks no old one")
+    void aLoggedInPlayerCannotReplace() {
+        world.registered(steve, "hunter22");
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        assertThat(world.isAuthenticated(steve)).isTrue();
+
+        world.scheduler.settle(answers()
+                .answer(
+                        guest(),
+                        AuthScreens.REPLACE,
+                        answer(Map.of("password", "takenover1", "confirm", "takenover1"))));
+
+        com.uxplima.auth.domain.hash.PasswordHash stored = java.util.Objects.requireNonNull(world.accounts
+                .findByName(new com.uxplima.auth.domain.name.PlayerName("Steve"))
+                .orElseThrow()
+                .password());
+        assertThat(world.hashing.verify(com.uxplima.auth.domain.password.Password.of("hunter22"), stored))
+                .isNotInstanceOf(com.uxplima.auth.domain.hash.Verification.Wrong.class);
+    }
+
+    @Test
     @DisplayName("a registration with both passwords makes the account")
     void aRegisterAnswerMakesTheAccount() {
         world.unregistered(steve);
@@ -415,7 +436,7 @@ final class ScreenAnswersTest {
                     return claimResult;
                 },
                 world.sessions::chose,
-                world.change::replace);
+                world.change);
     }
 
     private Guest guest() {

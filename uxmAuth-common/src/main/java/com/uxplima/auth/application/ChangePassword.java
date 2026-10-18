@@ -72,7 +72,7 @@ public final class ChangePassword {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(old, "old");
         Objects.requireNonNull(fresh, "fresh");
-        return Wiping.after(() -> attempt(connection, old, fresh), old, fresh);
+        return Wiping.after(() -> attempt(connection, old, fresh, false), old, fresh);
     }
 
     /**
@@ -82,15 +82,27 @@ public final class ChangePassword {
     public CompletableFuture<ChangeResult> replace(UUID connection, Password fresh) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(fresh, "fresh");
-        return Wiping.after(() -> attempt(connection, null, fresh), fresh);
+        return Wiping.after(() -> attempt(connection, null, fresh, false), fresh);
     }
 
-    private CompletableFuture<ChangeResult> attempt(UUID connection, @Nullable Password old, Password fresh) {
+    /**
+     * Replaces the weak password a login was held up by. It asks no old password, so it is taken only from a
+     * player held for it: anyone else answers {@link ChangeResult.NotLoggedIn}.
+     */
+    public CompletableFuture<ChangeResult> replaceWeak(UUID connection, Password fresh) {
+        Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(fresh, "fresh");
+        return Wiping.after(() -> attempt(connection, null, fresh, true), fresh);
+    }
+
+    private CompletableFuture<ChangeResult> attempt(
+            UUID connection, @Nullable Password old, Password fresh, boolean heldOnly) {
         Sessions.Held held = sessions.held(connection).orElse(null);
         if (held == null) {
             return CompletableFuture.completedFuture(new ChangeResult.Gone());
         }
-        Optional<UUID> owner = owner(held.state());
+        Optional<UUID> owner =
+                heldOnly && !(held.state() instanceof AuthState.Replacing) ? Optional.empty() : owner(held.state());
         if (owner.isEmpty()) {
             return CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn());
         }

@@ -13,6 +13,7 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.adapter.outbound.TimeWords;
+import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.ChangeResult;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
@@ -65,7 +66,7 @@ public final class ScreenAnswers {
 
     /** A new password in place of a weak one, for the connection with this id. */
     @FunctionalInterface
-    public interface Replacer {
+    private interface Replacer {
         CompletableFuture<ChangeResult> replace(UUID connection, Password fresh);
     }
 
@@ -123,22 +124,31 @@ public final class ScreenAnswers {
             Predicate<UUID> registering,
             Claims claims,
             Choices choices) {
-        this(
-                screens,
-                register,
-                logIn,
-                settings,
-                passwords,
-                messages,
-                shower,
-                registering,
-                claims,
-                choices,
+        this(screens, register, logIn, settings, passwords, messages, shower, registering, claims, choices, (Replacer)
                 (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()));
     }
 
-    /** @param replacer what saves a new password in place of a weak one */
+    /**
+     * @param change what saves a new password in place of a weak one. The screen asks no old password, so only
+     *     its replacement of a weak one is reachable from here, never a change of a sound one.
+     */
     public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices,
+            ChangePassword change) {
+        this(screens, register, logIn, settings, passwords, messages, shower, registering, claims, choices, (Replacer)
+                Objects.requireNonNull(change, "change")::replaceWeak);
+    }
+
+    private ScreenAnswers(
             AuthScreens screens,
             RegisterAccount register,
             LogIn logIn,
