@@ -409,7 +409,8 @@ public enum Keys implements MessageKey {
     SCREEN_CODE_TITLE("screen.code.title", "<value>One more step"),
     SCREEN_CODE_BODY(
             "screen.code.body",
-            "<body>Type the code your authenticator app shows for this server, or one of your backup codes."),
+            "<body>Type the code your authenticator app shows for this server, the one mailed to you, or one of"
+                    + " your backup codes."),
     SCREEN_CODE_CODE("screen.code.code", "Code"),
     SCREEN_CODE_SUBMIT("screen.code.submit", "Log in"),
     SCREEN_CODE_CANCEL("screen.code.cancel", "Leave"),
