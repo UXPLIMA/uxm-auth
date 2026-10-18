@@ -5,6 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +55,27 @@ public final class SqlAccountRepository implements AccountRepository {
     private static final String DROP_CHOICE = "DELETE FROM uxmauth_session_choice WHERE account_id = ?";
     private static final String MOVE_CHOICE = "UPDATE uxmauth_session_choice SET account_id = ? WHERE account_id = ?";
     private static final String MOVE_RENAMES = "UPDATE uxmauth_rename SET account_id = ? WHERE account_id = ?";
+
+    /**
+     * What every other store keeps under an account's id: the app and backup codes, the mail address and its codes,
+     * the login history and the last server. A deleted account drops them, so a later account under the same id,
+     * which an offline id derived from the name is, inherits none of them; a moved id takes them along.
+     */
+    private static final List<String> DROP_KEPT = List.of(
+            "DELETE FROM uxmauth_factor WHERE account_id = ?",
+            "DELETE FROM uxmauth_backup_code WHERE account_id = ?",
+            "DELETE FROM uxmauth_email WHERE account_id = ?",
+            "DELETE FROM uxmauth_mail_code WHERE account_id = ?",
+            "DELETE FROM uxmauth_login WHERE account_id = ?",
+            "DELETE FROM uxmauth_last_server WHERE account_id = ?");
+
+    private static final List<String> MOVE_KEPT = List.of(
+            "UPDATE uxmauth_factor SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_backup_code SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_email SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_mail_code SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_login SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_last_server SET account_id = ? WHERE account_id = ?");
 
     private final Database database;
 
@@ -221,6 +243,9 @@ public final class SqlAccountRepository implements AccountRepository {
             // A remembered session must never let a later account under the same id in.
             sql.update(DROP_SESSIONS, statement -> statement.setString(1, id.toString()));
             sql.update(DROP_CHOICE, statement -> statement.setString(1, id.toString()));
+            for (String drop : DROP_KEPT) {
+                sql.update(drop, statement -> statement.setString(1, id.toString()));
+            }
             sql.update(DELETE, statement -> statement.setString(1, id.toString()));
         });
     }
@@ -244,6 +269,16 @@ public final class SqlAccountRepository implements AccountRepository {
                 statement.setString(1, to.toString());
                 statement.setString(2, from.toString());
             });
+            // Rows a gone account left under the new id would collide with the ones that move there.
+            for (String drop : DROP_KEPT) {
+                sql.update(drop, statement -> statement.setString(1, to.toString()));
+            }
+            for (String move : MOVE_KEPT) {
+                sql.update(move, statement -> {
+                    statement.setString(1, to.toString());
+                    statement.setString(2, from.toString());
+                });
+            }
         });
     }
 

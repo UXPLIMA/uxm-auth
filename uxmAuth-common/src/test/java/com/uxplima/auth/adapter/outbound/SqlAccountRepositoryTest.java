@@ -290,6 +290,78 @@ final class SqlAccountRepositoryTest {
         assertThat(sessions.choice(fresh)).contains(true);
     }
 
+    /** Everything a store keeps under one account id, read back the way each store reads it. */
+    private record Kept(boolean app, int backupCodes, boolean address, boolean code, int logins, boolean lastServer) {}
+
+    private Kept keep(UUID id) {
+        java.time.Clock clock = java.time.Clock.fixed(REGISTERED, java.time.ZoneOffset.UTC);
+        SqlFactors factors = new SqlFactors(database, SecretSeal.fromPassphrase("lab"), clock);
+        SqlEmails emails = new SqlEmails(database, clock);
+        SqlLoginHistory history = new SqlLoginHistory(database);
+        SqlLastServers servers = new SqlLastServers(database, clock);
+        com.uxplima.auth.domain.mail.EmailAddress address = com.uxplima.auth.domain.mail.EmailAddress.parse(
+                        "steve@example.net")
+                .orElseThrow();
+        factors.setApp(id, new com.uxplima.auth.domain.factor.TotpSecret(new byte[20]));
+        factors.setBackupCodes(id, java.util.List.of(new com.uxplima.auth.domain.hash.PasswordHash("$x$a")));
+        emails.setAddress(id, address);
+        var unused = emails.changeCode(
+                id,
+                com.uxplima.auth.application.port.Emails.Purpose.LOGIN,
+                none -> java.util.Optional.of(new com.uxplima.auth.application.port.Emails.Code(
+                        address,
+                        new com.uxplima.auth.domain.hash.PasswordHash("$x$c"),
+                        REGISTERED.plusSeconds(600),
+                        3,
+                        REGISTERED)));
+        history.record(
+                id,
+                new com.uxplima.auth.application.port.LoginHistory.Entry(
+                        REGISTERED, "10.0.0.1", com.uxplima.auth.domain.state.AuthMethod.PASSWORD));
+        servers.remember(id, "lobby");
+        return kept(id);
+    }
+
+    private Kept kept(UUID id) {
+        java.time.Clock clock = java.time.Clock.fixed(REGISTERED, java.time.ZoneOffset.UTC);
+        SqlFactors factors = new SqlFactors(database, SecretSeal.fromPassphrase("lab"), clock);
+        SqlEmails emails = new SqlEmails(database, clock);
+        return new Kept(
+                factors.app(id).isPresent(),
+                factors.backupCodes(id).size(),
+                emails.address(id).isPresent(),
+                emails.code(id, com.uxplima.auth.application.port.Emails.Purpose.LOGIN)
+                        .isPresent(),
+                new SqlLoginHistory(database).count(id),
+                new SqlLastServers(database, clock).of(id).isPresent());
+    }
+
+    @Test
+    @DisplayName("a deleted account leaves nothing under its id, so a later account under the same id inherits nothing")
+    void aDeletedAccountLeavesNothing() {
+        Account steve = cracked("Steve", "10.0.0.1");
+        repository.insert(steve);
+        assertThat(keep(steve.id())).isEqualTo(new Kept(true, 1, true, true, 1, true));
+
+        repository.delete(steve.id());
+
+        assertThat(kept(steve.id())).isEqualTo(new Kept(false, 0, false, false, 0, false));
+    }
+
+    @Test
+    @DisplayName("a moved id takes its app, codes, address, mailed code, history and last server with it")
+    void aMovedIdTakesEverything() {
+        Account alex = cracked("Alex", "10.0.0.1");
+        repository.insert(alex);
+        Kept before = keep(alex.id());
+        UUID fresh = UUID.randomUUID();
+
+        repository.moveId(alex.id(), fresh);
+
+        assertThat(kept(fresh)).isEqualTo(before);
+        assertThat(kept(alex.id())).isEqualTo(new Kept(false, 0, false, false, 0, false));
+    }
+
     @Test
     @DisplayName("a name nobody registered finds nothing")
     void anUnknownNameFindsNothing() {
