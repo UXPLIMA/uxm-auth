@@ -70,7 +70,8 @@ final class DoorListenerTest {
     }
 
     private DoorListener listener() {
-        return new DoorListener(world.door(), admission, remember, sessions, world.words, logger);
+        return new DoorListener(
+                world.door(), admission, remember, world.accounts::findById, sessions, world.words, logger);
     }
 
     private PreLoginEvent preLoginOf(String name) {
@@ -229,7 +230,8 @@ final class DoorListenerTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.eq(false),
                         org.mockito.ArgumentMatchers.any());
-        DoorListener listener = new DoorListener(door, admission, remember, sessions, world.words, logger);
+        DoorListener listener =
+                new DoorListener(door, admission, remember, world.accounts::findById, sessions, world.words, logger);
         listener.preLogin(preLoginOf("Steve"));
 
         listener.profile(new GameProfileRequestEvent(
@@ -399,7 +401,7 @@ final class DoorListenerTest {
                 new PlayerName("Steve"),
                 AccountKind.CRACKED,
                 null,
-                null,
+                world.hashing.hash(com.uxplima.auth.domain.password.Password.of("hunter22")),
                 world.clock.instant(),
                 "10.0.0.1",
                 null,
@@ -412,6 +414,48 @@ final class DoorListenerTest {
                 .isFalse();
     }
 
+    @Test
+    @DisplayName("a session kept under an id another name's account holds lets nobody in under this name")
+    void aSessionOfAnotherNameLetsNobodyIn() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        AccountRepository.Insert unused = world.accounts.insert(new Account(
+                steve,
+                new PlayerName("Alex"),
+                AccountKind.CRACKED,
+                null,
+                world.hashing.hash(com.uxplima.auth.domain.password.Password.of("hunter22")),
+                world.clock.instant(),
+                "10.0.0.1",
+                null,
+                null));
+        remembered.remember(
+                steve, FROM.getAddress().getHostAddress(), world.clock.instant().plusSeconds(60));
+
+        assertThat(loggedInFrom(FROM, steve)).isFalse();
+    }
+
+    @Test
+    @DisplayName("an account with no password is never let in by a session, whatever was kept under its id")
+    void anAccountWithNoPasswordIsNotResumed() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        AccountRepository.Insert unused = world.accounts.insert(new Account(
+                steve,
+                new PlayerName("Steve"),
+                AccountKind.CRACKED,
+                null,
+                null,
+                world.clock.instant(),
+                "10.0.0.1",
+                null,
+                null));
+        remembered.remember(
+                steve, FROM.getAddress().getHostAddress(), world.clock.instant().plusSeconds(60));
+
+        assertThat(loggedInFrom(FROM, steve)).isFalse();
+    }
+
     private boolean loggedInFrom(InetSocketAddress from, UUID id) {
         when(connection.getRemoteAddress()).thenReturn(from);
         DoorListener listener = listener();
@@ -420,6 +464,7 @@ final class DoorListenerTest {
         Player player = mock(Player.class);
         when(player.getRemoteAddress()).thenReturn(from);
         when(player.getUniqueId()).thenReturn(id);
+        when(player.getUsername()).thenReturn("Steve");
         when(player.getVirtualHost())
                 .thenReturn(Optional.of(InetSocketAddress.createUnresolved(ProxyWorld.PLAY, 25565)));
         listener.login(new LoginEvent(player, ""));

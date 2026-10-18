@@ -61,7 +61,7 @@ public final class Remember {
                     case EVERYONE -> true;
                     case CHOSEN -> store.choice(account).orElse(false);
                 };
-        if (wanted && !shared.get().matches(Objects.requireNonNull(host, "host"))) {
+        if (wanted && !shared(Objects.requireNonNull(host, "host"))) {
             store.remember(account, address, clock.get().plus(now.lasts()));
         }
     }
@@ -70,10 +70,19 @@ public final class Remember {
     public boolean resumes(UUID account, String address, String host) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(address, "address");
-        if (settings.get().mode() == Mode.OFF || shared.get().matches(Objects.requireNonNull(host, "host"))) {
+        if (settings.get().mode() == Mode.OFF || shared(Objects.requireNonNull(host, "host"))) {
             return false;
         }
         return store.holds(account, address, clock.get());
+    }
+
+    /**
+     * Whether the host is a shared-address filter. While the operator lists any, a host nobody knows counts as
+     * one: a connection the door could not read the host of must not be trusted by its address.
+     */
+    private boolean shared(String host) {
+        HostPatterns patterns = shared.get();
+        return patterns.matches(host) || (host.isBlank() && !patterns.isEmpty());
     }
 
     /** The account chose sessions, or no sessions; choosing none ends the ones it has. */

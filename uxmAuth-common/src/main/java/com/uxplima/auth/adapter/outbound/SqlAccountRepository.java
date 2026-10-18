@@ -49,6 +49,9 @@ public final class SqlAccountRepository implements AccountRepository {
     private static final String DELETE = "DELETE FROM uxmauth_account WHERE id = ?";
     private static final String DELETE_RENAMES = "DELETE FROM uxmauth_rename WHERE account_id = ?";
     private static final String MOVE_ID = "UPDATE uxmauth_account SET id = ? WHERE id = ?";
+    private static final String DROP_SESSIONS = "DELETE FROM uxmauth_session WHERE account_id = ?";
+    private static final String DROP_CHOICE = "DELETE FROM uxmauth_session_choice WHERE account_id = ?";
+    private static final String MOVE_CHOICE = "UPDATE uxmauth_session_choice SET account_id = ? WHERE account_id = ?";
     private static final String MOVE_RENAMES = "UPDATE uxmauth_rename SET account_id = ? WHERE account_id = ?";
 
     private final Database database;
@@ -208,6 +211,9 @@ public final class SqlAccountRepository implements AccountRepository {
         Objects.requireNonNull(id, "id");
         database.inTransaction(sql -> {
             sql.update(DELETE_RENAMES, statement -> statement.setString(1, id.toString()));
+            // A remembered session must never let a later account under the same id in.
+            sql.update(DROP_SESSIONS, statement -> statement.setString(1, id.toString()));
+            sql.update(DROP_CHOICE, statement -> statement.setString(1, id.toString()));
             sql.update(DELETE, statement -> statement.setString(1, id.toString()));
         });
     }
@@ -222,6 +228,12 @@ public final class SqlAccountRepository implements AccountRepository {
                 statement.setString(2, from.toString());
             });
             sql.update(MOVE_RENAMES, statement -> {
+                statement.setString(1, to.toString());
+                statement.setString(2, from.toString());
+            });
+            // The sessions of the old id stay behind; the choice is the player's and moves with them.
+            sql.update(DROP_SESSIONS, statement -> statement.setString(1, from.toString()));
+            sql.update(MOVE_CHOICE, statement -> {
                 statement.setString(1, to.toString());
                 statement.setString(2, from.toString());
             });

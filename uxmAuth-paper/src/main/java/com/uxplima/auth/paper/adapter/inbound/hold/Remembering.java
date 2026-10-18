@@ -2,6 +2,7 @@ package com.uxplima.auth.paper.adapter.inbound.hold;
 
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.UUID;
 
 import org.bukkit.entity.Player;
 
@@ -40,8 +41,28 @@ public final class Remembering {
             return;
         }
         String address = from.getAddress().getHostAddress();
-        String host =
-                sessions.held(player.getUniqueId()).map(Sessions.Held::host).orElse("");
-        scheduler.async(() -> remember.loggedIn(in.account().id(), address, host));
+        Sessions.Held held = sessions.held(player.getUniqueId()).orElse(null);
+        if (held == null) {
+            return;
+        }
+        UUID connection = player.getUniqueId();
+        scheduler.async(() -> {
+            remember.loggedIn(in.account().id(), address, held.host());
+            // A logout or a password change may have come between the login and this write, and ended the
+            // sessions before this one was written: then it goes again.
+            if (!stillHolds(connection, held.generation(), in)) {
+                remember.forget(in.account().id());
+            }
+        });
+    }
+
+    private boolean stillHolds(UUID connection, long generation, AuthState.Authenticated in) {
+        return sessions.held(connection)
+                .filter(now -> now.generation() == generation)
+                .map(Sessions.Held::state)
+                .filter(AuthState.Authenticated.class::isInstance)
+                .map(state -> ((AuthState.Authenticated) state).account().password())
+                .filter(password -> Objects.equals(password, in.account().password()))
+                .isPresent();
     }
 }

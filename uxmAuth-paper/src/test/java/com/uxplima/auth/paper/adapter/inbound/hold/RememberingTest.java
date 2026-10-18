@@ -108,4 +108,41 @@ final class RememberingTest {
         assertThat(world.remembered.holds(account(), address(), world.clock.instant()))
                 .isFalse();
     }
+
+    @Test
+    @DisplayName("a login the player left before it was written down is not remembered, nor one whose password changed")
+    void aLoginThatEndedIsNotRemembered() {
+        com.uxplima.uxmlib.scheduler.Scheduler late =
+                org.mockito.Mockito.mock(com.uxplima.uxmlib.scheduler.Scheduler.class);
+        Remembering remembering = new Remembering(world.remember, world.sessions, late);
+        world.registered(steve, "hunter22");
+        world.logIn.run(steve.getUniqueId(), Password.of("hunter22"), address()).join();
+
+        remembering.loggedIn(steve, authenticated());
+        world.logOut.run(steve.getUniqueId());
+        lastWrite(late).run();
+        assertThat(world.remembered.holds(account(), address(), world.clock.instant()))
+                .isFalse();
+
+        world.logIn.run(steve.getUniqueId(), Password.of("hunter22"), address()).join();
+        remembering.loggedIn(steve, authenticated());
+        world.change
+                .run(steve.getUniqueId(), Password.of("hunter22"), Password.of("fresh777"))
+                .join();
+        lastWrite(late).run();
+        assertThat(world.remembered.holds(account(), address(), world.clock.instant()))
+                .isFalse();
+    }
+
+    private com.uxplima.auth.domain.state.AuthState.Authenticated authenticated() {
+        return (com.uxplima.auth.domain.state.AuthState.Authenticated)
+                world.sessions.state(steve.getUniqueId()).orElseThrow();
+    }
+
+    /** The write the scheduler was last handed, which a real one would run a moment later. */
+    private static Runnable lastWrite(com.uxplima.uxmlib.scheduler.Scheduler late) {
+        org.mockito.ArgumentCaptor<Runnable> write = org.mockito.ArgumentCaptor.forClass(Runnable.class);
+        org.mockito.Mockito.verify(late, org.mockito.Mockito.atLeastOnce()).async(write.capture());
+        return write.getValue();
+    }
 }

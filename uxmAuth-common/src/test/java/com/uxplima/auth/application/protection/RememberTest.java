@@ -97,4 +97,31 @@ final class RememberTest {
 
         assertThat(remember().resumes(STEVE, HOME, PLAY)).isFalse();
     }
+
+    @Test
+    @DisplayName("while the operator lists shared-address hosts, a host nobody knows counts as one of them")
+    void anUnknownHostCountsAsShared() {
+        mode = Remember.Mode.EVERYONE;
+        remember().loggedIn(STEVE, HOME, "");
+        assertThat(kept.until).isEmpty();
+
+        remember().loggedIn(STEVE, HOME, PLAY);
+        assertThat(remember().resumes(STEVE, HOME, "")).isFalse();
+        assertThat(remember().resumes(STEVE, HOME, PLAY)).isTrue();
+    }
+
+    @Test
+    @DisplayName("with no shared-address host listed, a host nobody knows is an ordinary one")
+    void anUnknownHostWithoutSharedHosts() {
+        mode = Remember.Mode.EVERYONE;
+        Remember plain = new Remember(
+                kept,
+                () -> new Remember.Settings(mode, Duration.ofMinutes(60)),
+                () -> new HostPatterns(List.of()),
+                () -> clock.instant());
+
+        plain.loggedIn(STEVE, HOME, "");
+
+        assertThat(plain.resumes(STEVE, HOME, "")).isTrue();
+    }
 }

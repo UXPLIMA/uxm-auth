@@ -3,10 +3,13 @@ package com.uxplima.auth.velocity.adapter.inbound;
 import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Function;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.Remember;
+import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.state.AuthMethod;
@@ -34,6 +37,7 @@ public final class DoorListener {
     /** Below every plugin that leaves the default, so a decision another plugin made is seen. */
     private static final short LATE = -1000;
 
+    private final Function<UUID, Optional<Account>> accounts;
     private final Remember remember;
     private final Admission admission;
     private final ProxyDoor door;
@@ -44,17 +48,20 @@ public final class DoorListener {
     /**
      * @param admission the rules a connection meets before its name is read
      * @param remember the sessions that let a player back from the same address in without the password
+     * @param accounts the account under an id, which a session is kept by
      */
     public DoorListener(
             ProxyDoor door,
             Admission admission,
             Remember remember,
+            Function<UUID, Optional<Account>> accounts,
             ProxySessions sessions,
             DoorWords words,
             Logger logger) {
         this.door = Objects.requireNonNull(door, "door");
         this.admission = Objects.requireNonNull(admission, "admission");
         this.remember = Objects.requireNonNull(remember, "remember");
+        this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.words = Objects.requireNonNull(words, "words");
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -180,8 +187,14 @@ public final class DoorListener {
         sessions.waiting(player.getUniqueId(), new Claim.Waiting(usual.unverified(), usual.explain(), usual.marked()));
         String host =
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse("");
-        if (remember.resumes(
-                player.getUniqueId(), player.getRemoteAddress().getAddress().getHostAddress(), host)) {
+        // Only the account this very name holds, with a password, is let in by a session kept under its id.
+        boolean resumed = accounts.apply(player.getUniqueId())
+                .filter(account -> account.name().value().equals(player.getUsername()))
+                .filter(account -> account.password() != null)
+                .filter(account -> remember.resumes(
+                        account.id(), player.getRemoteAddress().getAddress().getHostAddress(), host))
+                .isPresent();
+        if (resumed) {
             sessions.loggedIn(player.getUniqueId(), AuthMethod.SESSION);
         }
     }

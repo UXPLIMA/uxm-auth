@@ -237,6 +237,29 @@ final class SqlAccountRepositoryTest {
     }
 
     @Test
+    @DisplayName("a deleted account takes its remembered sessions with it, and a moved one leaves them behind")
+    void sessionsGoWithTheAccount() {
+        Account steve = cracked("Steve", "10.0.0.1");
+        Account alex = cracked("Alex", "10.0.0.1");
+        repository.insert(steve);
+        repository.insert(alex);
+        SqlRememberedSessions sessions = new SqlRememberedSessions(database);
+        java.time.Instant now = java.time.Instant.parse("2026-10-18T10:00:00Z");
+        sessions.remember(steve.id(), "10.0.0.1", now.plusSeconds(60));
+        sessions.remember(alex.id(), "10.0.0.1", now.plusSeconds(60));
+        sessions.choose(alex.id(), true);
+        UUID fresh = UUID.randomUUID();
+
+        repository.delete(steve.id());
+        repository.moveId(alex.id(), fresh);
+
+        assertThat(sessions.holds(steve.id(), "10.0.0.1", now)).isFalse();
+        assertThat(sessions.holds(alex.id(), "10.0.0.1", now)).isFalse();
+        assertThat(sessions.holds(fresh, "10.0.0.1", now)).isFalse();
+        assertThat(sessions.choice(fresh)).contains(true);
+    }
+
+    @Test
     @DisplayName("a name nobody registered finds nothing")
     void anUnknownNameFindsNothing() {
         assertThat(repository.findByName(new PlayerName("Nobody"))).isEmpty();

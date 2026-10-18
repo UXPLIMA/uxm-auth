@@ -109,7 +109,8 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().sessions(),
                 () -> settings.current().protection().sharedHosts(),
                 clock::instant);
-        ProxySessions sessions = listen(door, settings, words, clock, new SqlLastServers(database, clock), remember);
+        ProxySessions sessions =
+                listen(door, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
         waiting.open(settings, accounts, words, sessions, remember);
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
@@ -124,7 +125,8 @@ final class ProxyGraph implements AutoCloseable {
             Messages words,
             Clock clock,
             LastServers lastServers,
-            Remember remember) {
+            Remember remember,
+            SqlAccountRepository accounts) {
         ProxySessions sessions = new ProxySessions();
         Supplier<Optional<Claims>> claims = claims(settings);
         RouteListener routes = new RouteListener(
@@ -138,6 +140,7 @@ final class ProxyGraph implements AutoCloseable {
                 door,
                 new Admission(() -> settings.current().protection().sharedHosts(), List.of()),
                 remember,
+                accounts::findById,
                 sessions,
                 new DoorWords(words),
                 logger));

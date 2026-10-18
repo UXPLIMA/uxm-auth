@@ -22,6 +22,11 @@ public final class HostPatterns {
                 .toList();
     }
 
+    /** Whether no host is listed. */
+    public boolean isEmpty() {
+        return patterns.isEmpty();
+    }
+
     /** Whether the host a client joined through is one of these. */
     public boolean matches(String host) {
         String plain = plain(Objects.requireNonNull(host, "host"));
