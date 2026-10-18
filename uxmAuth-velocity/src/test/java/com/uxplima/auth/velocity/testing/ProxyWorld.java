@@ -35,6 +35,7 @@ import com.uxplima.auth.domain.hash.Argon2idHasher;
 import com.uxplima.auth.domain.hash.BcryptHasher;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.NamePolicy;
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.DomainMark;
@@ -118,10 +119,36 @@ public final class ProxyWorld implements AutoCloseable {
     public ConflictStrategy conflict = ConflictStrategy.RENAME;
     public UuidScheme scheme = UuidScheme.KEEP_FIRST;
 
+    /** The codes of the second step on this proxy: six digits every 30 seconds, one step either side. */
+    public static final com.uxplima.auth.domain.factor.Totp TOTP =
+            new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1);
+
+    public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
+    public final com.uxplima.auth.application.factor.SecondStep secondStep;
+
+    /** Which ways in ask the code on this proxy; a test changes it. */
+    public com.uxplima.auth.application.factor.SecondStep.Settings stepSettings =
+            new com.uxplima.auth.application.factor.SecondStep.Settings(true, false, 3);
+
     public ProxyWorld(Path folder) {
         this.database = AuthDatabase.open(
                 new PluginSettings.Storage("jdbc:sqlite:" + folder.resolve("accounts.db"), "", "", 1), "proxy-test");
         this.accounts = new SqlAccountRepository(database);
+        this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
+                database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("network"), clock);
+        this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
+    }
+
+    /** Turns the app on for the account under this name, and answers its secret. */
+    public com.uxplima.auth.domain.factor.TotpSecret appOn(PlayerName name) {
+        com.uxplima.auth.domain.factor.TotpSecret secret = new com.uxplima.auth.domain.factor.TotpSecret(new byte[20]);
+        factors.setApp(accounts.findByName(name).orElseThrow().id(), secret);
+        return secret;
+    }
+
+    /** The app's code now for this secret. */
+    public String codeNow(com.uxplima.auth.domain.factor.TotpSecret secret) {
+        return TOTP.code(secret.bytes(), TOTP.step(clock.instant()));
     }
 
     /** The door, built with what the test set. */
@@ -166,7 +193,7 @@ public final class ProxyWorld implements AutoCloseable {
         NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
         return new LimboLogin(
                 new ReadTheName(accounts, () -> names, () -> 3),
-                new LogIn(accounts, hashing, lane, sessions, clock, failures, () -> policy, captchas),
+                new LogIn(accounts, hashing, lane, sessions, clock, failures, () -> policy, captchas, secondStep),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -192,8 +219,20 @@ public final class ProxyWorld implements AutoCloseable {
                         () -> Set.of("login", "l", "giris"),
                         () -> Set.of("register", "reg"),
                         () -> Set.of("changepassword", "cp"),
-                        () -> Set.of("captcha", "dogrula")),
-                () -> asksTwice);
+                        () -> Set.of("captcha", "dogrula"),
+                        () -> Set.of("2fa", "dogrulama")),
+                () -> asksTwice,
+                secondStep,
+                codes(failures));
+    }
+
+    /** The code of the second step on this proxy, checked at once. */
+    private LimboLogin.CodeCheck codes(LogIn.Failures failures) {
+        com.uxplima.auth.application.factor.ConfirmFactor confirm =
+                new com.uxplima.auth.application.factor.ConfirmFactor(
+                        accounts, factors, sessions, () -> TOTP, failures, clock::instant);
+        return (id, code, address) ->
+                java.util.concurrent.CompletableFuture.completedFuture(confirm.confirm(id, code, address));
     }
 
     @Override

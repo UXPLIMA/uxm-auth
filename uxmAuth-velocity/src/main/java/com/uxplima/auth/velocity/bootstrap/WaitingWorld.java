@@ -4,6 +4,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -19,9 +20,12 @@ import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.factor.ConfirmFactor;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.BreachedPasswords;
+import com.uxplima.auth.application.port.Factors;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.application.protection.Captchas;
@@ -103,14 +107,16 @@ final class WaitingWorld implements AutoCloseable {
         Set<String> register = CommandFile.labels(commands, "register");
         Set<String> change = CommandFile.labels(commands, "changepassword");
         Set<String> captcha = CommandFile.labels(commands, "captcha");
-        LimboLogin.Words labels = new LimboLogin.Words(() -> login, () -> register, () -> change, () -> captcha);
+        Set<String> factor = CommandFile.labels(commands, "2fa");
+        LimboLogin.Words labels =
+                new LimboLogin.Words(() -> login, () -> register, () -> change, () -> captcha, () -> factor);
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
         LimboWait wait = new LimboWait(
                 LimboWorld.open(
                         limboApi,
                         folder,
                         settings.current().network(),
-                        metas(List.of(login, register, change, captcha)),
+                        metas(List.of(login, register, change, captcha, factor)),
                         logger),
                 network::waitsAtTheProxy,
                 (player, exit) -> visit(passwords, network, guards.remember(), player, exit),
@@ -132,7 +138,9 @@ final class WaitingWorld implements AutoCloseable {
             RegisterAccount.Cap cap,
             BreachedPasswords breaches,
             NetworkEvents events,
-            RememberedSessions remembered) {}
+            RememberedSessions remembered,
+            Factors factors,
+            SecondStep secondStep) {}
 
     private LimboLogin passwords(
             PluginSettings settings,
@@ -162,7 +170,8 @@ final class WaitingWorld implements AutoCloseable {
                         clock,
                         guards.failures(),
                         () -> settings.current().passwordPolicy(),
-                        captchas),
+                        captchas,
+                        guards.secondStep()),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -178,7 +187,26 @@ final class WaitingWorld implements AutoCloseable {
                 sessions,
                 words,
                 labels,
-                () -> settings.current().passwords().confirmOnRegister());
+                () -> settings.current().passwords().confirmOnRegister(),
+                guards.secondStep(),
+                codes(settings, accounts, sessions, guards, hashingLane));
+    }
+
+    /** The code of the second step, checked on the hashing lane: the factor table is read. */
+    private static LimboLogin.CodeCheck codes(
+            PluginSettings settings,
+            SqlAccountRepository accounts,
+            Sessions sessions,
+            Guards guards,
+            HashingLane lane) {
+        ConfirmFactor confirm = new ConfirmFactor(
+                accounts,
+                guards.factors(),
+                sessions,
+                () -> settings.current().secondFactor().setup().totp(),
+                guards.failures(),
+                Instant::now);
+        return (id, code, address) -> lane.submit(() -> confirm.confirm(id, code, address));
     }
 
     /** The hashers of the waiting world and the lane they run on. */

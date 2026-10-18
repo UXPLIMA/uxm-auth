@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.account.Account;
@@ -44,6 +45,7 @@ public final class DoorListener {
     private final ProxySessions sessions;
     private final DoorWords words;
     private final Logger logger;
+    private final SecondStep secondStep;
 
     /**
      * @param admission the rules a connection meets before its name is read
@@ -58,6 +60,19 @@ public final class DoorListener {
             ProxySessions sessions,
             DoorWords words,
             Logger logger) {
+        this(door, admission, remember, accounts, sessions, words, logger, SecondStep.NONE);
+    }
+
+    /** @param secondStep whether a session or a premium name lets the player in, or only past the password */
+    public DoorListener(
+            ProxyDoor door,
+            Admission admission,
+            Remember remember,
+            Function<UUID, Optional<Account>> accounts,
+            ProxySessions sessions,
+            DoorWords words,
+            Logger logger,
+            SecondStep secondStep) {
         this.door = Objects.requireNonNull(door, "door");
         this.admission = Objects.requireNonNull(admission, "admission");
         this.remember = Objects.requireNonNull(remember, "remember");
@@ -65,6 +80,7 @@ public final class DoorListener {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.words = Objects.requireNonNull(words, "words");
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
     }
 
     @Subscribe(priority = LATE)
@@ -167,7 +183,10 @@ public final class DoorListener {
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Premium premium -> {
-                        sessions.loggedIn(player.getUniqueId(), premium.state().method());
+                        passed(
+                                player,
+                                premium.state().account(),
+                                premium.state().method());
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Untouched untouched -> {
@@ -188,14 +207,20 @@ public final class DoorListener {
         String host =
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse("");
         // Only the account this very name holds, with a password, is let in by a session kept under its id.
-        boolean resumed = accounts.apply(player.getUniqueId())
+        accounts.apply(player.getUniqueId())
                 .filter(account -> account.name().value().equals(player.getUsername()))
                 .filter(account -> account.password() != null)
                 .filter(account -> remember.resumes(
                         account.id(), player.getRemoteAddress().getAddress().getHostAddress(), host))
-                .isPresent();
-        if (resumed) {
-            sessions.loggedIn(player.getUniqueId(), AuthMethod.SESSION);
+                .ifPresent(account -> passed(player, account, AuthMethod.SESSION));
+    }
+
+    /** A way in passed: the player is logged in, or past the password only, owing the app's code. */
+    private void passed(Player player, Account account, AuthMethod method) {
+        if (secondStep.asks(account, method)) {
+            sessions.code(player.getUniqueId(), method);
+        } else {
+            sessions.loggedIn(player.getUniqueId(), method);
         }
     }
 

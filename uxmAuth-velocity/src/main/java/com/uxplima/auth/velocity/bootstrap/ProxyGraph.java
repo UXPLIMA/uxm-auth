@@ -18,9 +18,11 @@ import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.PwnedPasswords;
+import com.uxplima.auth.adapter.outbound.SecretSeal;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
@@ -28,6 +30,7 @@ import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
 import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
@@ -100,6 +103,11 @@ final class ProxyGraph implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         SqlAccountRepository accounts = new SqlAccountRepository(database);
         ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
+        NetworkSecret secret = secret(settings);
+        // Sealed with the secret every member shares, so a code set up on any server reads here.
+        SqlFactors factors = new SqlFactors(database, SecretSeal.fromPassphrase(secret.encoded()), clock);
+        SecondStep secondStep =
+                new SecondStep(factors, () -> settings.current().secondFactor().step());
         SqlRememberedSessions remembered = new SqlRememberedSessions(database, clock);
         Remember remember = new Remember(
                 remembered,
@@ -113,9 +121,21 @@ final class ProxyGraph implements AutoCloseable {
                 clock::instant);
         Admission admission = admission(settings, bans, watchCountries(settings, clock), clock);
         ProxySessions sessions = listen(
-                door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
+                door,
+                admission,
+                settings,
+                words,
+                clock,
+                new SqlLastServers(database, clock),
+                remember,
+                accounts,
+                new Steps(secret, secondStep));
         waiting.open(
-                settings, accounts, words, sessions, guards(settings, accounts, remember, bans, clock, remembered));
+                settings,
+                accounts,
+                words,
+                sessions,
+                guards(settings, accounts, remember, bans, clock, remembered, new Codes(factors, secondStep)));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
@@ -126,7 +146,8 @@ final class ProxyGraph implements AutoCloseable {
             Remember remember,
             AddressBans bans,
             Clock clock,
-            SqlRememberedSessions remembered) {
+            SqlRememberedSessions remembered,
+            Codes codes) {
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -137,7 +158,8 @@ final class ProxyGraph implements AutoCloseable {
                 PwnedPasswords.SERVICE,
                 () -> settings.current().passwordLists().breachCheck(),
                 logger::warn);
-        return new WaitingWorld.Guards(remember, bans::failed, cap::full, breaches, events, remembered);
+        return new WaitingWorld.Guards(
+                remember, bans::failed, cap::full, breaches, events, remembered, codes.factors(), codes.step());
     }
 
     /** The door's rules, in order: the country, a banned address, then too many connections from one. */
@@ -212,12 +234,20 @@ final class ProxyGraph implements AutoCloseable {
             Clock clock,
             LastServers lastServers,
             Remember remember,
-            SqlAccountRepository accounts) {
+            SqlAccountRepository accounts,
+            Steps steps) {
         ProxySessions sessions = new ProxySessions();
-        Supplier<Optional<Claims>> claims = claims(settings);
+        Supplier<Optional<Claims>> claims = claims(settings, steps.secret());
         RouteListener routes = routes(sessions, settings, lastServers);
         register(new DoorListener(
-                door, admission, remember, accounts::findById, sessions, new DoorWords(words), logger));
+                door,
+                admission,
+                remember,
+                accounts::findById,
+                sessions,
+                new DoorWords(words),
+                logger,
+                steps.secondStep()));
         register(new HoldListener(
                 sessions,
                 proxy.getCommandManager(),
@@ -277,10 +307,10 @@ final class ProxyGraph implements AutoCloseable {
     }
 
     /**
-     * The signer of the claims every server behind this proxy reads. The secret is the one in config.conf, or the
-     * one this proxy made on its first start, which the console points the operator to.
+     * The network secret: the one in config.conf, or the one this proxy made on its first start, which the console
+     * points the operator to. It signs the claims every server behind this proxy reads, and seals the app secrets.
      */
-    private Supplier<Optional<Claims>> claims(PluginSettings settings) {
+    private NetworkSecret secret(PluginSettings settings) {
         ProxySecret.Loaded loaded =
                 ProxySecret.loadOrCreate(folder, settings.current().network().secret());
         if (loaded.created()) {
@@ -289,9 +319,19 @@ final class ProxyGraph implements AutoCloseable {
                             + " config.conf on every server behind this proxy, and set network.enabled to true there.",
                     loaded.file());
         }
-        NetworkSecret secret = loaded.secret();
+        return loaded.secret();
+    }
+
+    /** The signer of the claims every server behind this proxy reads. */
+    private static Supplier<Optional<Claims>> claims(PluginSettings settings, NetworkSecret secret) {
         return () -> Optional.of(new Claims(secret, settings.current().network().claimFor()));
     }
+
+    /** The network secret and the step after the password, which the door and the claims read. */
+    private record Steps(NetworkSecret secret, SecondStep secondStep) {}
+
+    /** The factor table and the step after the password, which the waiting world reads. */
+    private record Codes(SqlFactors factors, SecondStep step) {}
 
     /** The decision at the pre-login: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(

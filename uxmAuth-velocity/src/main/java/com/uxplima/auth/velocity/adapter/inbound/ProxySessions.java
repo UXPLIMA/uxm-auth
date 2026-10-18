@@ -48,6 +48,24 @@ public final class ProxySessions {
         sessions.put(Objects.requireNonNull(id, "id"), new Session(NOTHING, false, NOTHING, false));
     }
 
+    /** The door let the player past the password by this method, and the app's code is owed. */
+    public void code(UUID id, AuthMethod method) {
+        Objects.requireNonNull(method, "method");
+        sessions.compute(
+                Objects.requireNonNull(id, "id"),
+                (key, session) -> session == null
+                        ? new Session(new Claim.Code(method), false, NOTHING, true)
+                        : new Session(new Claim.Code(method), false, session.door(), session.ours()));
+    }
+
+    /** The way the door let a player who owes the app's code past the password. */
+    public Optional<AuthMethod> passed(UUID id) {
+        Session session = sessions.get(Objects.requireNonNull(id, "id"));
+        return session != null && session.standing() instanceof Claim.Code code
+                ? Optional.of(code.method())
+                : Optional.empty();
+    }
+
     /** The player logged in, by this method. */
     public void loggedIn(UUID id, AuthMethod method) {
         login(id, method, false);
@@ -101,10 +119,12 @@ public final class ProxySessions {
                 .map(Session::door);
     }
 
-    /** Whether the player waits for a password the proxy itself takes. */
+    /** Whether the player waits for a password, or the app's code, that the proxy itself takes. */
     public boolean waitsAtTheProxy(UUID id) {
         Session session = sessions.get(Objects.requireNonNull(id, "id"));
-        return session != null && session.ours() && session.standing() instanceof Claim.Waiting;
+        return session != null
+                && session.ours()
+                && (session.standing() instanceof Claim.Waiting || session.standing() instanceof Claim.Code);
     }
 
     /** Whether the player is logged in. */

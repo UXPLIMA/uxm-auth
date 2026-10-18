@@ -20,9 +20,11 @@ import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.ConflictStrategy;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.velocity.testing.ProxyWorld;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.LoginEvent;
@@ -71,7 +73,14 @@ final class DoorListenerTest {
 
     private DoorListener listener() {
         return new DoorListener(
-                world.door(), admission, remember, world.accounts::findById, sessions, world.words, logger);
+                world.door(),
+                admission,
+                remember,
+                world.accounts::findById,
+                sessions,
+                world.words,
+                logger,
+                world.secondStep);
     }
 
     private PreLoginEvent preLoginOf(String name) {
@@ -411,6 +420,57 @@ final class DoorListenerTest {
         assertThat(loggedInFrom(FROM, steve)).isTrue();
         assertThat(loggedInFrom(new InetSocketAddress("198.51.100.2", 40002), steve))
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("a session of an account with the app lets the player past the password only: the code is owed")
+    void aSessionOfAnAccountWithTheAppOwesTheCode() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        AccountRepository.Insert unused = world.accounts.insert(new Account(
+                steve,
+                new PlayerName("Steve"),
+                AccountKind.CRACKED,
+                null,
+                world.hashing.hash(com.uxplima.auth.domain.password.Password.of("hunter22")),
+                world.clock.instant(),
+                "10.0.0.1",
+                null,
+                null));
+        world.appOn(new PlayerName("Steve"));
+        remembered.remember(
+                steve, FROM.getAddress().getHostAddress(), world.clock.instant().plusSeconds(60));
+
+        assertThat(loggedInFrom(FROM, steve)).isFalse();
+        assertThat(sessions.nextStanding(steve)).contains(new Claim.Code(AuthMethod.SESSION));
+    }
+
+    @Test
+    @DisplayName(
+            "a proved premium player with the app is logged in while premium skips, and owes the code once it does not")
+    void aPremiumPlayerOwesTheCodeWhenPremiumDoesNotSkip() {
+        assertThat(premiumLogin()).isEqualTo(new Claim.LoggedIn(AuthMethod.PREMIUM));
+        world.appOn(new PlayerName("Notch"));
+        assertThat(premiumLogin()).isEqualTo(new Claim.LoggedIn(AuthMethod.PREMIUM));
+
+        world.stepSettings = new com.uxplima.auth.application.factor.SecondStep.Settings(false, false, 3);
+
+        assertThat(premiumLogin()).isEqualTo(new Claim.Code(AuthMethod.PREMIUM));
+    }
+
+    private Claim.Standing premiumLogin() {
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Notch"));
+        listener.profile(
+                new GameProfileRequestEvent(connection, new GameProfile(ProxyWorld.MOJANG, "Notch", List.of()), true));
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(FROM);
+        when(player.getUniqueId()).thenReturn(ProxyWorld.MOJANG);
+        when(player.getUsername()).thenReturn("Notch");
+        listener.login(new LoginEvent(player, ""));
+        Claim.Standing standing = sessions.nextStanding(ProxyWorld.MOJANG).orElseThrow();
+        listener.left(new DisconnectEvent(player, DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
+        return standing;
     }
 
     @Test

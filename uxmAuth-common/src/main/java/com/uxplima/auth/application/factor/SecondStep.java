@@ -85,4 +85,21 @@ public final class SecondStep {
                 ? new AuthState.Authenticated(account, method)
                 : new AuthState.Replacing(account, mustReplace);
     }
+
+    /**
+     * Where a connection stands whose first step the proxy saw pass this way, and which it says owes the code: it
+     * waits for the code, unless the account has no app any more. The operator's skips were the proxy's to read.
+     */
+    public AuthState awaiting(Account account, AuthMethod method) {
+        Objects.requireNonNull(account, "account");
+        Objects.requireNonNull(method, "method");
+        return hasApp.test(account.id())
+                ? new AuthState.SecondFactor(
+                        account,
+                        method,
+                        Set.of(FactorKind.APP),
+                        Attempts.fresh(settings.get().attempts()),
+                        null)
+                : new AuthState.Authenticated(account, method);
+    }
 }

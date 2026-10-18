@@ -14,6 +14,9 @@ import org.junit.jupiter.api.io.TempDir;
 /** Which key seals the second factor's secrets: the server's own file alone, the network's secret on a network. */
 final class FactorGraphTest {
 
+    /** A network secret as the proxy writes one, with the space a copy and paste can leave around it. */
+    private static final String NETWORK = " " + "n".repeat(43) + " ";
+
     private static final byte[] SECRET = "12345678901234567890".getBytes(StandardCharsets.US_ASCII);
 
     @TempDir
@@ -25,11 +28,11 @@ final class FactorGraphTest {
         String sealedAlone = FactorGraph.seal(false, "", folder).seal(SECRET);
         assertThat(folder.resolve(FactorGraph.KEY_FILE)).exists();
 
-        String sealedOnNetwork = FactorGraph.seal(true, "net secret", folder).seal(SECRET);
+        String sealedOnNetwork = FactorGraph.seal(true, NETWORK, folder).seal(SECRET);
 
-        assertThat(SecretSeal.fromPassphrase("net secret").open(sealedOnNetwork))
+        assertThat(SecretSeal.fromPassphrase(NETWORK.strip()).open(sealedOnNetwork))
                 .isEqualTo(SECRET);
-        assertThatThrownBy(() -> SecretSeal.fromPassphrase("net secret").open(sealedAlone))
+        assertThatThrownBy(() -> SecretSeal.fromPassphrase(NETWORK.strip()).open(sealedAlone))
                 .isInstanceOf(SecretSeal.Unreadable.class);
     }
 
@@ -38,14 +41,13 @@ final class FactorGraphTest {
     void aServerThatJoinsANetworkKeepsItsSecrets() {
         String sealedAlone = FactorGraph.seal(false, "", folder).seal(SECRET);
 
-        assertThat(FactorGraph.seal(true, "net secret", folder).open(sealedAlone))
-                .isEqualTo(SECRET);
+        assertThat(FactorGraph.seal(true, NETWORK, folder).open(sealedAlone)).isEqualTo(SECRET);
     }
 
     @Test
     @DisplayName("a network member that never ran alone makes no key file")
     void aMemberMakesNoKeyFile() {
-        FactorGraph.seal(true, "net secret", folder);
+        FactorGraph.seal(true, NETWORK, folder);
 
         assertThat(folder.resolve(FactorGraph.KEY_FILE)).doesNotExist();
     }

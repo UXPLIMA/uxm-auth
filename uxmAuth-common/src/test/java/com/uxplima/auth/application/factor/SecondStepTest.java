@@ -98,4 +98,18 @@ final class SecondStepTest {
         assertThat(SecondStep.NONE.after(steve, AuthMethod.PASSWORD, null))
                 .isEqualTo(new AuthState.Authenticated(steve, AuthMethod.PASSWORD));
     }
+
+    @Test
+    @DisplayName("a player the proxy says owes the code waits for it, unless the app went off meanwhile")
+    void theProxysWordIsKept() {
+        assertThat(step.awaiting(steve, AuthMethod.SESSION))
+                .isEqualTo(new AuthState.Authenticated(steve, AuthMethod.SESSION));
+
+        appOn();
+        settings = new SecondStep.Settings(true, true, 3);
+
+        assertThat(step.awaiting(steve, AuthMethod.SESSION))
+                .isEqualTo(new AuthState.SecondFactor(
+                        steve, AuthMethod.SESSION, Set.of(FactorKind.APP), Attempts.fresh(3), null));
+    }
 }

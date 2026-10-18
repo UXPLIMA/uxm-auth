@@ -33,11 +33,22 @@ public record Claim(UUID id, String name, Standing standing, Instant issued, Str
      */
     public record Waiting(boolean unverified, boolean explain, boolean marked) implements Standing {}
 
+    /**
+     * The first step passed, by this method, and the app's code is owed: the server asks the code, never the
+     * password.
+     */
+    public record Code(AuthMethod method) implements Standing {
+        public Code {
+            Objects.requireNonNull(method, "method");
+        }
+    }
+
     private static final String VERSION = "v1";
     private static final String SEPARATOR = "|";
     private static final int PARTS = 6;
     private static final String LOGGED_IN = "L:";
     private static final String WAITING = "W:";
+    private static final String CODE = "C:";
 
     public Claim {
         Objects.requireNonNull(id, "id");
@@ -66,6 +77,7 @@ public record Claim(UUID id, String name, Standing standing, Instant issued, Str
             case LoggedIn in -> LOGGED_IN + in.method().name();
             case Waiting waiting ->
                 WAITING + flag(waiting.unverified()) + flag(waiting.explain()) + flag(waiting.marked());
+            case Code code -> CODE + code.method().name();
         };
     }
 
@@ -95,6 +107,9 @@ public record Claim(UUID id, String name, Standing standing, Instant issued, Str
     private static Optional<Standing> standingOf(String written) {
         if (written.startsWith(LOGGED_IN)) {
             return Optional.of(new LoggedIn(AuthMethod.valueOf(written.substring(LOGGED_IN.length()))));
+        }
+        if (written.startsWith(CODE)) {
+            return Optional.of(new Code(AuthMethod.valueOf(written.substring(CODE.length()))));
         }
         String flags = written.startsWith(WAITING) ? written.substring(WAITING.length()) : "";
         if (!flags.matches("[01]{3}")) {

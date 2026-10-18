@@ -12,6 +12,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
@@ -280,5 +281,73 @@ final class LimboLoginTest {
 
         assertThat(told(said(login, "/register hunter22 hunter22"))).contains("Too many accounts");
         assertThat(world.accounts.findByName(NAME)).isEmpty();
+    }
+
+    private com.uxplima.auth.domain.factor.TotpSecret registeredWithTheApp() throws Exception {
+        LimboLogin first = world.limboLogin(true);
+        first.arrive(READER, STEVE, NAME, NONE);
+        said(first, "/register hunter22 hunter22");
+        first.leave(STEVE);
+        return world.appOn(NAME);
+    }
+
+    @Test
+    @DisplayName("a right password on an account with the app asks the code, and /2fa with the app's code lets in")
+    void thePasswordThenTheCode() throws Exception {
+        com.uxplima.auth.domain.factor.TotpSecret secret = registeredWithTheApp();
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/login hunter22")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_CODE_NEEDED)));
+        assertThat(login.registered(STEVE))
+                .as("the time to log in, not to register, runs")
+                .isTrue();
+        assertThat(plain(login.reminder(READER, STEVE)))
+                .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_CODE_NEEDED)));
+        assertThat(told(said(login, "/2fa 000000")))
+                .isEqualTo(plain(world.messages.render(
+                        READER, Keys.FACTOR_LOGIN_WRONG, com.uxplima.uxmlib.text.Text.placeholder("left", "2"))));
+        assertThat(said(login, "/2fa " + world.codeNow(secret)))
+                .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.PASSWORD));
+    }
+
+    @Test
+    @DisplayName("wrong codes run out like wrong passwords, and the last sends the player away")
+    void wrongCodesRunOut() throws Exception {
+        registeredWithTheApp();
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+        said(login, "/login hunter22");
+
+        said(login, "/2fa 000000");
+        said(login, "/2fa 000000");
+
+        assertThat(said(login, "/2fa 000000")).isInstanceOf(LimboLogin.Outcome.Out.class);
+    }
+
+    @Test
+    @DisplayName("a player the door let past the password owes only the code, and it lets them in by the door's way")
+    void aPlayerOwingTheCodeTypesOnlyTheCode() throws Exception {
+        com.uxplima.auth.domain.factor.TotpSecret secret = registeredWithTheApp();
+        LimboLogin login = world.limboLogin(true);
+
+        assertThat(plain(login.arrive(READER, STEVE, NAME, NONE, "", java.util.Optional.of(AuthMethod.SESSION))
+                        .getLast()))
+                .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_CODE_NEEDED)));
+        assertThat(told(said(login, "/login hunter22")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_CODE_NEEDED)));
+        assertThat(said(login, "/2fa " + world.codeNow(secret)))
+                .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.SESSION));
+    }
+
+    @Test
+    @DisplayName("/2fa from a player no code is asked of says so")
+    void noCodeIsAsked() throws Exception {
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/2fa 123456")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_NOTHING_ASKED)));
     }
 }

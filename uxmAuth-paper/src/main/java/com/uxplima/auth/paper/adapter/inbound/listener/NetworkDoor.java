@@ -44,6 +44,18 @@ public final class NetworkDoor {
             }
         }
 
+        /**
+         * The proxy saw this account's first step pass by this method, and the app's code is owed, on the visit its
+         * claim named.
+         */
+        record Code(Account account, AuthMethod method, String visit) implements Reading {
+            public Code {
+                Objects.requireNonNull(account, "account");
+                Objects.requireNonNull(method, "method");
+                Objects.requireNonNull(visit, "visit");
+            }
+        }
+
         /** The player waits for a password, with the flags the proxy's door decided, on the visit its claim named. */
         record Waiting(Claim.Waiting flags, String visit) implements Reading {
             public Waiting {
@@ -108,6 +120,10 @@ public final class NetworkDoor {
             case Claim.LoggedIn in ->
                 accounts.apply(claim.id())
                         .<Reading>map(account -> new Reading.LoggedIn(account, in.method(), claim.nonce()))
+                        .orElseGet(() -> refused(name, "NO_ACCOUNT"));
+            case Claim.Code code ->
+                accounts.apply(claim.id())
+                        .<Reading>map(account -> new Reading.Code(account, code.method(), claim.nonce()))
                         .orElseGet(() -> refused(name, "NO_ACCOUNT"));
         };
     }

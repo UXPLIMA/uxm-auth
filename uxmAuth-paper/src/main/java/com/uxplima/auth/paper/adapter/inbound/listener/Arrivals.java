@@ -192,6 +192,13 @@ public final class Arrivals {
                         null,
                         List.of(),
                         Optional.of(in.visit()));
+            case NetworkDoor.Reading.Code code ->
+                new Arrival.Opens(
+                        id,
+                        secondStep.awaiting(code.account(), code.method()),
+                        null,
+                        List.of(),
+                        Optional.of(code.visit()));
             case NetworkDoor.Reading.Waiting waiting ->
                 usualArrival(
                         event,

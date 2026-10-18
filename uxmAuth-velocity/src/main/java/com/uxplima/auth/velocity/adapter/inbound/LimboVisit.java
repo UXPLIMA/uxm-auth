@@ -71,7 +71,8 @@ public final class LimboVisit {
 
     /** The player arrived in the waiting world. */
     public void arrive() {
-        login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING), host).forEach(exit::tell);
+        login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING), host, sessions.passed(id))
+                .forEach(exit::tell);
         login.standing(reader, id).ifPresent(this::answer);
     }
 

@@ -95,7 +95,8 @@ final class NetworkArrivalsTest {
                 scheme,
                 new NetworkDoor(() -> Optional.of(claims), world.accounts::findById, world.clock, logger),
                 com.uxplima.auth.application.protection.Admission.none(),
-                (account, address, host) -> true);
+                (account, address, host) -> true,
+                world.secondStep);
     }
 
     private AsyncPlayerPreLoginEvent arriving(UUID id, String name, Optional<String> claim) {
@@ -138,6 +139,41 @@ final class NetworkArrivalsTest {
         assertThat(event.getPlayerProfile().getProperties())
                 .extracting(ProfileProperty::getName)
                 .containsExactly("textures");
+    }
+
+    @Test
+    @DisplayName(
+            "a claim that the player owes the app's code waits for the code, never the password, by the proxy's way")
+    void aCodeClaimWaitsForTheCode() {
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.appOn(steve);
+        AsyncPlayerPreLoginEvent event = arriving(
+                steve.getUniqueId(),
+                "Steve",
+                Optional.of(signed(steve.getUniqueId(), "Steve", new Claim.Code(AuthMethod.SESSION))));
+
+        Arrivals.Arrival.Opens opened = opens(arrivals().arrive(event));
+
+        assertThat(opened.state())
+                .isInstanceOfSatisfying(
+                        AuthState.SecondFactor.class,
+                        waiting -> assertThat(waiting.method()).isEqualTo(AuthMethod.SESSION));
+        assertThat(opened.id()).isEqualTo(steve.getUniqueId());
+        assertThat(opened.visit()).contains("n0nce");
+    }
+
+    @Test
+    @DisplayName("a code claimed for an account this server cannot find turns the player away")
+    void aCodeForNoAccountIsRefused() {
+        UUID given = UUID.randomUUID();
+
+        assertThat(arrivals()
+                        .arrive(arriving(
+                                given,
+                                "Ghost",
+                                Optional.of(signed(given, "Ghost", new Claim.Code(AuthMethod.PREMIUM))))))
+                .isInstanceOf(Arrivals.Arrival.Refused.class);
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.uxplima.auth.application.factor.ConfirmFactor;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.factor.BedrockSetupForm;
@@ -120,7 +121,9 @@ final class FactorGraph {
         if (!networked) {
             return SecretSeal.fromKeyFile(file, new SecureRandom());
         }
-        SecretSeal shared = SecretSeal.fromPassphrase(secret);
+        // Read as the proxy reads its own, so a secret written with a stray space seals alike on both.
+        SecretSeal shared =
+                SecretSeal.fromPassphrase(NetworkSecret.parse(secret).encoded());
         return SecretSeal.readKeyFile(file).map(shared::openingAlso).orElse(shared);
     }
 }

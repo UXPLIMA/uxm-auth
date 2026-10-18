@@ -24,6 +24,8 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.factor.ConfirmFactor;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -75,18 +77,39 @@ public final class LimboLogin {
         }
     }
 
-    /** The words of /login, /register, /changepassword and /captcha, as commands.conf names them. */
+    /** The words of /login, /register, /changepassword, /captcha and /2fa, as commands.conf names them. */
     public record Words(
             Supplier<Set<String>> loginLabels,
             Supplier<Set<String>> registerLabels,
             Supplier<Set<String>> changeLabels,
-            Supplier<Set<String>> captchaLabels) {
+            Supplier<Set<String>> captchaLabels,
+            Supplier<Set<String>> factorLabels) {
         public Words {
             Objects.requireNonNull(loginLabels, "loginLabels");
             Objects.requireNonNull(registerLabels, "registerLabels");
             Objects.requireNonNull(changeLabels, "changeLabels");
             Objects.requireNonNull(captchaLabels, "captchaLabels");
+            Objects.requireNonNull(factorLabels, "factorLabels");
         }
+
+        /** The words, with no /2fa, for a waiting world that asks no code. */
+        public Words(
+                Supplier<Set<String>> loginLabels,
+                Supplier<Set<String>> registerLabels,
+                Supplier<Set<String>> changeLabels,
+                Supplier<Set<String>> captchaLabels) {
+            this(loginLabels, registerLabels, changeLabels, captchaLabels, Set::of);
+        }
+    }
+
+    /** Checks the code of the second step, off the thread the line arrived on: the factor table is read. */
+    @FunctionalInterface
+    public interface CodeCheck {
+        /** No code is asked, for a waiting world built without a factor table. */
+        CodeCheck NONE =
+                (id, code, address) -> CompletableFuture.completedFuture(new ConfirmFactor.Result.NotWaiting());
+
+        CompletableFuture<ConfirmFactor.Result> confirm(UUID connection, String code, String address);
     }
 
     private final ReadTheName names;
@@ -99,6 +122,8 @@ public final class LimboLogin {
     private final TimeWords times;
     private final Words words;
     private final BooleanSupplier asksTwice;
+    private final SecondStep secondStep;
+    private final CodeCheck codes;
 
     public LimboLogin(
             ReadTheName names,
@@ -110,6 +135,36 @@ public final class LimboLogin {
             Messages messages,
             Words words,
             BooleanSupplier asksTwice) {
+        this(
+                names,
+                logIn,
+                register,
+                change,
+                captchas,
+                sessions,
+                messages,
+                words,
+                asksTwice,
+                SecondStep.NONE,
+                CodeCheck.NONE);
+    }
+
+    /**
+     * @param secondStep where a player the door let past the password waits for the app's code
+     * @param codes checks the code of the second step
+     */
+    public LimboLogin(
+            ReadTheName names,
+            LogIn logIn,
+            RegisterAccount register,
+            ChangePassword change,
+            Captchas captchas,
+            Sessions sessions,
+            Messages messages,
+            Words words,
+            BooleanSupplier asksTwice,
+            SecondStep secondStep,
+            CodeCheck codes) {
         this.names = Objects.requireNonNull(names, "names");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.register = Objects.requireNonNull(register, "register");
@@ -120,6 +175,8 @@ public final class LimboLogin {
         this.times = new TimeWords(messages);
         this.words = Objects.requireNonNull(words, "words");
         this.asksTwice = Objects.requireNonNull(asksTwice, "asksTwice");
+        this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
+        this.codes = Objects.requireNonNull(codes, "codes");
     }
 
     /**
@@ -132,12 +189,26 @@ public final class LimboLogin {
 
     /** The same, through the host the player typed, which a wrong password is counted with. */
     public List<Component> arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door, String host) {
+        return arrive(reader, id, name, door, host, Optional.empty());
+    }
+
+    /**
+     * The same, for a player the door let past the password by this way, who owes only the app's code: the wait
+     * opens on the code.
+     */
+    public List<Component> arrive(
+            Audience reader, UUID id, PlayerName name, Claim.Waiting door, String host, Optional<AuthMethod> passed) {
         Objects.requireNonNull(reader, "reader");
+        Objects.requireNonNull(passed, "passed");
         sessions.close(Objects.requireNonNull(id, "id"));
         Objects.requireNonNull(door, "door");
         AuthState state = names.waiting(Objects.requireNonNull(name, "name"));
         if (door.unverified() && state instanceof AuthState.Unregistered unregistered) {
             state = new AuthState.Unregistered(unregistered.name(), true);
+        }
+        if (passed.isPresent() && state instanceof AuthState.Registered registered) {
+            AuthState owed = secondStep.awaiting(registered.account(), passed.get());
+            state = owed instanceof AuthState.SecondFactor ? owed : state;
         }
         sessions.open(id, state, UUID.randomUUID().toString(), Objects.requireNonNull(host, "host"));
         Component reminder = reminder(reader, id);
@@ -170,7 +241,35 @@ public final class LimboLogin {
         if (words.changeLabels().get().contains(label) && replacing(id)) {
             return replaced(reader, id, rest);
         }
+        if (words.factorLabels().get().contains(label) && rest.size() == 1) {
+            return coded(reader, id, rest.getFirst(), address);
+        }
         return CompletableFuture.completedFuture(new Outcome.Stay(reminder(reader, id)));
+    }
+
+    /** The code of the second step; a player no code is asked of is told it is not asked. */
+    private CompletableFuture<Outcome> coded(Audience reader, UUID id, String code, String address) {
+        return codes.confirm(id, code, address).thenApply(result -> coded(reader, id, result));
+    }
+
+    private Outcome coded(Audience reader, UUID id, ConfirmFactor.Result result) {
+        return switch (result) {
+            case ConfirmFactor.Result.LoggedIn in
+            when in.state() instanceof AuthState.Authenticated done -> new Outcome.In(done.method());
+            case ConfirmFactor.Result.LoggedIn in -> new Outcome.Stay(reminder(reader, id));
+            case ConfirmFactor.Result.Wrong wrong ->
+                new Outcome.Stay(messages.render(
+                        reader,
+                        Keys.FACTOR_LOGIN_WRONG,
+                        Text.placeholder("left", String.valueOf(wrong.attemptsLeft()))));
+            case ConfirmFactor.Result.TooManyAttempts tooMany ->
+                new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
+            case ConfirmFactor.Result.Banned banned ->
+                new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            case ConfirmFactor.Result.NotWaiting notWaiting ->
+                new Outcome.Stay(messages.render(reader, Keys.FACTOR_NOTHING_ASKED));
+            case ConfirmFactor.Result.Gone gone -> new Outcome.Stay(reminder(reader, id));
+        };
     }
 
     /** The captcha that stands before what this player does next, drawn fresh, when one does. */
@@ -298,6 +397,9 @@ public final class LimboLogin {
         if (replacing(id)) {
             return messages.render(reader, Keys.LOGIN_MUST_REPLACE);
         }
+        if (sessions.state(id).orElse(null) instanceof AuthState.SecondFactor) {
+            return messages.render(reader, Keys.FACTOR_CODE_NEEDED);
+        }
         return messages.render(reader, registered(id) ? Keys.REMINDER_LOGIN : Keys.REMINDER_REGISTER);
     }
 
@@ -305,10 +407,10 @@ public final class LimboLogin {
         return sessions.state(id).filter(AuthState.Replacing.class::isInstance).isPresent();
     }
 
-    /** Whether the waiting player has an account. */
+    /** Whether the waiting player has an account: they wait for its password, or for its code. */
     public boolean registered(UUID id) {
         return sessions.state(Objects.requireNonNull(id, "id"))
-                .filter(AuthState.Registered.class::isInstance)
+                .filter(state -> state instanceof AuthState.Registered || state instanceof AuthState.SecondFactor)
                 .isPresent();
     }
 }

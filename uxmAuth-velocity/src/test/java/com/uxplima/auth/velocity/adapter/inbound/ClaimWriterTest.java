@@ -92,6 +92,25 @@ final class ClaimWriterTest {
     }
 
     @Test
+    @DisplayName("a player who owes the app's code is vouched for as owing it, by the way the door let them past")
+    void aPlayerOwingTheCodeIsVouchedForAsOwing() {
+        sessions.waiting(STEVE, new Claim.Waiting(false, false, false));
+        sessions.code(STEVE, AuthMethod.SESSION);
+
+        writer.claim(player);
+
+        assertThat(written())
+                .isInstanceOfSatisfying(
+                        Claims.Reading.Valid.class,
+                        valid -> assertThat(valid.claim().standing()).isEqualTo(new Claim.Code(AuthMethod.SESSION)));
+        assertThat(sessions.loggedIn(STEVE)).isFalse();
+        assertThat(sessions.waitsAtTheProxy(STEVE)).isTrue();
+        assertThat(sessions.passed(STEVE)).contains(AuthMethod.SESSION);
+        sessions.loggedIn(STEVE, AuthMethod.SESSION);
+        assertThat(sessions.passed(STEVE)).isEmpty();
+    }
+
+    @Test
     @DisplayName("one claim at a time: a claim left from an earlier connection is replaced, and none is kept unknown")
     void anOldClaimIsReplaced() {
         properties.add(new GameProfile.Property(ClaimWriter.PROPERTY, "stale", ""));

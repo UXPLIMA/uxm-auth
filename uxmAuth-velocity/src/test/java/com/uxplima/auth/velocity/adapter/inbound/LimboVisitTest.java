@@ -15,6 +15,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.velocity.testing.ProxyWorld;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -101,6 +102,27 @@ final class LimboVisitTest {
         assertThat(told).anySatisfy(line -> assertThat(line).contains("/register"));
         assertThat(events).containsExactly("released");
         assertThat(sessions.loggedIn(STEVE)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a player the door let past the password by a session types only the code, and leaves logged in by it")
+    void aPlayerOwingTheCodeTypesOnlyTheCode() throws Exception {
+        LimboVisit first = visit();
+        first.arrive();
+        settle(first.said("/register hunter22 hunter22"));
+        first.left();
+        com.uxplima.auth.domain.factor.TotpSecret secret = world.appOn(new PlayerName("Steve"));
+        events.clear();
+        sessions.waiting(STEVE, new Claim.Waiting(false, false, false));
+        sessions.code(STEVE, AuthMethod.SESSION);
+
+        LimboVisit visit = visit();
+        visit.arrive();
+        settle(visit.said("/2fa " + world.codeNow(secret)));
+
+        assertThat(events).containsExactly("released");
+        assertThat(sessions.loggedIn(STEVE)).isTrue();
+        assertThat(sessions.nextStanding(STEVE)).contains(new Claim.LoggedIn(AuthMethod.SESSION));
     }
 
     @Test

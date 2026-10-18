@@ -100,6 +100,19 @@ final class ClaimsTest {
     }
 
     @Test
+    @DisplayName("a player whose first step passed and who owes the app's code reads back with the way they came")
+    void aPlayerOwingTheCodeReadsBack() {
+        Claim owing = new Claim(STEVE, "Steve", new Claim.Code(AuthMethod.SESSION), NOW, "n0nce");
+
+        assertThat(claims.read(claims.sign(owing), STEVE, "Steve", NOW)).isEqualTo(new Claims.Reading.Valid(owing));
+        assertThat(Claim.parse("v1|" + STEVE + "|Steve|C:NOPE|" + NOW.toEpochMilli() + "|n0nce"))
+                .isEmpty();
+        assertThat(Claim.parse("v1|" + STEVE + "|Steve|C:PREMIUM|" + NOW.toEpochMilli() + "|n0nce"))
+                .hasValueSatisfying(
+                        claim -> assertThat(claim.standing()).isEqualTo(new Claim.Code(AuthMethod.PREMIUM)));
+    }
+
+    @Test
     @DisplayName("a secret is at least 32 characters, and a fresh one is 43 that read back the same")
     void aSecretIsLongEnough() {
         assertThatThrownBy(() -> NetworkSecret.parse("short")).isInstanceOf(IllegalArgumentException.class);

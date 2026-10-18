@@ -75,6 +75,8 @@ public final class ReportListener {
                     }
                     // The server knows no door flags of the proxy's; the proxy keeps its own.
                     case Claim.Waiting waiting -> sessions.loggedOut(player.getUniqueId());
+                    // No server reports a code owed; only the proxy's door decides that.
+                    case Claim.Code code -> {}
                 }
             }
             case Claims.Reading.Refused refused ->
