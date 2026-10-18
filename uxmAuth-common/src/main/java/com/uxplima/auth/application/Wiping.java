@@ -6,11 +6,11 @@ import java.util.function.Supplier;
 import com.uxplima.auth.domain.password.Password;
 
 /** Wipes the passwords a use case was handed once its answer is known, on every path. */
-final class Wiping {
+public final class Wiping {
 
     private Wiping() {}
 
-    static <T> CompletableFuture<T> after(Supplier<CompletableFuture<T>> work, Password... passwords) {
+    public static <T> CompletableFuture<T> after(Supplier<CompletableFuture<T>> work, Password... passwords) {
         CompletableFuture<T> answer;
         try {
             answer = work.get();

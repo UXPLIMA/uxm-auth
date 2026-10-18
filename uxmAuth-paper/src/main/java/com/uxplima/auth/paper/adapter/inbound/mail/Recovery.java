@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.RecoveryWords;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.mail.RecoverPassword;
@@ -18,7 +19,6 @@ import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.paper.adapter.inbound.command.Addresses;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
-import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.Messages;
 
 /**
@@ -73,11 +73,18 @@ public final class Recovery {
                 outcome -> answer(player, outcome));
     }
 
-    /** {@code /recover <code> <new password>}: the code that went to the address sets the new password. */
+    /**
+     * {@code /recover <code> <new password>}: the code that went to the address sets the new password. One of the
+     * two alone is told how to type them, and spends nothing.
+     */
     public CompletableFuture<Void> recover(Player player, String code, String fresh) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(fresh, "fresh");
+        if (code.isBlank() || fresh.isBlank()) {
+            messages.send(player, Keys.RECOVER_USAGE);
+            return CompletableFuture.completedFuture(null);
+        }
         String address = Addresses.of(player);
         String host =
                 sessions.held(player.getUniqueId()).map(Sessions.Held::host).orElse("");
@@ -89,49 +96,15 @@ public final class Recovery {
 
     private void answer(Player player, RecoverPassword.Outcome outcome) {
         switch (outcome) {
-            case RecoverPassword.Outcome.Sent sent -> sent(player, sent);
-            case RecoverPassword.Outcome.Cooldown cooldown ->
-                messages.send(
-                        player,
-                        Keys.RECOVER_COOLDOWN,
-                        Text.placeholder(
-                                "seconds",
-                                String.valueOf(Math.max(1, cooldown.left().toSeconds()))));
-            case RecoverPassword.Outcome.Wrong wrong ->
-                messages.send(
-                        player, Keys.RECOVER_WRONG, Text.placeholder("left", String.valueOf(wrong.attemptsLeft())));
             case RecoverPassword.Outcome.Rejected rejected ->
                 PasswordWords.reason(messages, player, rejected.why()).ifPresent(player::sendMessage);
             case RecoverPassword.Outcome.Banned banned -> {
                 moments.fire(player, AuthSettings.Moment.BANNED);
                 player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
             }
-            default -> messages.send(player, plain(outcome));
+            default -> RecoveryWords.line(outcome).ifPresent(line -> line.send(messages, player));
         }
-    }
-
-    /** The answers that carry nothing but their words. */
-    private static Keys plain(RecoverPassword.Outcome outcome) {
-        return switch (outcome) {
-            case RecoverPassword.Outcome.NoAddress none -> Keys.RECOVER_NO_ADDRESS;
-            case RecoverPassword.Outcome.MailOff off -> Keys.EMAIL_MAIL_OFF;
-            case RecoverPassword.Outcome.MailFailed failed -> Keys.EMAIL_MAIL_FAILED;
-            case RecoverPassword.Outcome.NotWaiting notWaiting -> Keys.RECOVER_NOT_WAITING;
-            case RecoverPassword.Outcome.Recovered recovered -> Keys.RECOVER_DONE;
-            case RecoverPassword.Outcome.Expired expired -> Keys.RECOVER_EXPIRED;
-            case RecoverPassword.Outcome.NothingPending nothing -> Keys.RECOVER_NOTHING_PENDING;
-            case RecoverPassword.Outcome.TooManyAttempts tooMany -> Keys.RECOVER_TOO_MANY_ATTEMPTS;
-            default -> throw new IllegalStateException("an answer with words of its own: " + outcome);
-        };
-    }
-
-    private void sent(Player player, RecoverPassword.Outcome.Sent sent) {
-        messages.send(
-                player,
-                Keys.RECOVER_SENT,
-                Text.placeholder("address", sent.masked()),
-                Text.placeholder("minutes", String.valueOf(sent.lasts().toMinutes())));
-        if (bedrock.test(player.getUniqueId())) {
+        if (outcome instanceof RecoverPassword.Outcome.Sent && bedrock.test(player.getUniqueId())) {
             form.show(player, (code, fresh) -> {
                 CompletableFuture<Void> unused = recover(player, code, fresh);
             });

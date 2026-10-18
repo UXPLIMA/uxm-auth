@@ -77,19 +77,31 @@ public final class LimboLogin {
         }
     }
 
-    /** The words of /login, /register, /changepassword, /captcha and /2fa, as commands.conf names them. */
+    /** The words of /login, /register, /changepassword, /captcha, /2fa and /recover, as commands.conf names them. */
     public record Words(
             Supplier<Set<String>> loginLabels,
             Supplier<Set<String>> registerLabels,
             Supplier<Set<String>> changeLabels,
             Supplier<Set<String>> captchaLabels,
-            Supplier<Set<String>> factorLabels) {
+            Supplier<Set<String>> factorLabels,
+            Supplier<Set<String>> recoverLabels) {
         public Words {
             Objects.requireNonNull(loginLabels, "loginLabels");
             Objects.requireNonNull(registerLabels, "registerLabels");
             Objects.requireNonNull(changeLabels, "changeLabels");
             Objects.requireNonNull(captchaLabels, "captchaLabels");
             Objects.requireNonNull(factorLabels, "factorLabels");
+            Objects.requireNonNull(recoverLabels, "recoverLabels");
+        }
+
+        /** The words, with no /recover, for a waiting world that mails nothing. */
+        public Words(
+                Supplier<Set<String>> loginLabels,
+                Supplier<Set<String>> registerLabels,
+                Supplier<Set<String>> changeLabels,
+                Supplier<Set<String>> captchaLabels,
+                Supplier<Set<String>> factorLabels) {
+            this(loginLabels, registerLabels, changeLabels, captchaLabels, factorLabels, Set::of);
         }
 
         /** The words, with no /2fa, for a waiting world that asks no code. */
@@ -112,6 +124,18 @@ public final class LimboLogin {
         CompletableFuture<ConfirmFactor.Result> confirm(UUID connection, String code, String address);
     }
 
+    /**
+     * A forgotten password: the words typed after /recover, from this address. Nothing answered leaves the player
+     * with what to type now.
+     */
+    @FunctionalInterface
+    public interface Recover {
+        /** No recovery, for a waiting world built without mail. */
+        Recover NONE = (reader, id, typed, address) -> CompletableFuture.completedFuture(Optional.empty());
+
+        CompletableFuture<Optional<Outcome>> answer(Audience reader, UUID id, List<String> typed, String address);
+    }
+
     private final ReadTheName names;
     private final LogIn logIn;
     private final RegisterAccount register;
@@ -124,6 +148,7 @@ public final class LimboLogin {
     private final BooleanSupplier asksTwice;
     private final SecondStep secondStep;
     private final CodeCheck codes;
+    private final Recover recover;
 
     public LimboLogin(
             ReadTheName names,
@@ -165,6 +190,35 @@ public final class LimboLogin {
             BooleanSupplier asksTwice,
             SecondStep secondStep,
             CodeCheck codes) {
+        this(
+                names,
+                logIn,
+                register,
+                change,
+                captchas,
+                sessions,
+                messages,
+                words,
+                asksTwice,
+                secondStep,
+                codes,
+                Recover.NONE);
+    }
+
+    /** @param recover a forgotten password, by a code mailed to the linked address */
+    public LimboLogin(
+            ReadTheName names,
+            LogIn logIn,
+            RegisterAccount register,
+            ChangePassword change,
+            Captchas captchas,
+            Sessions sessions,
+            Messages messages,
+            Words words,
+            BooleanSupplier asksTwice,
+            SecondStep secondStep,
+            CodeCheck codes,
+            Recover recover) {
         this.names = Objects.requireNonNull(names, "names");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.register = Objects.requireNonNull(register, "register");
@@ -177,6 +231,7 @@ public final class LimboLogin {
         this.asksTwice = Objects.requireNonNull(asksTwice, "asksTwice");
         this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
         this.codes = Objects.requireNonNull(codes, "codes");
+        this.recover = Objects.requireNonNull(recover, "recover");
     }
 
     /**
@@ -238,11 +293,21 @@ public final class LimboLogin {
         if (words.captchaLabels().get().contains(label) && rest.size() == 1) {
             return CompletableFuture.completedFuture(answered(reader, id, rest.getFirst()));
         }
+        return otherWords(reader, id, label, rest, address);
+    }
+
+    /** /changepassword, /2fa and /recover, and what to type now for any other line. */
+    private CompletableFuture<Outcome> otherWords(
+            Audience reader, UUID id, String label, List<String> rest, String address) {
         if (words.changeLabels().get().contains(label) && replacing(id)) {
             return replaced(reader, id, rest);
         }
         if (words.factorLabels().get().contains(label) && rest.size() == 1) {
             return coded(reader, id, rest.getFirst(), address);
+        }
+        if (words.recoverLabels().get().contains(label)) {
+            return recover.answer(reader, id, rest, address)
+                    .thenApply(answer -> answer.orElseGet(() -> new Outcome.Stay(reminder(reader, id))));
         }
         return CompletableFuture.completedFuture(new Outcome.Stay(reminder(reader, id)));
     }

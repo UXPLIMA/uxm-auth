@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.CommandFile;
@@ -24,8 +25,11 @@ import com.uxplima.auth.application.factor.ConfirmFactor;
 import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.mail.MailCodes;
+import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.BreachedPasswords;
+import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.Factors;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
@@ -34,6 +38,7 @@ import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
+import com.uxplima.auth.velocity.adapter.inbound.LimboRecovery;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisit;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboWait;
@@ -103,22 +108,10 @@ final class WaitingWorld implements AutoCloseable {
             Messages words,
             ProxySessions network,
             Guards guards) {
-        Path commands = folder.resolve(COMMANDS);
-        Set<String> login = CommandFile.labels(commands, "login");
-        Set<String> register = CommandFile.labels(commands, "register");
-        Set<String> change = CommandFile.labels(commands, "changepassword");
-        Set<String> captcha = CommandFile.labels(commands, "captcha");
-        Set<String> factor = CommandFile.labels(commands, "2fa");
-        LimboLogin.Words labels =
-                new LimboLogin.Words(() -> login, () -> register, () -> change, () -> captcha, () -> factor);
+        LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
         LimboWait wait = new LimboWait(
-                LimboWorld.open(
-                        limboApi,
-                        folder,
-                        settings.current().network(),
-                        metas(List.of(login, register, change, captcha, factor)),
-                        logger),
+                LimboWorld.open(limboApi, folder, settings.current().network(), metas(labels), logger),
                 network::waitsAtTheProxy,
                 (player, exit) -> visit(passwords, network, guards.remember(), player, exit),
                 () -> settings.current().timeouts(),
@@ -142,7 +135,9 @@ final class WaitingWorld implements AutoCloseable {
             RememberedSessions remembered,
             Factors factors,
             SecondStep secondStep,
-            FactorCheck.MailedCode mailedCode) {}
+            FactorCheck.MailedCode mailedCode,
+            Emails emails,
+            MailCodes mailCodes) {}
 
     private LimboLogin passwords(
             PluginSettings settings,
@@ -191,7 +186,30 @@ final class WaitingWorld implements AutoCloseable {
                 labels,
                 () -> settings.current().passwords().confirmOnRegister(),
                 guards.secondStep(),
-                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane)));
+                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane)),
+                recovery(settings, accounts, sessions, words, guards, new Hashers(hashing, hashingLane)));
+    }
+
+    /** A forgotten password, by a code mailed to the linked address; the new one is hashed on the lane. */
+    private static LimboRecovery recovery(
+            PluginSettings settings,
+            SqlAccountRepository accounts,
+            Sessions sessions,
+            Messages words,
+            Guards guards,
+            Hashers hashers) {
+        RecoverPassword recover = new RecoverPassword(
+                sessions,
+                guards.emails(),
+                guards.mailCodes(),
+                accounts,
+                hashers.hashing(),
+                hashers.lane(),
+                () -> settings.current().passwordPolicy(),
+                guards.breaches(),
+                guards.remembered(),
+                guards.events());
+        return new LimboRecovery(recover, sessions, words);
     }
 
     /** The code of the second step, checked on the hashing lane: the factor table is read, backup codes hashed. */
@@ -237,11 +255,29 @@ final class WaitingWorld implements AutoCloseable {
                 exit);
     }
 
-    /** /login and /register as the client must know them to send them, in every word commands.conf gives. */
-    private List<CommandMeta> metas(List<Set<String>> labels) {
+    /** Each command the waiting world answers, in every word commands.conf gives it. */
+    private static LimboLogin.Words labels(Path commands) {
+        Set<String> login = CommandFile.labels(commands, "login");
+        Set<String> register = CommandFile.labels(commands, "register");
+        Set<String> change = CommandFile.labels(commands, "changepassword");
+        Set<String> captcha = CommandFile.labels(commands, "captcha");
+        Set<String> factor = CommandFile.labels(commands, "2fa");
+        Set<String> recover = CommandFile.labels(commands, "recover");
+        return new LimboLogin.Words(
+                () -> login, () -> register, () -> change, () -> captcha, () -> factor, () -> recover);
+    }
+
+    /** The waiting world's commands as the client must know them to send them, in every word commands.conf gives. */
+    private List<CommandMeta> metas(LimboLogin.Words labels) {
         List<CommandMeta> metas = new ArrayList<>();
-        for (Set<String> words : labels) {
-            List<String> all = List.copyOf(words);
+        for (Supplier<Set<String>> each : List.of(
+                labels.loginLabels(),
+                labels.registerLabels(),
+                labels.changeLabels(),
+                labels.captchaLabels(),
+                labels.factorLabels(),
+                labels.recoverLabels())) {
+            List<String> all = List.copyOf(each.get());
             if (!all.isEmpty()) {
                 metas.add(proxy.getCommandManager()
                         .metaBuilder(all.getFirst())

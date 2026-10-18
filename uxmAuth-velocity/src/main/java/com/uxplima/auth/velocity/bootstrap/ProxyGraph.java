@@ -32,7 +32,9 @@ import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
+import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.MailedLoginCode;
+import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
@@ -140,14 +142,7 @@ final class ProxyGraph implements AutoCloseable {
                 accounts,
                 words,
                 sessions,
-                guards(
-                        settings,
-                        accounts,
-                        remember,
-                        bans,
-                        clock,
-                        remembered,
-                        new Codes(factors, secondStep, new MailedLoginCode(mail.emails, mail.codes))));
+                guards(settings, accounts, remember, bans, clock, remembered, Codes.of(factors, secondStep, mail)));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
@@ -160,11 +155,7 @@ final class ProxyGraph implements AutoCloseable {
             Clock clock,
             SqlRememberedSessions remembered,
             Codes codes) {
-        AccountCap cap = new AccountCap(
-                accounts,
-                () -> settings.current().protection().accounts(),
-                () -> settings.current().protection().sharedAddresses(),
-                clock::instant);
+        AccountCap cap = cap(settings, accounts, clock);
         PwnedPasswords breaches = new PwnedPasswords(
                 web,
                 PwnedPasswords.SERVICE,
@@ -179,7 +170,18 @@ final class ProxyGraph implements AutoCloseable {
                 remembered,
                 codes.factors(),
                 codes.step(),
-                codes.mail());
+                codes.mail(),
+                codes.emails(),
+                codes.mailCodes());
+    }
+
+    /** How many accounts one address may make, and which addresses many people share. */
+    private static AccountCap cap(PluginSettings settings, SqlAccountRepository accounts, Clock clock) {
+        return new AccountCap(
+                accounts,
+                () -> settings.current().protection().accounts(),
+                () -> settings.current().protection().sharedAddresses(),
+                clock::instant);
     }
 
     /** The door's rules, in order: the country, a banned address, then too many connections from one. */
@@ -354,7 +356,14 @@ final class ProxyGraph implements AutoCloseable {
     private record Steps(NetworkSecret secret, SecondStep secondStep) {}
 
     /** The factor table and the step after the password, which the waiting world reads. */
-    private record Codes(SqlFactors factors, SecondStep step, FactorCheck.MailedCode mail) {}
+    private record Codes(
+            SqlFactors factors, SecondStep step, FactorCheck.MailedCode mail, Emails emails, MailCodes mailCodes) {
+
+        /** The factor table and the step, with the mail's own table and codes. */
+        static Codes of(SqlFactors factors, SecondStep step, ProxyMail mail) {
+            return new Codes(factors, step, new MailedLoginCode(mail.emails, mail.codes), mail.emails, mail.codes);
+        }
+    }
 
     /** The decision at the pre-login: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(

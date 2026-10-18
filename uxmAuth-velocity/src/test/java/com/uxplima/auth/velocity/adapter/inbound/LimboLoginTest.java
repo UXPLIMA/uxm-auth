@@ -392,4 +392,80 @@ final class LimboLoginTest {
         assertThat(told(said(login, "/2fa 123456")))
                 .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_NOTHING_ASKED)));
     }
+
+    /** Steve has an account with a confirmed address, and waits at the login. */
+    private LimboLogin waitingWithAnAddress() throws Exception {
+        LimboLogin first = world.limboLogin(true);
+        first.arrive(READER, STEVE, NAME, NONE);
+        said(first, "/register hunter22 hunter22");
+        first.leave(STEVE);
+        world.emails.setAddress(
+                world.accounts.findByName(NAME).orElseThrow().id(),
+                com.uxplima.auth.domain.mail.EmailAddress.parse("steve@example.net")
+                        .orElseThrow());
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+        return login;
+    }
+
+    private String recoveryCode() {
+        return java.util.Objects.requireNonNull(world.mailed.getLast().get("code"), "code");
+    }
+
+    @Test
+    @DisplayName("/recover in the waiting world mails a code; the code and a new password set it, and it logs in")
+    void aForgottenPasswordIsRecovered() throws Exception {
+        LimboLogin login = waitingWithAnAddress();
+
+        assertThat(told(said(login, "/kurtar"))).contains("s***@e***.net");
+        assertThat(told(said(login, "/recover " + recoveryCode() + " fresh7777")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.RECOVER_DONE)));
+        assertThat(told(said(login, "/login hunter22"))).contains("Tries left");
+        assertThat(said(login, "/login fresh7777")).isEqualTo(new LimboLogin.Outcome.In(AuthMethod.PASSWORD));
+    }
+
+    @Test
+    @DisplayName("through the proxy, a second request inside the cooldown says when, a wrong code its tries left,"
+            + " and an expired code is refused")
+    void theCodeIsGuarded() throws Exception {
+        LimboLogin login = waitingWithAnAddress();
+        said(login, "/recover");
+        world.clock.pass(java.time.Duration.ofSeconds(45));
+
+        assertThat(told(said(login, "/recover"))).contains("15");
+        assertThat(world.mailed).hasSize(1);
+        assertThat(told(said(login, "/recover 000000 fresh7777"))).contains("4");
+        world.clock.pass(java.time.Duration.ofMinutes(16));
+        assertThat(told(said(login, "/recover " + recoveryCode() + " fresh7777")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.RECOVER_EXPIRED)));
+    }
+
+    @Test
+    @DisplayName("a wrong recovery code counts toward the address ban, and the ban sends the player away")
+    void wrongCodesBan() throws Exception {
+        LimboLogin login = waitingWithAnAddress();
+        said(login, "/recover");
+        java.util.List<String> counted = new java.util.concurrent.CopyOnWriteArrayList<>();
+        world.mailFailures = (address, host) -> {
+            counted.add(address);
+            return java.util.Optional.of(java.time.Duration.ofMinutes(30));
+        };
+
+        assertThat(said(login, "/recover 000000 fresh7777")).isInstanceOf(LimboLogin.Outcome.Out.class);
+        assertThat(counted).containsExactly("127.0.0.1");
+    }
+
+    @Test
+    @DisplayName("/recover with one word, or three, says how to type it and spends nothing")
+    void halfTypedSaysHow() throws Exception {
+        LimboLogin login = waitingWithAnAddress();
+        said(login, "/recover");
+        String usage = plain(world.messages.render(READER, Keys.RECOVER_USAGE));
+
+        assertThat(told(said(login, "/recover " + recoveryCode()))).isEqualTo(usage);
+        assertThat(told(said(login, "/recover " + recoveryCode() + " fresh7777 again")))
+                .isEqualTo(usage);
+        assertThat(told(said(login, "/recover " + recoveryCode() + " fresh7777")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.RECOVER_DONE)));
+    }
 }

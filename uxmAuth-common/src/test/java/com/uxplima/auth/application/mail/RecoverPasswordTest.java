@@ -193,6 +193,23 @@ final class RecoverPasswordTest {
     }
 
     @Test
+    @DisplayName("the new password is wiped once the answer is known: set, refused, or the code wrong")
+    void theNewPasswordIsWiped() {
+        UUID connection = waiting();
+        recover.request(connection, Locale.ENGLISH).join();
+        Password weak = Password.of("abc");
+        Password wrongCode = Password.of("fresh7777");
+        Password set = Password.of("fresh7777");
+
+        recover.recover(connection, code(), weak, "203.0.113.7", "").join();
+        recover.recover(connection, "000000", wrongCode, "203.0.113.7", "").join();
+        recover.recover(connection, code(), set, "203.0.113.7", "").join();
+
+        assertThat(List.of(weak, wrongCode, set))
+                .allSatisfy(typed -> assertThat(typed.isWiped()).isTrue());
+    }
+
+    @Test
     @DisplayName("a new password known from a breach is refused before the code is checked, and spends no try")
     void aBreachedPasswordSpendsNothing() {
         UUID connection = waiting();

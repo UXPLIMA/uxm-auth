@@ -40,13 +40,19 @@ final class RecoveryTest {
     private Recovery recovery;
     private final Set<UUID> bedrock = new HashSet<>();
     private @Nullable BiConsumer<String, String> form;
+    private int forms;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords());
         steve = server.addPlayer("Steve");
-        recovery = world.recovery((player, answer) -> form = answer, bedrock::contains);
+        recovery = world.recovery(
+                (player, answer) -> {
+                    form = answer;
+                    forms++;
+                },
+                bedrock::contains);
         world.registered(steve, "hunter22");
         world.emails.setAddress(
                 account(), EmailAddress.parse("berke@example.com").orElseThrow());
@@ -124,6 +130,21 @@ final class RecoveryTest {
     }
 
     @Test
+    @DisplayName("a code without a new password, or a password without a code, says how to type it and spends nothing")
+    void halfTypedSaysHow() {
+        world.scheduler.settle(recovery.request(steve));
+        steve.nextComponentMessage();
+
+        world.scheduler.settle(recovery.recover(steve, mailedCode(), ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RECOVER_USAGE));
+        world.scheduler.settle(recovery.recover(steve, "", "fresh7777"));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RECOVER_USAGE));
+
+        world.scheduler.settle(recovery.recover(steve, mailedCode(), "fresh7777"));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RECOVER_DONE));
+    }
+
+    @Test
     @DisplayName("enough wrong codes ban the address and send the player away")
     void wrongCodesBan() {
         String address = Addresses.of(steve);
@@ -165,5 +186,9 @@ final class RecoveryTest {
                         .run(steve.getUniqueId(), Password.of("fresh7777"), "127.0.0.1")
                         .join())
                 .isInstanceOf(LoginResult.LoggedIn.class);
+        world.scheduler.drain();
+        assertThat(forms)
+                .as("the form follows the sent code, not the answer to it")
+                .isEqualTo(1);
     }
 }

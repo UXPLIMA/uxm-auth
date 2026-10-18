@@ -129,6 +129,9 @@ public final class ProxyWorld implements AutoCloseable {
     public final com.uxplima.auth.adapter.outbound.SqlEmails emails;
     public final com.uxplima.auth.application.mail.MailCodes mailCodes;
 
+    /** How a wrong mailed code is counted against its address; nothing until a test sets it. */
+    public LogIn.Failures mailFailures = (address, host) -> java.util.Optional.empty();
+
     /** The values of every mail this proxy sent, in order. */
     public final List<java.util.Map<String, String>> mailed =
             java.util.Collections.synchronizedList(new java.util.ArrayList<>());
@@ -155,7 +158,7 @@ public final class ProxyWorld implements AutoCloseable {
                 lane,
                 () -> new com.uxplima.auth.application.mail.MailCodes.Settings(
                         Duration.ofMinutes(15), 5, Duration.ofSeconds(60), 6),
-                (address, host) -> java.util.Optional.empty(),
+                (address, host) -> mailFailures.failed(address, host),
                 new java.util.SplittableRandom(17),
                 clock::instant);
         com.uxplima.auth.application.mail.MailLogin mailLogin =
@@ -224,6 +227,7 @@ public final class ProxyWorld implements AutoCloseable {
     /** The same, with a limit on the accounts one address may make. */
     public LimboLogin limboLogin(boolean asksTwice, LogIn.Failures failures, RegisterAccount.Cap cap) {
         NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
+        SqlRememberedSessions remembered = new SqlRememberedSessions(database, clock);
         return new LimboLogin(
                 new ReadTheName(accounts, () -> names, () -> 3),
                 new LogIn(accounts, hashing, lane, sessions, clock, failures, () -> policy, captchas, secondStep),
@@ -237,14 +241,7 @@ public final class ProxyWorld implements AutoCloseable {
                         cap,
                         com.uxplima.auth.application.port.BreachedPasswords.NONE,
                         captchas::blocksRegistration),
-                new ChangePassword(
-                        accounts,
-                        hashing,
-                        lane,
-                        sessions,
-                        () -> policy,
-                        new LocalEvents(),
-                        new SqlRememberedSessions(database, clock)),
+                new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered),
                 captchas,
                 sessions,
                 messages,
@@ -253,10 +250,25 @@ public final class ProxyWorld implements AutoCloseable {
                         () -> Set.of("register", "reg"),
                         () -> Set.of("changepassword", "cp"),
                         () -> Set.of("captcha", "dogrula"),
-                        () -> Set.of("2fa", "dogrulama")),
+                        () -> Set.of("2fa", "dogrulama"),
+                        () -> Set.of("recover", "kurtar")),
                 () -> asksTwice,
                 secondStep,
-                codes(failures));
+                codes(failures),
+                new com.uxplima.auth.velocity.adapter.inbound.LimboRecovery(
+                        new com.uxplima.auth.application.mail.RecoverPassword(
+                                sessions,
+                                emails,
+                                mailCodes,
+                                accounts,
+                                hashing,
+                                lane,
+                                () -> policy,
+                                com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                                remembered,
+                                new LocalEvents()),
+                        sessions,
+                        messages));
     }
 
     /** The code of the second step on this proxy, checked at once. */

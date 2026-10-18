@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.Wiping;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.BreachedPasswords;
@@ -150,13 +151,20 @@ public final class RecoverPassword {
 
     /**
      * Sets the new password when the code that went to the address is right, typed from this address. A password
-     * the rules refuse is said before the code is tried.
+     * the rules refuse is said before the code is tried. The new password is wiped once the answer is known.
      */
     public CompletableFuture<Outcome> recover(
             UUID connection, String code, Password fresh, String address, String host) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(fresh, "fresh");
+        Objects.requireNonNull(address, "address");
+        Objects.requireNonNull(host, "host");
+        return Wiping.after(() -> attempt(connection, code, fresh, address, host), fresh);
+    }
+
+    private CompletableFuture<Outcome> attempt(
+            UUID connection, String code, Password fresh, String address, String host) {
         Optional<Account> account = waiting(connection);
         if (account.isEmpty()) {
             return done(new Outcome.NotWaiting());

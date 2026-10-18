@@ -274,7 +274,7 @@ public enum Keys implements MessageKey {
                     + " within <value><minutes><good> minutes."),
     EMAIL_COOLDOWN(
             "email.cooldown",
-            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body>" + " seconds."),
+            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body> seconds."),
     EMAIL_CONFIRMED(
             "email.confirmed",
             "<good>Linked: <value><address><good>. A forgotten password can be set again through it."),
@@ -307,12 +307,16 @@ public enum Keys implements MessageKey {
                     + " password><good> within <value><minutes><good> minutes."),
     RECOVER_COOLDOWN(
             "recover.cooldown",
-            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body>" + " seconds."),
+            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body> seconds."),
     RECOVER_NO_ADDRESS(
             "recover.no-address",
             "<etag:'ERROR'> <body>No address is linked to this account, so no code can be sent. Ask" + " the staff."),
     RECOVER_NOT_WAITING(
             "recover.not-waiting", "<etag:'ERROR'> <body>A password is recovered at the login, before it is typed."),
+    RECOVER_USAGE(
+            "recover.usage",
+            "<etag:'ERROR'> <body>Type <value>/recover<body> for a code, then <value>/recover <code> <new"
+                    + " password><body>."),
     RECOVER_DONE("recover.done", "<good>Your new password is set. Log in with <value>/login <password><good>."),
     RECOVER_WRONG("recover.wrong", "<etag:'ERROR'> <body>That is not the code. Tries left: <value><left><body>."),
     RECOVER_EXPIRED(
