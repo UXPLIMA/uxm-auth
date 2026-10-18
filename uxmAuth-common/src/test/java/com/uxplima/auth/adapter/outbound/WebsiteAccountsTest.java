@@ -193,7 +193,22 @@ final class WebsiteAccountsTest {
         assertThat(adopted.id()).isEqualTo(UuidScheme.offline(new PlayerName("Alex")));
         assertThat(adopted.name().value()).isEqualTo("Alex");
         assertThat(adopted.kind()).isEqualTo(AccountKind.CRACKED);
+        assertThat(adopted.unverified())
+                .as("the premium source is asked about the name at the next connection, as for a registration")
+                .isTrue();
         assertThat(adopted.registeredAt()).isEqualTo(NOW.minusSeconds(3600));
+
+        madeOnTheWebsite("bob", "Bob", hashing.hash(Password.of("webpass1")).encoded());
+        assertThat(accounts.findByName(new PlayerName("Bob"))).isPresent();
+        String changed = hashing.hash(Password.of("webpass2")).encoded();
+        database()
+                .inTransaction(sql -> sql.update("UPDATE authme SET password = ? WHERE username = ?", statement -> {
+                    statement.setString(1, changed);
+                    statement.setString(2, "bob");
+                }));
+        assertThat(logIn(accounts, hashing, "Bob", "webpass2"))
+                .as("an adopted row stays the account's when the website changes it before the first login")
+                .isInstanceOf(LoginResult.LoggedIn.class);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -388,6 +403,82 @@ final class WebsiteAccountsTest {
                 .isEqualTo(new AccountRepository.NameTaken(new PlayerName("Bob")));
         assertThat(sitePassword("alex")).isPresent();
         assertThat(sitePassword("bob")).contains(theirs);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"sqlite", "h2"})
+    @DisplayName("a website row somebody made under the name of an account the plugin held first is not that"
+            + " account's: its password opens nothing, and nothing the account does touches it")
+    void aStrangersRowIsNotTrusted(String engine) {
+        open(engine);
+        Hashing hashing = hashing(WebsiteTable.Hash.SHA256);
+        WebsiteAccounts accounts = accounts(WebsiteTable.Hash.SHA256);
+        Account steve = steve(hashing);
+        new SqlAccountRepository(database()).insert(steve);
+        String planted = hashing.hash(Password.of("planted1")).encoded();
+        madeOnTheWebsite("steve", "Steve", planted);
+
+        assertThat(accounts.findByName(new PlayerName("Steve")).orElseThrow().password())
+                .isEqualTo(steve.password());
+        assertThat(logIn(accounts, hashing, "Steve", "planted1")).isInstanceOf(LoginResult.Wrong.class);
+        assertThat(logIn(accounts, hashing, "Steve", "hunter22")).isInstanceOf(LoginResult.LoggedIn.class);
+        PasswordHash fresh = hashing.hash(Password.of("fresh777"));
+        assertThat(accounts.replacePassword(steve.id(), steve.password(), fresh))
+                .isTrue();
+        accounts.update(steve.withPassword(fresh));
+        Optional<String> address = database()
+                .transaction(sql -> sql.queryFirst(
+                        "SELECT ip FROM authme WHERE username = ?",
+                        statement -> statement.setString(1, "steve"),
+                        row -> String.valueOf(row.getString("ip"))));
+        assertThat(address).as("the login is not written to their row").contains("null");
+        accounts.rename(steve.id(), new PlayerName("Steven"), NOW);
+        accounts.delete(steve.id());
+        assertThat(sitePassword("steve")).contains(planted);
+        assertThat(sitePassword("steven")).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"sqlite", "h2"})
+    @DisplayName("a website row holding the account's own hash, as an imported account's does, is the account's"
+            + " from then on")
+    void anImportedRowIsTrusted(String engine) {
+        open(engine);
+        Hashing hashing = hashing(WebsiteTable.Hash.SHA256);
+        WebsiteAccounts accounts = accounts(WebsiteTable.Hash.SHA256);
+        Account steve = steve(hashing);
+        new SqlAccountRepository(database()).insert(steve);
+        madeOnTheWebsite(
+                "steve", "Steve", Objects.requireNonNull(steve.password()).encoded());
+        assertThat(accounts.findByName(new PlayerName("Steve"))).isPresent();
+
+        String changed = hashing.hash(Password.of("fresh777")).encoded();
+        database()
+                .inTransaction(sql -> sql.update("UPDATE authme SET password = ? WHERE username = ?", statement -> {
+                    statement.setString(1, changed);
+                    statement.setString(2, "steve");
+                }));
+        assertThat(logIn(accounts, hashing, "Steve", "fresh777")).isInstanceOf(LoginResult.LoggedIn.class);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"sqlite", "h2"})
+    @DisplayName("the link to the website's row moves with the account's id, and goes with the account")
+    void theLinkFollowsTheId(String engine) {
+        open(engine);
+        Hashing hashing = hashing(WebsiteTable.Hash.SHA256);
+        WebsiteAccounts accounts = accounts(WebsiteTable.Hash.SHA256);
+        Account steve = steve(hashing);
+        accounts.insert(steve);
+        WebsiteRows website =
+                new WebsiteRows(database(), new WebsiteTable(true, "authme", WebsiteTable.Hash.SHA256, COLUMNS));
+        UUID turned = UUID.randomUUID();
+
+        accounts.moveId(steve.id(), turned);
+        assertThat(website.linked(turned)).isTrue();
+        assertThat(website.linked(steve.id())).isFalse();
+        new SqlAccountRepository(database()).delete(turned);
+        assertThat(website.linked(turned)).isFalse();
     }
 
     @org.junit.jupiter.api.Test

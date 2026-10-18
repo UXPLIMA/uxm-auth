@@ -67,7 +67,8 @@ public final class SqlAccountRepository implements AccountRepository {
             "DELETE FROM uxmauth_email WHERE account_id = ?",
             "DELETE FROM uxmauth_mail_code WHERE account_id = ?",
             "DELETE FROM uxmauth_login WHERE account_id = ?",
-            "DELETE FROM uxmauth_last_server WHERE account_id = ?");
+            "DELETE FROM uxmauth_last_server WHERE account_id = ?",
+            "DELETE FROM uxmauth_website_link WHERE account_id = ?");
 
     private static final List<String> MOVE_KEPT = List.of(
             "UPDATE uxmauth_factor SET account_id = ? WHERE account_id = ?",
@@ -75,7 +76,8 @@ public final class SqlAccountRepository implements AccountRepository {
             "UPDATE uxmauth_email SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_mail_code SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_login SET account_id = ? WHERE account_id = ?",
-            "UPDATE uxmauth_last_server SET account_id = ? WHERE account_id = ?");
+            "UPDATE uxmauth_last_server SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_website_link SET account_id = ? WHERE account_id = ?");
 
     private final Database database;
 

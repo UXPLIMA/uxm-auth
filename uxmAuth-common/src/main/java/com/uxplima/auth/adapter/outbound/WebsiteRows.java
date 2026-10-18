@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.PasswordHash;
@@ -175,6 +176,24 @@ final class WebsiteRows {
 
     void delete(PlayerName name) {
         sql.update(DeleteBuilder.from(table).where(columns.name(), key(name)).build());
+    }
+
+    /** Whether the website's row under this account's name is known to be the account's. */
+    boolean linked(UUID account) {
+        return database.transaction(tx -> tx.queryFirst(
+                        "SELECT account_id FROM uxmauth_website_link WHERE account_id = ?",
+                        statement -> statement.setString(1, account.toString()),
+                        row -> row.getString(1)))
+                .isPresent();
+    }
+
+    /** Records that the website's row under this account's name is the account's. */
+    void link(UUID account) {
+        if (!linked(account)) {
+            database.inTransaction(tx -> tx.update(
+                    "INSERT INTO uxmauth_website_link (account_id) VALUES (?)",
+                    statement -> statement.setString(1, account.toString())));
+        }
     }
 
     private static String key(PlayerName name) {
