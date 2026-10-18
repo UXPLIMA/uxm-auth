@@ -96,6 +96,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
+import com.uxplima.auth.paper.adapter.outbound.captcha.CaptchaMap;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
 import com.uxplima.auth.paper.adapter.outbound.handshake.PremiumHelloDoor;
@@ -245,7 +246,7 @@ final class AuthGraph implements AutoCloseable {
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
-        CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, CaptchaScreen.Hand.NONE);
+        CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,
@@ -390,6 +391,20 @@ final class AuthGraph implements AutoCloseable {
                 answers, player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies), scheduler);
         formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
+    }
+
+    /** The map the captcha is drawn on, or none when the server has no world to keep one in. */
+    private CaptchaScreen.Hand captchaHand(Plugin plugin, PluginSettings settings) {
+        return CaptchaMap.open(
+                        plugin.getServer(),
+                        plugin.getDataFolder().toPath().resolve("captcha-map.id"),
+                        () -> settings.current().protection().captcha(),
+                        id -> bedrock.player(id).isPresent(),
+                        () -> settings.current().hold().hideInventory(),
+                        new SecureRandom(),
+                        plugin.getLogger())
+                .<CaptchaScreen.Hand>map(map -> map)
+                .orElse(CaptchaScreen.Hand.NONE);
     }
 
     /** Listens, filters the log, and sends every player already online to the door. */

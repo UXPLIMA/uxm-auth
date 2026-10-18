@@ -28,6 +28,9 @@ public final class CaptchaScreen implements CaptchaOffer {
 
         /** Says whether the map is in the hand now. */
         boolean give(Player player, String code);
+
+        /** The player left: whatever was drawn for them goes. */
+        default void forget(UUID id) {}
     }
 
     private final Captchas captchas;
@@ -80,6 +83,7 @@ public final class CaptchaScreen implements CaptchaOffer {
     /** The connection ended: its code and its solved captcha go with it. */
     public void forget(UUID id) {
         captchas.forget(Objects.requireNonNull(id, "id"));
+        hand.forget(id);
     }
 
     /** Answers the latest showing, which any answer spends; says whether it was the code. */

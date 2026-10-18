@@ -259,6 +259,18 @@ final class ScreenAnswersTest {
     void aReconnectStartsTheCaptchaOver() {
         world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
         world.unregistered(steve);
+        List<java.util.UUID> forgotten = new ArrayList<>();
+        hand = new CaptchaScreen.Hand() {
+            @Override
+            public boolean give(org.bukkit.entity.Player player, String code) {
+                return false;
+            }
+
+            @Override
+            public void forget(java.util.UUID id) {
+                forgotten.add(id);
+            }
+        };
         ScreenAnswers answers = answers();
         world.scheduler.settle(answers.answer(
                 guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
@@ -270,6 +282,7 @@ final class ScreenAnswersTest {
 
         assertThat(world.captchas.blocksRegistration(steve.getUniqueId())).isTrue();
         assertThat(world.captchas.code(steve.getUniqueId())).isEmpty();
+        assertThat(forgotten).containsExactly(steve.getUniqueId());
     }
 
     @Test
