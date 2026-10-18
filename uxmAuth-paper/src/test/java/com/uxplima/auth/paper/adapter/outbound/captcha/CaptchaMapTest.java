@@ -179,6 +179,32 @@ final class CaptchaMapTest {
     }
 
     @Test
+    @DisplayName("an item in the hand is never replaced: the hold had not emptied it, so the code stays on the screen")
+    void anItemInTheHandStays() {
+        CaptchaMap map = map();
+        steve.getInventory().setItemInMainHand(new ItemStack(Material.DIAMOND_SWORD));
+
+        assertThat(map.give(steve, "AAAAA")).isFalse();
+
+        assertThat(steve.getInventory().getItemInMainHand().getType()).isEqualTo(Material.DIAMOND_SWORD);
+    }
+
+    @Test
+    @DisplayName("a map from another plugin in the hand is not ours to replace either")
+    void anotherMapStays() {
+        CaptchaMap map = map();
+        ItemStack theirs = new ItemStack(Material.FILLED_MAP);
+        MapMeta meta = (MapMeta) java.util.Objects.requireNonNull(theirs.getItemMeta());
+        meta.setMapView(java.util.Objects.requireNonNull(makes)
+                .createMap(server.getWorlds().getFirst()));
+        theirs.setItemMeta(meta);
+        steve.getInventory().setItemInMainHand(theirs);
+
+        assertThat(map.give(steve, "AAAAA")).isFalse();
+        assertThat(steve.getInventory().getItemInMainHand()).isEqualTo(theirs);
+    }
+
+    @Test
     @DisplayName("the server keeps one map: its number is written once and the next start takes the same map")
     void oneMapAcrossStarts() throws Exception {
         CaptchaMap first = map();

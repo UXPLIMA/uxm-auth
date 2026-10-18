@@ -38,8 +38,9 @@ import org.jspecify.annotations.Nullable;
  * and read back at the next start, so no start leaves a map behind. The renderer draws each player the picture
  * of their own latest code, once per code.
  *
- * <p>The map goes only into a hand the hold emptied: the inventory is kept on disk while a player waits and comes
- * back whole at the login, so the map never takes the place of an item.
+ * <p>The map goes only into a hand the hold emptied, or one that holds this map already: the inventory is kept on
+ * disk while a player waits and comes back whole at the login, and an item still in the hand was not taken yet, so
+ * the map never takes the place of an item.
  */
 public final class CaptchaMap extends MapRenderer implements CaptchaScreen.Hand {
 
@@ -107,7 +108,10 @@ public final class CaptchaMap extends MapRenderer implements CaptchaScreen.Hand 
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(code, "code");
         UUID id = player.getUniqueId();
-        if (settings.get().java() != Captchas.JavaScreen.MAP || bedrock.test(id) || !hidesInventory.getAsBoolean()) {
+        if (settings.get().java() != Captchas.JavaScreen.MAP
+                || bedrock.test(id)
+                || !hidesInventory.getAsBoolean()
+                || !freeHand(player)) {
             return false;
         }
         BufferedImage picture = CaptchaImage.of(CaptchaPicture.draw(code, random));
@@ -118,6 +122,18 @@ public final class CaptchaMap extends MapRenderer implements CaptchaScreen.Hand 
         item.setItemMeta(meta);
         player.getInventory().setItemInMainHand(item);
         return true;
+    }
+
+    /**
+     * Whether the hand holds nothing, or this map: anything else is an item the hold has not taken yet, and a map
+     * in its place would lose it.
+     */
+    private boolean freeHand(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        return held.getType().isAir()
+                || (held.getItemMeta() instanceof MapMeta meta
+                        && meta.hasMapView()
+                        && Objects.equals(meta.getMapView(), view));
     }
 
     @Override
