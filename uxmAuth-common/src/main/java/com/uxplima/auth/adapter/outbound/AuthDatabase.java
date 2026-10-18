@@ -31,13 +31,25 @@ public final class AuthDatabase {
         Objects.requireNonNull(storage, "storage");
         Objects.requireNonNull(poolName, "poolName");
         load(driverOf(storage.jdbcUrl()));
-        return AuthSchema.migrate(Database.builder()
+        Database database = pool(storage, poolName, storage.poolSize());
+        if (!SchemaLock.shared(database.dialect())) {
+            return AuthSchema.migrate(database);
+        }
+        // The lock has a pool of its own, so a pool of one connection still has one left for the migrations.
+        try (Database lock = pool(storage, poolName + "-schema", 1)) {
+            SchemaLock.holding(lock, () -> AuthSchema.migrate(database));
+        }
+        return database;
+    }
+
+    private static Database pool(PluginSettings.Storage storage, String poolName, int size) {
+        return Database.builder()
                 .poolName(poolName)
                 .jdbcUrl(addressOf(storage.jdbcUrl()))
                 .username(storage.username())
                 .password(storage.password())
-                .maxPoolSize(storage.poolSize())
-                .build());
+                .maxPoolSize(size)
+                .build();
     }
 
     /** The driver class this jar carries for the address. */
