@@ -41,7 +41,8 @@ final class LegacyHashesTest {
                     new AuthMeSha256Hasher(),
                     new Pbkdf2HexHasher(10_000),
                     new Pbkdf2DjangoHasher(),
-                    new LegacyDigestHasher()));
+                    new LegacyDigestHasher(),
+                    new Pbkdf2Hasher(1000)));
 
     private static PasswordHash read(Style style, String raw, @Nullable String salt, @Nullable String algorithm) {
         LegacyHashes.Read read = LegacyHashes.rewrite(style, raw, salt, algorithm);
@@ -54,7 +55,7 @@ final class LegacyHashesTest {
     private static void opens(PasswordHash hash) {
         assertThat(HASHING.verify(Password.of("hunter22"), hash))
                 .as("the right password")
-                .isInstanceOf(Verification.RightButRehash.class);
+                .isInstanceOfAny(Verification.Right.class, Verification.RightButRehash.class);
         assertThat(HASHING.verify(Password.of("hunter23"), hash))
                 .as("a wrong one")
                 .isInstanceOf(Verification.Wrong.class);
@@ -97,6 +98,28 @@ final class LegacyHashesTest {
         assertThat(read(Style.DOLLAR_SHA, BCRYPT_2Y, null, null).encoded())
                 .as("a source that moved some hashes on keeps them")
                 .isEqualTo(BCRYPT_2Y);
+    }
+
+    @Test
+    @DisplayName("a PBKDF2 hash under the short prefix, and bcrypt and Argon2id split into hash, salt and algorithm,"
+            + " read")
+    void splitAndRenamedFormats() {
+        opens(read(
+                Style.AS_IS,
+                "pbkdf2$1000$AAECAwQFBgcICQoLDA0ODw==$cjNIKfympRSbAs88K9Rcn6XPiOL6tRYwMWZzHxqYtXg=",
+                null,
+                null));
+        opens(read(
+                Style.ALGORITHM_COLUMN, "04$wA2bSW/CXl4NaEwu4OYB2oVqkWXOtkC", "o34.5HR1UQlklD7vcMNyn.", "BCrypt-2A"));
+
+        String phc =
+                new Argon2idHasher(1024, 1, 1).hash(Password.of("hunter22")).encoded();
+        String[] parts = phc.split("\\$", -1);
+        java.util.Base64.Encoder padded = java.util.Base64.getEncoder();
+        java.util.Base64.Decoder bare = java.util.Base64.getDecoder();
+        String salt = padded.encodeToString(bare.decode(parts[4]));
+        String hash = "19,1,1024$" + padded.encodeToString(bare.decode(parts[5]));
+        opens(read(Style.ALGORITHM_COLUMN, hash, salt, "Argon-2ID"));
     }
 
     @Test

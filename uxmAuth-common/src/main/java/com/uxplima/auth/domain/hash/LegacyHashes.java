@@ -1,6 +1,7 @@
 package com.uxplima.auth.domain.hash;
 
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,6 +25,9 @@ public final class LegacyHashes {
     private static final Pattern HASH_FIRST = Pattern.compile("^\\$SHA(?:512)?\\$([0-9a-fA-F]+)\\$([^$]+)$");
     private static final Pattern NAME_SALT_HASH = Pattern.compile("^(SHA256|SHA512)\\$([^$]*)\\$([0-9a-fA-F]+)$");
     private static final Pattern AUTHME = Pattern.compile("^\\$SHA\\$[0-9A-Za-z]+\\$[0-9a-fA-F]{64}$");
+    private static final Pattern SPLIT_BCRYPT = Pattern.compile("^(\\d{2})\\$([./A-Za-z0-9]{31})$");
+    private static final Pattern BCRYPT_SALT = Pattern.compile("[./A-Za-z0-9]{22}");
+    private static final Pattern SPLIT_ARGON2 = Pattern.compile("^(\\d+),(\\d+),(\\d+)\\$([A-Za-z0-9+/=]+)$");
     private static final Pattern WORD = Pattern.compile("[^A-Za-z0-9$_-]");
 
     /** How a source writes its hashes, by the word its layout file uses. */
@@ -136,26 +140,59 @@ public final class LegacyHashes {
         });
     }
 
+    /** A hash split over columns: the hash, its salt, and the algorithm's name beside them. */
     private static Optional<PasswordHash> algorithmColumn(
             String raw, @Nullable String salt, @Nullable String algorithm) {
         if (algorithm == null) {
             return Optional.empty();
         }
         String name = algorithm.trim().toUpperCase(Locale.ROOT);
-        if (!name.equals("SHA-256") && !name.equals("SHA-512")) {
+        if (name.equals("SHA-256") || name.equals("SHA-512")) {
+            String algorithmWord = name.equals("SHA-256") ? "sha256" : "sha512";
+            if (raw.length() != LegacyDigestHasher.length(algorithmWord)) {
+                return Optional.empty();
+            }
+            return salt == null || salt.isEmpty() ? digest("plain", "", raw) : digest("double-salted", salt, raw);
+        }
+        if (salt == null) {
             return Optional.empty();
         }
-        String algorithmWord = name.equals("SHA-256") ? "sha256" : "sha512";
-        if (raw.length() != LegacyDigestHasher.length(algorithmWord)) {
-            return Optional.empty();
+        if (name.startsWith("BCRYPT-")) {
+            return splitBcrypt(name.substring("BCRYPT-".length()).toLowerCase(Locale.ROOT), raw, salt);
         }
-        return salt == null || salt.isEmpty() ? digest("plain", "", raw) : digest("double-salted", salt, raw);
+        return name.equals("ARGON-2ID") ? splitArgon2id(raw, salt) : Optional.empty();
+    }
+
+    /** bcrypt kept as {@code cost$hash} beside a 22-character salt: put back together. */
+    private static Optional<PasswordHash> splitBcrypt(String version, String raw, String salt) {
+        return matched(SPLIT_BCRYPT, raw)
+                .filter(parts -> BCRYPT_SALT.matcher(salt).matches())
+                .map(parts -> new PasswordHash("$" + version + "$" + parts[0] + "$" + salt + parts[1]));
+    }
+
+    /** Argon2id kept as {@code version,iterations,memory$hash} beside its salt, both in Base64: written as PHC. */
+    private static Optional<PasswordHash> splitArgon2id(String raw, String salt) {
+        return matched(SPLIT_ARGON2, raw).flatMap(parts -> {
+            try {
+                Base64.Encoder bare = Base64.getEncoder().withoutPadding();
+                Base64.Decoder padded = Base64.getDecoder();
+                String phc = "$argon2id$v=" + parts[0] + "$m=" + parts[2] + ",t=" + parts[1] + ",p=1$"
+                        + bare.encodeToString(padded.decode(salt)) + "$" + bare.encodeToString(padded.decode(parts[3]));
+                return Optional.of(new PasswordHash(phc));
+            } catch (IllegalArgumentException notBase64) {
+                return Optional.empty();
+            }
+        });
     }
 
     /** A hash this plugin reads as the source wrote it. */
     private static Optional<PasswordHash> asItIs(String raw) {
         if (raw.startsWith("BCRYPT$")) {
             return nameSaltHash(raw);
+        }
+        if (raw.startsWith("pbkdf2$")) {
+            // PBKDF2-HMAC-SHA256 with a Base64 salt and key: the plugin's own form under a shorter name.
+            return asItIs("pbkdf2-sha256$" + raw.substring("pbkdf2$".length()));
         }
         PasswordHash hash = new PasswordHash(raw);
         Optional<HashAlgorithm> recognised = HashFormats.recognise(hash);
