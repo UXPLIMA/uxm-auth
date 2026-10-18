@@ -13,13 +13,6 @@ import com.uxplima.uxmlib.config.HoconConfig;
 /** {@code screens.conf}, read into one immutable {@link ScreenSettings} and swapped whole on reload. */
 public final class ScreenFile {
 
-    /** The fields and buttons each screen labels, in the order a screen draws them. */
-    private static final Map<String, List<String>> LABELS = Map.of(
-            "register", List.of("password", "confirm", "accept", "remember", "submit", "cancel"),
-            "login", List.of("password", "remember", "submit", "claim", "cancel"),
-            "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"),
-            "replace", List.of("password", "confirm", "submit", "cancel"));
-
     private final Path file;
     private volatile ScreenSettings current;
 
@@ -61,12 +54,13 @@ public final class ScreenFile {
                 screen(config, "login"),
                 screen(config, "pin"),
                 config.getString("login-world-name", ScreenSettings.LOGIN_WORLD),
-                screen(config, "replace"));
+                screen(config, "replace"),
+                screen(config, "captcha"));
     }
 
     private static ScreenSettings.Screen screen(HoconConfig config, String name) {
         Map<String, String> labels = new LinkedHashMap<>();
-        for (String label : LABELS.getOrDefault(name, List.of())) {
+        for (String label : ScreenSettings.LABELS.getOrDefault(name, List.of())) {
             labels.put(label, config.getString(name + "." + label, "@screen." + name + "." + label));
         }
         return new ScreenSettings.Screen(

@@ -35,6 +35,9 @@ public sealed interface LoginResult {
         }
     }
 
+    /** A captcha stands before this login: the connection must solve the one it is shown first. No try was spent. */
+    record CaptchaNeeded() implements LoginResult {}
+
     /** There is no password to log in with: no account, or one that never set a password. */
     record NotRegistered() implements LoginResult {}
 

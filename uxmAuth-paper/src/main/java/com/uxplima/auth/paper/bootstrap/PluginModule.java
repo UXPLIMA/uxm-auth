@@ -20,6 +20,7 @@ import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LanguageSuggestions;
@@ -270,6 +271,7 @@ final class PluginModule {
         registerIfEnabled(commands, ClaimCommand.KEY, "claim", graph.claim, resolvers, scheduler);
         registerIfEnabled(commands, PremiumCommand.KEY, "premium", graph.premium, resolvers, scheduler);
         registerIfEnabled(commands, SessionCommand.KEY, "session", graph.session, resolvers, scheduler);
+        registerIfEnabled(commands, CaptchaCommand.KEY, "captcha", graph.captchaCommand, resolvers, scheduler);
     }
 
     private void registerIfEnabled(

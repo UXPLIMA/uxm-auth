@@ -64,6 +64,47 @@ final class LogInTest {
     }
 
     @Test
+    @DisplayName("once a name failed so often a login waits for the captcha, spends no try, and a login forgives it")
+    void aCaptchaStandsBeforeTheLoginAfterFailures() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.application.protection.Captchas captchas =
+                new com.uxplima.auth.application.protection.Captchas(
+                        () -> new com.uxplima.auth.application.protection.Captchas.Settings(
+                                com.uxplima.auth.application.protection.Captchas.When.FAILURES,
+                                1,
+                                5,
+                                "ABC",
+                                java.time.Duration.ofMinutes(60),
+                                com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG),
+                        new java.util.SplittableRandom(3),
+                        () -> AuthFixture.NOW);
+        LogIn guarded = new LogIn(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                fixture.clock,
+                (address, host) -> java.util.Optional.empty(),
+                () -> fixture.policy,
+                captchas);
+
+        assertThat(guarded.run(connection, Password.of("nope1234"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.Wrong(2));
+        assertThat(guarded.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.CaptchaNeeded());
+        assertThat(fixture.sessions.state(connection))
+                .hasValueSatisfying(state -> assertThat(
+                                ((AuthState.Registered) state).attempts().left())
+                        .isEqualTo(2));
+
+        captchas.solve(connection, captchas.show(connection));
+
+        assertThat(guarded.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+        assertThat(captchas.blocks(UUID.randomUUID(), new PlayerName("Steve"))).isFalse();
+    }
+
+    @Test
     @DisplayName("a right password on an old hash is stored again in the current algorithm")
     void loginRehashesALegacyHashAndStoresIt() {
         Account legacy = AuthFixture.account("Alex", new BcryptHasher(4).hash(Password.of("hunter22")));

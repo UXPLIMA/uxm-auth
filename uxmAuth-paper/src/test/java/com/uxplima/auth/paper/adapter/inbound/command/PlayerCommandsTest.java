@@ -321,6 +321,115 @@ final class PlayerCommandsTest {
         drain();
     }
 
+    @Test
+    @DisplayName("a login the captcha stands before says so and shows the captcha, and spends no try")
+    void aLoginWaitsForTheCaptcha() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.FAILURES);
+        world.registered(steve, "hunter22");
+        world.door.hold(steve);
+        world.scheduler.drain();
+        world.scheduler.settle(login().attempt(steve, "wrong123"));
+        drain();
+        world.fired.clear();
+
+        world.scheduler.settle(login().attempt(steve, "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(offered).containsExactly("Steve:" + plain(world.messages.render(steve, Keys.CAPTCHA_NEEDED)));
+        assertThat(world.fired).doesNotContain(AuthSettings.Moment.WRONG_PASSWORD, AuthSettings.Moment.LOGGED_IN);
+    }
+
+    @Test
+    @DisplayName("a registration the captcha stands before says so and shows the captcha")
+    void aRegistrationWaitsForTheCaptcha() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        world.unregistered(steve);
+
+        world.scheduler.settle(register(AuthWorld.shippedPasswords()).attempt(steve, "hunter22", "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(offered).containsExactly("Steve:" + plain(world.messages.render(steve, Keys.CAPTCHA_NEEDED)));
+    }
+
+    @Test
+    @DisplayName("/captcha with no code waiting says so, a wrong code shows a new one, the right one the next screen")
+    void theCaptchaCommandAnswers() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        world.unregistered(steve);
+        java.util.List<String> handed = new java.util.ArrayList<>();
+        java.util.List<com.uxplima.auth.domain.state.AuthState> next = new java.util.ArrayList<>();
+        CaptchaCommand command = captchaCommand((player, code) -> handed.add(code), (player, state) -> next.add(state));
+        drain();
+
+        command.answer(steve, "ABCDE");
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_NOTHING));
+
+        com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen screen = captchaScreen((player, code) -> {
+            handed.add(code);
+            return true;
+        });
+        screen.offer(steve, steve.getUniqueId(), null);
+        drain();
+        command.answer(steve, "WRONG");
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_WRONG));
+        assertThat(handed).hasSize(2).doesNotHaveDuplicates();
+        drain();
+
+        command.answer(steve, handed.getLast().toLowerCase(java.util.Locale.ROOT));
+
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_SOLVED));
+        assertThat(next).singleElement().isInstanceOf(com.uxplima.auth.domain.state.AuthState.Unregistered.class);
+        assertThat(world.captchas.blocksRegistration(steve.getUniqueId())).isFalse();
+    }
+
+    private final java.util.List<String> offered = new java.util.ArrayList<>();
+
+    private static com.uxplima.auth.application.protection.Captchas.Settings captcha(
+            com.uxplima.auth.application.protection.Captchas.When when) {
+        return new com.uxplima.auth.application.protection.Captchas.Settings(
+                when,
+                1,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.MAP);
+    }
+
+    private static String plain(net.kyori.adventure.text.Component line) {
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(line);
+    }
+
+    private com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen captchaScreen(
+            com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen.Hand hand) {
+        com.uxplima.auth.adapter.outbound.ScreenSettings screens =
+                new com.uxplima.auth.adapter.outbound.ScreenFile(folder.resolve("screens.conf")).current();
+        return new com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen(
+                world.captchas,
+                new com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens(
+                        () -> screens,
+                        () -> world.passwords,
+                        world.messages,
+                        new com.uxplima.uxmlib.text.style.Styler(com.uxplima.uxmlib.text.style.Theme.defaults())),
+                new com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower() {
+                    @Override
+                    public void show(
+                            net.kyori.adventure.audience.Audience who,
+                            com.uxplima.auth.paper.adapter.inbound.screen.DialogSpec spec) {}
+
+                    @Override
+                    public void close(net.kyori.adventure.audience.Audience who) {}
+                },
+                world.messages,
+                hand);
+    }
+
+    private CaptchaCommand captchaCommand(
+            com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen.Hand hand,
+            com.uxplima.auth.paper.adapter.inbound.hold.ScreenOffer next) {
+        return new CaptchaCommand(captchaScreen(hand), world.sessions::state, next, world.messages);
+    }
+
     private void drain() {
         while (steve.nextComponentMessage() != null) {
             // Throw away what came before the part under test.
@@ -329,12 +438,26 @@ final class PlayerCommandsTest {
 
     private LoginCommand login() {
         return new LoginCommand(
-                world.logIn, world.door, world::openingOf, world.moments, world.messages, world.replies);
+                world.logIn,
+                world.door,
+                world::openingOf,
+                world.moments,
+                world.messages,
+                world.replies,
+                (reader, id, reason) -> offered.add(((org.bukkit.entity.Player) reader).getName() + ":"
+                        + plain(java.util.Objects.requireNonNull(reason))));
     }
 
     private RegisterCommand register(AuthSettings.Passwords passwords) {
         return new RegisterCommand(
-                world.register, world.door, world::openingOf, () -> passwords, world.messages, world.replies);
+                world.register,
+                world.door,
+                world::openingOf,
+                () -> passwords,
+                world.messages,
+                world.replies,
+                (reader, id, reason) -> offered.add(((org.bukkit.entity.Player) reader).getName() + ":"
+                        + plain(java.util.Objects.requireNonNull(reason))));
     }
 
     private ChangePasswordCommand changePassword(AuthSettings.Passwords passwords) {

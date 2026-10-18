@@ -20,10 +20,19 @@ public record ScreenSettings(
         Screen login,
         Screen pin,
         String loginWorld,
-        Screen replace) {
+        Screen replace,
+        Screen captcha) {
 
     /** The world a waiting player is moved to while the waiting room is the login world, unless the file names one. */
     public static final String LOGIN_WORLD = "uxmauth_login";
+
+    /** The labels each screen carries, in the order the file writes them. */
+    static final Map<String, List<String>> LABELS = Map.of(
+            "register", List.of("password", "confirm", "accept", "remember", "submit", "cancel"),
+            "login", List.of("password", "remember", "submit", "claim", "cancel"),
+            "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"),
+            "replace", List.of("password", "confirm", "submit", "cancel"),
+            "captcha", List.of("code", "submit", "cancel"));
 
     public ScreenSettings {
         Objects.requireNonNull(loginWorld, "loginWorld");
@@ -37,6 +46,33 @@ public record ScreenSettings(
         Objects.requireNonNull(login, "login");
         Objects.requireNonNull(pin, "pin");
         Objects.requireNonNull(replace, "replace");
+        Objects.requireNonNull(captcha, "captcha");
+    }
+
+    /** The screens with the shipped captcha screen. */
+    public ScreenSettings(
+            WaitingRoom waitingRoom,
+            Cancel cancel,
+            boolean canClose,
+            boolean pinPad,
+            Rules rules,
+            Screen register,
+            Screen login,
+            Screen pin,
+            String loginWorld,
+            Screen replace) {
+        this(
+                waitingRoom,
+                cancel,
+                canClose,
+                pinPad,
+                rules,
+                register,
+                login,
+                pin,
+                loginWorld,
+                replace,
+                shipped("captcha"));
     }
 
     /** The screens with the shipped screen for replacing a weak password. */
@@ -55,11 +91,16 @@ public record ScreenSettings(
 
     /** The screen a player held to replace a weak password reads, as the shipped file writes it. */
     public static Screen shippedReplace() {
+        return shipped("replace");
+    }
+
+    /** A screen as the shipped file writes it: every line from the catalogue, under the screen's own name. */
+    private static Screen shipped(String name) {
         Map<String, String> labels = new java.util.LinkedHashMap<>();
-        for (String label : List.of("password", "confirm", "submit", "cancel")) {
-            labels.put(label, "@screen.replace." + label);
+        for (String label : LABELS.getOrDefault(name, List.of())) {
+            labels.put(label, "@screen." + name + "." + label);
         }
-        return new Screen("@screen.replace.title", List.of("@screen.replace.body"), labels);
+        return new Screen("@screen." + name + ".title", List.of("@screen." + name + ".body"), labels);
     }
 
     /** The screens with the login world under its usual name. */

@@ -555,6 +555,43 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName(
+            "the captcha is off by default, and the operator's moment, count, length, characters and screen are read")
+    void theCaptchaIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").protection().captcha())
+                .isEqualTo(new com.uxplima.auth.application.protection.Captchas.Settings(
+                        com.uxplima.auth.application.protection.Captchas.When.OFF,
+                        3,
+                        5,
+                        "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                        java.time.Duration.ofMinutes(60),
+                        com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG));
+
+        assertThat(settingsFrom(
+                                folder,
+                                "protection { captcha { when = both, after-failures = 2, length = 6,"
+                                        + " characters = \"123\", failure-memory-minutes = 5, java = map } }\n")
+                        .protection()
+                        .captcha())
+                .isEqualTo(new com.uxplima.auth.application.protection.Captchas.Settings(
+                        com.uxplima.auth.application.protection.Captchas.When.BOTH,
+                        2,
+                        6,
+                        "123",
+                        java.time.Duration.ofMinutes(5),
+                        com.uxplima.auth.application.protection.Captchas.JavaScreen.MAP));
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { captcha { when = sometimes } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.captcha");
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { captcha { java = book } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.captcha");
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { captcha { length = 9 } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.captcha");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

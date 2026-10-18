@@ -5,6 +5,7 @@ import java.util.Objects;
 
 import com.uxplima.auth.adapter.outbound.geo.GeoSettings;
 import com.uxplima.auth.application.protection.AccountCap;
+import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.premium.HostPatterns;
@@ -23,6 +24,7 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  * @param connections how often one address may connect
  * @param accounts how many password accounts one address may make
  * @param countries which countries come in, and how the country file is fetched
+ * @param captcha when a captcha stands before a registration or a login, and how it is drawn
  */
 public record ProtectionSettings(
         List<String> sharedAddressHosts,
@@ -31,7 +33,8 @@ public record ProtectionSettings(
         BanSteps bans,
         ConnectionWindow.Settings connections,
         AccountCap.Settings accounts,
-        GeoSettings countries) {
+        GeoSettings countries,
+        Captchas.Settings captcha) {
     public ProtectionSettings {
         sharedAddressHosts = List.copyOf(Objects.requireNonNull(sharedAddressHosts, "sharedAddressHosts"));
         sharedAddressSources = List.copyOf(Objects.requireNonNull(sharedAddressSources, "sharedAddressSources"));
@@ -45,6 +48,7 @@ public record ProtectionSettings(
         Objects.requireNonNull(connections, "connections");
         Objects.requireNonNull(accounts, "accounts");
         Objects.requireNonNull(countries, "countries");
+        Objects.requireNonNull(captcha, "captcha");
     }
 
     /** What the console should say about these settings at every start and reload. */

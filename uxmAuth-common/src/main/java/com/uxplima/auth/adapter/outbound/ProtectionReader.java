@@ -7,6 +7,7 @@ import java.util.Set;
 
 import com.uxplima.auth.adapter.outbound.geo.GeoSettings;
 import com.uxplima.auth.application.protection.AccountCap;
+import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
@@ -18,6 +19,8 @@ import com.uxplima.uxmlib.config.HoconConfig;
 final class ProtectionReader {
 
     private static final List<Integer> SHIPPED_STEPS = List.of(5, 30, 60, 1440);
+    // The letters and digits that are not read as one another: no 0 and O, no 1, I and L.
+    private static final String SHIPPED_CHARACTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
     private ProtectionReader() {}
 
@@ -29,7 +32,26 @@ final class ProtectionReader {
                 bans(config),
                 connections(config),
                 accounts(config),
-                countries(config));
+                countries(config),
+                captcha(config));
+    }
+
+    private static Captchas.Settings captcha(HoconConfig config) {
+        try {
+            return new Captchas.Settings(
+                    Captchas.When.valueOf(word(config, "captcha.when", "off")),
+                    config.getInt("protection.captcha.after-failures", 3),
+                    config.getInt("protection.captcha.length", 5),
+                    config.getString("protection.captcha.characters", SHIPPED_CHARACTERS),
+                    Duration.ofMinutes(config.getInt("protection.captcha.failure-memory-minutes", 60)),
+                    Captchas.JavaScreen.valueOf(word(config, "captcha.java", "dialog")));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("protection.captcha: " + wrong.getMessage(), wrong);
+        }
+    }
+
+    private static String word(HoconConfig config, String name, String shipped) {
+        return config.getString("protection." + name, shipped).strip().toUpperCase(Locale.ROOT);
     }
 
     private static GeoSettings countries(HoconConfig config) {

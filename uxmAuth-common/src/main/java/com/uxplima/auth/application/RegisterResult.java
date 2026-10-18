@@ -36,6 +36,9 @@ public sealed interface RegisterResult {
     /** The address made all the password accounts it may for now. */
     record TooManyAccounts() implements RegisterResult {}
 
+    /** A captcha stands before this registration: the connection must solve the one it is shown first. */
+    record CaptchaNeeded() implements RegisterResult {}
+
     /** This connection already has an account. */
     record AlreadyRegistered() implements RegisterResult {}
 

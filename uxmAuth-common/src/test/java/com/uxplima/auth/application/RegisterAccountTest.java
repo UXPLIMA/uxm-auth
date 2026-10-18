@@ -204,6 +204,39 @@ final class RegisterAccountTest {
     }
 
     @Test
+    @DisplayName("a registration waits for the captcha before any password is looked at, and goes on once solved")
+    void aCaptchaStandsBeforeRegistration() {
+        UUID connection = fixture.unregistered("Steve");
+        java.util.Set<UUID> solved = new java.util.HashSet<>();
+        RegisterAccount guarded = new RegisterAccount(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                fixture.clock,
+                (address, host) -> false,
+                com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                id -> !solved.contains(id));
+
+        assertThat(guarded.run(connection, new PlayerName("Steve"), Password.of("a"), Password.of("b"), "10.0.0.7")
+                        .join())
+                .isInstanceOf(RegisterResult.CaptchaNeeded.class);
+        assertThat(fixture.accounts.writes()).isZero();
+
+        solved.add(connection);
+
+        assertThat(guarded.run(
+                                connection,
+                                new PlayerName("Steve"),
+                                Password.of("hunter22"),
+                                Password.of("hunter22"),
+                                "10.0.0.7")
+                        .join())
+                .isInstanceOf(RegisterResult.Created.class);
+    }
+
+    @Test
     @DisplayName("a password known from a breach is refused before it is hashed, and no account is made")
     void aBreachedPasswordIsRefused() {
         UUID connection = fixture.unregistered("Steve");

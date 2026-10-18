@@ -20,6 +20,7 @@ import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Makes an account for a connection that has none, and logs it in.
@@ -37,6 +38,12 @@ public final class RegisterAccount {
         boolean full(String address, String host);
     }
 
+    /** Whether a captcha stands before the registration of the connection with this id. */
+    @FunctionalInterface
+    public interface Captcha {
+        boolean blocks(UUID connection);
+    }
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
@@ -45,6 +52,7 @@ public final class RegisterAccount {
     private final Clock clock;
     private final Cap cap;
     private final BreachedPasswords breaches;
+    private final Captcha captcha;
 
     public RegisterAccount(
             AccountRepository accounts,
@@ -78,6 +86,20 @@ public final class RegisterAccount {
             Clock clock,
             Cap cap,
             BreachedPasswords breaches) {
+        this(accounts, hashing, lane, sessions, policy, clock, cap, breaches, connection -> false);
+    }
+
+    /** @param captcha whether a captcha stands before a registration, asked before any password is looked at */
+    public RegisterAccount(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Supplier<PasswordPolicy> policy,
+            Clock clock,
+            Cap cap,
+            BreachedPasswords breaches,
+            Captcha captcha) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -86,6 +108,7 @@ public final class RegisterAccount {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.cap = Objects.requireNonNull(cap, "cap");
         this.breaches = Objects.requireNonNull(breaches, "breaches");
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
     }
 
     /** Both passwords are wiped once the answer is known, whatever it is. */
@@ -124,12 +147,9 @@ public final class RegisterAccount {
         if (!(held.state() instanceof AuthState.Unregistered unregistered)) {
             return CompletableFuture.completedFuture(new RegisterResult.AlreadyRegistered());
         }
-        if (!password.sameAs(confirm)) {
-            return CompletableFuture.completedFuture(new RegisterResult.Mismatch());
-        }
-        PasswordVerdict verdict = policy.get().check(password);
-        if (!(verdict instanceof PasswordVerdict.Accepted)) {
-            return CompletableFuture.completedFuture(new RegisterResult.Rejected(verdict));
+        RegisterResult refused = refusal(connection, password, confirm);
+        if (refused != null) {
+            return CompletableFuture.completedFuture(refused);
         }
         long generation = held.generation();
         boolean unverified = unregistered.unverified();
@@ -142,6 +162,18 @@ public final class RegisterAccount {
             }
             return store(connection, generation, name, hashing.hash(password), address, unverified);
         });
+    }
+
+    /** Why a registration is refused before anything costs a hash: the captcha, the confirmation, the policy. */
+    private @Nullable RegisterResult refusal(UUID connection, Password password, Password confirm) {
+        if (captcha.blocks(connection)) {
+            return new RegisterResult.CaptchaNeeded();
+        }
+        if (!password.sameAs(confirm)) {
+            return new RegisterResult.Mismatch();
+        }
+        PasswordVerdict verdict = policy.get().check(password);
+        return verdict instanceof PasswordVerdict.Accepted ? null : new RegisterResult.Rejected(verdict);
     }
 
     private RegisterResult store(

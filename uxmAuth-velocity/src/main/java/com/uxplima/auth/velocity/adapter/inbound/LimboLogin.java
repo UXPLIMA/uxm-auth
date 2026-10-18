@@ -207,6 +207,7 @@ public final class LimboLogin {
                 new Outcome.Stay(PasswordWords.reason(messages, reader, mustReplace.why())
                         .map(why -> why.append(Component.newline()).append(reminder(reader, id)))
                         .orElseGet(() -> reminder(reader, id)));
+            case LoginResult.CaptchaNeeded needed -> new Outcome.Stay(messages.render(reader, Keys.CAPTCHA_NEEDED));
             case LoginResult.NotRegistered notRegistered ->
                 new Outcome.Stay(messages.render(reader, Keys.LOGIN_NOT_REGISTERED));
             case LoginResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
@@ -227,6 +228,7 @@ public final class LimboLogin {
                         Text.placeholder("name", taken.stored().value())));
             case RegisterResult.TooManyAccounts tooMany ->
                 new Outcome.Stay(messages.render(reader, Keys.REGISTER_TOO_MANY_ACCOUNTS));
+            case RegisterResult.CaptchaNeeded needed -> new Outcome.Stay(messages.render(reader, Keys.CAPTCHA_NEEDED));
             case RegisterResult.AlreadyRegistered already ->
                 new Outcome.Stay(messages.render(reader, Keys.REGISTER_ALREADY));
             case RegisterResult.Gone gone -> new Outcome.Stay(reminder(reader, id));

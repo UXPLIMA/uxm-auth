@@ -135,6 +135,18 @@ public final class AuthWorld implements AutoCloseable {
     /** The addresses the shared-address filters of this world connect from; a test sets them. */
     public List<String> sharedSources = List.of();
 
+    /** When this world asks a captcha; off until a test sets it. */
+    public com.uxplima.auth.application.protection.Captchas.Settings captchaSettings =
+            new com.uxplima.auth.application.protection.Captchas.Settings(
+                    com.uxplima.auth.application.protection.Captchas.When.OFF,
+                    3,
+                    5,
+                    "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                    Duration.ofMinutes(60),
+                    com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG);
+
+    public final com.uxplima.auth.application.protection.Captchas captchas;
+
     /** For whom sessions are on in this world; a test sets it. */
     public Remember.Settings sessionSettings = new Remember.Settings(Remember.Mode.CHOSEN, Duration.ofMinutes(60));
 
@@ -191,10 +203,21 @@ public final class AuthWorld implements AutoCloseable {
                 },
                 remembering);
         AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
-        this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock, cap::full);
+        this.captchas = new com.uxplima.auth.application.protection.Captchas(
+                () -> captchaSettings, new java.util.SplittableRandom(11), clock::instant);
+        this.register = new RegisterAccount(
+                accounts,
+                hashing,
+                lane,
+                sessions,
+                () -> policy,
+                clock,
+                cap::full,
+                com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                captchas::blocksRegistration);
         this.bans =
                 new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
-        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed, () -> policy);
+        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed, () -> policy, captchas);
         this.change =
                 new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered);
         this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS, remembered);

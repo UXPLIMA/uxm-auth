@@ -208,6 +208,11 @@ public enum Keys implements MessageKey {
     SESSION_NOT_CHOSEN(
             "session.not-chosen",
             "<etag:'ERROR'> <body>This server decides sessions for everyone, so there is nothing to choose."),
+    CAPTCHA_NEEDED("captcha.needed", "<etag:'ERROR'> <body>Solve the captcha first."),
+    CAPTCHA_WRONG("captcha.wrong", "<etag:'ERROR'> <body>That was not the code. Here is a new one."),
+    CAPTCHA_SOLVED("captcha.solved", "<good>Captcha solved. Go on."),
+    CAPTCHA_MAP("captcha.map", "<body>Read the code on the map in your hand and type <value>/captcha <code><body>."),
+    CAPTCHA_NOTHING("captcha.nothing", "<etag:'ERROR'> <body>There is no captcha to answer."),
     LOGIN_MUST_REPLACE(
             "login.must-replace",
             "<body>Your password was right, but it no longer meets this server's rules. Set a new one with"
@@ -265,6 +270,11 @@ public enum Keys implements MessageKey {
     SCREEN_REPLACE_CONFIRM("screen.replace.confirm", "The same password again"),
     SCREEN_REPLACE_SUBMIT("screen.replace.submit", "Save and come in"),
     SCREEN_REPLACE_CANCEL("screen.replace.cancel", "Leave"),
+    SCREEN_CAPTCHA_TITLE("screen.captcha.title", "<value>Are you a player?"),
+    SCREEN_CAPTCHA_BODY("screen.captcha.body", "<body>Type the code you see: <value><code>"),
+    SCREEN_CAPTCHA_CODE("screen.captcha.code", "Code"),
+    SCREEN_CAPTCHA_SUBMIT("screen.captcha.submit", "Continue"),
+    SCREEN_CAPTCHA_CANCEL("screen.captcha.cancel", "Leave"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

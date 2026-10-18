@@ -27,14 +27,7 @@ public final class InWorldScreens implements ScreenOffer {
     private final BiConsumer<Player, Runnable> later;
     private final Predicate<Player> stillWaiting;
     private final ScreenShower shower;
-
-    public InWorldScreens(
-            Supplier<ScreenSettings> settings,
-            AuthScreens screens,
-            Predicate<UUID> sentToTheWorld,
-            ScreenShower shower) {
-        this(settings, screens, sentToTheWorld, (player, task) -> task.run(), player -> true, shower);
-    }
+    private final CaptchaScreen captcha;
 
     /**
      * @param later runs the showing a moment after the join, when the client can draw a screen: a Bedrock client
@@ -47,13 +40,15 @@ public final class InWorldScreens implements ScreenOffer {
             Predicate<UUID> sentToTheWorld,
             BiConsumer<Player, Runnable> later,
             Predicate<Player> stillWaiting,
-            ScreenShower shower) {
+            ScreenShower shower,
+            CaptchaScreen captcha) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.screens = Objects.requireNonNull(screens, "screens");
         this.sentToTheWorld = Objects.requireNonNull(sentToTheWorld, "sentToTheWorld");
         this.later = Objects.requireNonNull(later, "later");
         this.stillWaiting = Objects.requireNonNull(stillWaiting, "stillWaiting");
         this.shower = Objects.requireNonNull(shower, "shower");
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
     }
 
     @Override
@@ -68,6 +63,10 @@ public final class InWorldScreens implements ScreenOffer {
         }
         later.accept(player, () -> {
             if (!player.isOnline() || !stillWaiting.test(player)) {
+                return;
+            }
+            if (captcha.stands(player.getUniqueId(), state)) {
+                captcha.offer(player, player.getUniqueId(), null);
                 return;
             }
             switch (state) {

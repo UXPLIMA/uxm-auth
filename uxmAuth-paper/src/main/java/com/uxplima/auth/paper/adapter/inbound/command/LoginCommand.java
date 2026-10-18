@@ -16,6 +16,7 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
+import com.uxplima.auth.paper.adapter.inbound.screen.CaptchaOffer;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
@@ -39,6 +40,7 @@ public final class LoginCommand {
     private final Messages messages;
     private final Replies replies;
     private final TimeWords times;
+    private final CaptchaOffer captcha;
 
     /** @param openings the opening of the session each player stands in the world under */
     public LoginCommand(
@@ -48,6 +50,18 @@ public final class LoginCommand {
             MomentRunner moments,
             Messages messages,
             Replies replies) {
+        this(logIn, door, openings, moments, messages, replies, CaptchaOffer.NONE);
+    }
+
+    /** @param captcha what shows the captcha a login waits for */
+    public LoginCommand(
+            LogIn logIn,
+            Door door,
+            Function<Player, OptionalLong> openings,
+            MomentRunner moments,
+            Messages messages,
+            Replies replies,
+            CaptchaOffer captcha) {
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.door = Objects.requireNonNull(door, "door");
         this.openings = Objects.requireNonNull(openings, "openings");
@@ -55,6 +69,7 @@ public final class LoginCommand {
         this.messages = Objects.requireNonNull(messages, "messages");
         this.replies = Objects.requireNonNull(replies, "replies");
         this.times = new TimeWords(messages);
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
     }
 
     @Subcommand("")
@@ -93,6 +108,8 @@ public final class LoginCommand {
                 PasswordWords.reason(messages, player, mustReplace.why()).ifPresent(player::sendMessage);
                 messages.send(player, Keys.LOGIN_MUST_REPLACE);
             }
+            case LoginResult.CaptchaNeeded needed ->
+                captcha.offer(player, player.getUniqueId(), messages.render(player, Keys.CAPTCHA_NEEDED));
             case LoginResult.NotRegistered notRegistered -> messages.send(player, Keys.LOGIN_NOT_REGISTERED);
             case LoginResult.AlreadyLoggedIn already -> messages.send(player, Keys.LOGIN_ALREADY);
             case LoginResult.Gone gone -> {}

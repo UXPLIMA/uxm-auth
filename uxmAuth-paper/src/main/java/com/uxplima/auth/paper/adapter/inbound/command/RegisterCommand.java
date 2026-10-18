@@ -16,6 +16,7 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
+import com.uxplima.auth.paper.adapter.inbound.screen.CaptchaOffer;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
@@ -41,6 +42,7 @@ public final class RegisterCommand {
     private final Supplier<AuthSettings.Passwords> passwords;
     private final Messages messages;
     private final Replies replies;
+    private final CaptchaOffer captcha;
 
     public RegisterCommand(
             RegisterAccount register,
@@ -49,12 +51,25 @@ public final class RegisterCommand {
             Supplier<AuthSettings.Passwords> passwords,
             Messages messages,
             Replies replies) {
+        this(register, door, openings, passwords, messages, replies, CaptchaOffer.NONE);
+    }
+
+    /** @param captcha what shows the captcha a registration waits for */
+    public RegisterCommand(
+            RegisterAccount register,
+            Door door,
+            Function<Player, OptionalLong> openings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            Replies replies,
+            CaptchaOffer captcha) {
         this.register = Objects.requireNonNull(register, "register");
         this.door = Objects.requireNonNull(door, "door");
         this.openings = Objects.requireNonNull(openings, "openings");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.replies = Objects.requireNonNull(replies, "replies");
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
     }
 
     @Subcommand("")
@@ -100,6 +115,8 @@ public final class RegisterCommand {
                         Text.placeholder("name", taken.stored().value()));
             case RegisterResult.TooManyAccounts tooMany -> messages.send(player, Keys.REGISTER_TOO_MANY_ACCOUNTS);
             case RegisterResult.AlreadyRegistered already -> messages.send(player, Keys.REGISTER_ALREADY);
+            case RegisterResult.CaptchaNeeded needed ->
+                captcha.offer(player, player.getUniqueId(), messages.render(player, Keys.CAPTCHA_NEEDED));
             case RegisterResult.Gone gone -> {}
         }
     }

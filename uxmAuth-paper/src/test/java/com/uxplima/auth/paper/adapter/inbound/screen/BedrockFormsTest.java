@@ -100,6 +100,29 @@ final class BedrockFormsTest {
     }
 
     @Test
+    @DisplayName("a Bedrock player reads the captcha in a custom form: the code in its text, one field, its submit"
+            + " the answer")
+    void theCaptchaIsACustomForm() {
+        java.util.List<@Nullable String> codes = new ArrayList<>();
+        BedrockForms answering = new BedrockForms(forms, (player, action, answer) -> {
+            answered.add(action);
+            codes.add(answer.text(AuthScreens.CODE));
+        });
+
+        answering.show(steve, screens().captcha(steve, "K7QXR", null));
+
+        assertThat(forms.content).contains("K7QXR");
+        assertThat(forms.widgets)
+                .singleElement()
+                .isInstanceOfSatisfying(
+                        BedrockWidget.Input.class,
+                        input -> assertThat(input.name()).isEqualTo(AuthScreens.CODE));
+        forms.submit.accept(Map.of(AuthScreens.CODE, "k7qxr"));
+        assertThat(answered).containsExactly(AuthScreens.CAPTCHA);
+        assertThat(codes).containsExactly("k7qxr");
+    }
+
+    @Test
     @DisplayName("closing the form is leaving the screen")
     void closingIsCancel() {
         bedrockForms().show(steve, screens().login(steve, null));
@@ -168,6 +191,9 @@ final class BedrockFormsTest {
     /** Records the last form sent. */
     private static final class Forms implements BedrockScreen {
         int shown;
+
+        @Nullable String content;
+
         List<BedrockWidget> widgets = List.of();
         List<BedrockButton> buttons = List.of();
         Consumer<Map<String, String>> submit = values -> {};
@@ -214,6 +240,7 @@ final class BedrockFormsTest {
                 Consumer<Map<String, String>> onSubmit,
                 Runnable onClose) {
             shown++;
+            this.content = content;
             this.widgets = widgets;
             this.submit = onSubmit;
             this.close = onClose;

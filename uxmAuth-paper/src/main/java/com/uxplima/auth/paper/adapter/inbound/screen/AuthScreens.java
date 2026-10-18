@@ -20,6 +20,7 @@ import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.uxmlib.text.Text;
 import com.uxplima.uxmlib.text.message.MessageKey;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.uxplima.uxmlib.text.style.Styler;
@@ -39,6 +40,11 @@ public final class AuthScreens {
 
     /** The action of saving a new password in place of a weak one. */
     public static final String REPLACE = "replace";
+
+    /** The press that answers the captcha, and the field its code is typed in. */
+    public static final String CAPTCHA = "captcha";
+
+    public static final String CODE = "code";
 
     /** The action of "this name is mine" on the login screen. */
     public static final String CLAIM = "claim";
@@ -139,6 +145,22 @@ public final class AuthScreens {
                 body,
                 List.of(password(reader, screen, PASSWORD), password(reader, screen, CONFIRM)),
                 buttons(reader, screen, REPLACE),
+                settings.canClose());
+    }
+
+    /** The captcha with the code of this showing, and the reason it is asked, or the last answer refused, on top. */
+    public DialogSpec captcha(Audience reader, String code, @Nullable Component reason) {
+        Objects.requireNonNull(reader, "reader");
+        Objects.requireNonNull(code, "code");
+        ScreenSettings settings = screens.get();
+        ScreenSettings.Screen screen = settings.captcha();
+        List<Component> body = start(reason);
+        screen.body().forEach(line -> body.add(text(reader, line, Text.placeholder(CODE, code))));
+        return new DialogSpec(
+                text(reader, screen.title()),
+                body,
+                List.of(new DialogSpec.TextInput(CODE, text(reader, screen.label(CODE)), code.length())),
+                buttons(reader, screen, CAPTCHA),
                 settings.canClose());
     }
 

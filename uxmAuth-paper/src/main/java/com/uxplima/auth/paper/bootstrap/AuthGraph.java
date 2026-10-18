@@ -3,6 +3,7 @@ package com.uxplima.auth.paper.bootstrap;
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,6 +49,7 @@ import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
+import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
@@ -56,6 +58,7 @@ import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
@@ -81,6 +84,7 @@ import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
 import com.uxplima.auth.paper.adapter.inbound.listener.NetworkDoor;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.BedrockForms;
+import com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConfigurationGate;
 import com.uxplima.auth.paper.adapter.inbound.screen.FormAnswers;
 import com.uxplima.auth.paper.adapter.inbound.screen.InWorldScreens;
@@ -133,6 +137,7 @@ final class AuthGraph implements AutoCloseable {
     final ClaimCommand claim;
     final PremiumCommand premium;
     final SessionCommand session;
+    final CaptchaCommand captchaCommand;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
     private final LoginWorld loginWorld;
@@ -238,6 +243,9 @@ final class AuthGraph implements AutoCloseable {
         Welcomes welcomes = new Welcomes();
         Notices notices = new Notices(messages);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
+        Captchas captchas =
+                new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
+        CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, CaptchaScreen.Hand.NONE);
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,
@@ -245,7 +253,8 @@ final class AuthGraph implements AutoCloseable {
                 sessions,
                 clock,
                 bans::failed,
-                () -> settings.current().passwordPolicy());
+                () -> settings.current().passwordPolicy(),
+                captchas);
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -264,7 +273,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 clock,
                 cap::full,
-                breaches);
+                breaches,
+                captchas::blocksRegistration);
         this.events = bulletins(settings, plugin.getLogger());
         ChangePassword change = new ChangePassword(
                 accounts,
@@ -286,7 +296,8 @@ final class AuthGraph implements AutoCloseable {
                 id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered,
                 claims::claim,
                 sessions::chose,
-                change);
+                change,
+                captcha);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
@@ -301,23 +312,17 @@ final class AuthGraph implements AutoCloseable {
                 welcomes,
                 plugin.getLogger());
         Remembering remembering = new Remembering(remember, sessions, scheduler);
+        InWorldScreens inWorld = new InWorldScreens(
+                screenFile::current,
+                screens,
+                gate::sentToTheWorld,
+                (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task),
+                hold::isHeld,
+                shower,
+                captcha);
+        this.captchaCommand = new CaptchaCommand(captcha, sessions::state, inWorld, messages);
         Door door = new Door(
-                sessions,
-                keeper,
-                waiting,
-                moments,
-                greeter,
-                new InWorldScreens(
-                        screenFile::current,
-                        screens,
-                        gate::sentToTheWorld,
-                        (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task),
-                        hold::isHeld,
-                        shower),
-                welcomes,
-                notices,
-                channelReports,
-                remembering);
+                sessions, keeper, waiting, moments, greeter, inWorld, welcomes, notices, channelReports, remembering);
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -362,9 +367,9 @@ final class AuthGraph implements AutoCloseable {
                 messages,
                 plugin.getLogger());
         ConnectionListener joins = connections;
-        this.login = new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies);
+        this.login = new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies, captcha);
         this.register = new RegisterCommand(
-                registering, door, joins::openingOf, () -> settings.current().passwords(), messages, replies);
+                registering, door, joins::openingOf, () -> settings.current().passwords(), messages, replies, captcha);
         this.changePassword = new ChangePasswordCommand(
                 change, door, moments, () -> settings.current().passwords(), messages, replies);
         LogOut logOut =

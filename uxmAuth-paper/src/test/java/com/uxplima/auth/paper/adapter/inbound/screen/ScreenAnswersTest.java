@@ -43,6 +43,7 @@ final class ScreenAnswersTest {
     private final List<DialogSpec> shown = new ArrayList<>();
     private int closed;
     private ScreenSettings settings;
+    private CaptchaScreen.Hand hand = CaptchaScreen.Hand.NONE;
 
     @BeforeEach
     void setUp() {
@@ -52,6 +53,7 @@ final class ScreenAnswersTest {
         server.getPluginManager().addPermission(new Permission("uxmauth.login", PermissionDefault.TRUE));
         server.getPluginManager().addPermission(new Permission("uxmauth.register", PermissionDefault.TRUE));
         server.getPluginManager().addPermission(new Permission("uxmauth.claim", PermissionDefault.TRUE));
+        server.getPluginManager().addPermission(new Permission("uxmauth.captcha", PermissionDefault.TRUE));
         steve = server.addPlayer("Steve");
         settings = new com.uxplima.auth.adapter.outbound.ScreenFile(folder.resolve("screens.conf")).current();
     }
@@ -164,6 +166,136 @@ final class ScreenAnswersTest {
                 .password());
         assertThat(world.hashing.verify(com.uxplima.auth.domain.password.Password.of("hunter22"), stored))
                 .isNotInstanceOf(com.uxplima.auth.domain.hash.Verification.Wrong.class);
+    }
+
+    @Test
+    @DisplayName("a registration the captcha stands before shows the captcha, a wrong code a new one, the right one"
+            + " the register screen again")
+    void aCaptchaStandsBeforeTheRegistrationOnTheScreen() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        world.unregistered(steve);
+        java.util.UUID id = steve.getUniqueId();
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(shown.getLast().buttons())
+                .extracting(DialogSpec.Button::action)
+                .contains(AuthScreens.CAPTCHA);
+        assertThat(plain(shown.getLast().body().getFirst()))
+                .isEqualTo(plain(world.messages.render(steve, Keys.CAPTCHA_NEEDED)));
+        String first = world.captchas.code(id).orElseThrow();
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.CAPTCHA, answer(Map.of("code", "WRONG"))));
+        assertThat(plain(shown.getLast().body().getFirst()))
+                .isEqualTo(plain(world.messages.render(steve, Keys.CAPTCHA_WRONG)));
+        String second = world.captchas.code(id).orElseThrow();
+        assertThat(second).isNotEqualTo(first);
+        assertThat(plain(shown.getLast().body().get(1))).contains(second);
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.CAPTCHA, answer(Map.of("code", second))));
+        assertThat(shown.getLast().buttons())
+                .extracting(DialogSpec.Button::action)
+                .contains(AuthScreens.REGISTER);
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+        assertThat(world.isAuthenticated(steve)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a login the captcha stands before shows the captcha, and the right code brings the login screen")
+    void aCaptchaStandsBeforeTheLoginOnTheScreen() {
+        world.captchaSettings = new com.uxplima.auth.application.protection.Captchas.Settings(
+                com.uxplima.auth.application.protection.Captchas.When.FAILURES,
+                1,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG);
+        world.registered(steve, "hunter22");
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "nope1234"))));
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(shown.getLast().buttons())
+                .extracting(DialogSpec.Button::action)
+                .contains(AuthScreens.CAPTCHA);
+
+        String code = world.captchas.code(steve.getUniqueId()).orElseThrow();
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.CAPTCHA, answer(Map.of("code", code))));
+        assertThat(shown.getLast().buttons())
+                .extracting(DialogSpec.Button::action)
+                .contains(AuthScreens.LOGIN);
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        assertThat(world.isAuthenticated(steve)).isTrue();
+    }
+
+    @Test
+    @DisplayName("where the operator chose the map and the hand takes it, the code goes on the map and a line says so")
+    void aCaptchaOnTheMap() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        List<String> handed = new ArrayList<>();
+        hand = (player, code) -> handed.add(player.getName() + ":" + code);
+        world.unregistered(steve);
+        while (steve.nextComponentMessage() != null) {
+            // Only what the captcha says counts.
+        }
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+
+        assertThat(handed)
+                .containsExactly(
+                        "Steve:" + world.captchas.code(steve.getUniqueId()).orElseThrow());
+        assertThat(shown).isEmpty();
+        assertThat(closed).isEqualTo(1);
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_NEEDED));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_MAP));
+    }
+
+    @Test
+    @DisplayName("a connection that ends takes its captcha with it: the next one is shown a new code and must solve it")
+    void aReconnectStartsTheCaptchaOver() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        world.unregistered(steve);
+        ScreenAnswers answers = answers();
+        world.scheduler.settle(answers.answer(
+                guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+        String code = world.captchas.code(steve.getUniqueId()).orElseThrow();
+        world.scheduler.settle(answers.answer(guest(), AuthScreens.CAPTCHA, answer(Map.of("code", code))));
+        assertThat(world.captchas.blocksRegistration(steve.getUniqueId())).isFalse();
+
+        answers.forget(steve.getUniqueId());
+
+        assertThat(world.captchas.blocksRegistration(steve.getUniqueId())).isTrue();
+        assertThat(world.captchas.code(steve.getUniqueId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a player denied the captcha command cannot answer it through the screen either")
+    void theCaptchaScreenAsksTheCommandsPermission() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        world.unregistered(steve);
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+        String code = world.captchas.code(steve.getUniqueId()).orElseThrow();
+        steve.addAttachment(MockBukkit.createMockPlugin("Perms"), "uxmauth.captcha", false);
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.CAPTCHA, answer(Map.of("code", code))));
+
+        assertThat(world.captchas.blocksRegistration(steve.getUniqueId())).isTrue();
+    }
+
+    private static com.uxplima.auth.application.protection.Captchas.Settings captcha(
+            com.uxplima.auth.application.protection.Captchas.When when) {
+        return new com.uxplima.auth.application.protection.Captchas.Settings(
+                when,
+                3,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG);
     }
 
     @Test
@@ -436,7 +568,8 @@ final class ScreenAnswersTest {
                     return claimResult;
                 },
                 world.sessions::chose,
-                world.change);
+                world.change,
+                new CaptchaScreen(world.captchas, screens, shower, world.messages, hand));
     }
 
     private Guest guest() {

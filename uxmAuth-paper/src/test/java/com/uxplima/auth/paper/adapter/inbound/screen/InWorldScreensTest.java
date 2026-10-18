@@ -66,6 +66,54 @@ final class InWorldScreensTest {
     }
 
     @Test
+    @DisplayName("a captcha that stands before the player's next step is shown before the screen of their case")
+    void theCaptchaComesFirst() {
+        PlayerMock newcomer = server.addPlayer("Newcomer");
+        PlayerMock steve = server.addPlayer("Steve");
+        world.captchaSettings = new com.uxplima.auth.application.protection.Captchas.Settings(
+                com.uxplima.auth.application.protection.Captchas.When.REGISTER,
+                3,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG);
+        world.registered(steve, "hunter22");
+
+        InWorldScreens offer = offer(ScreenSettings.WaitingRoom.FROZEN);
+        offer.offer(newcomer, new AuthState.Unregistered(new PlayerName("Newcomer")));
+        offer.offer(steve, world.sessions.state(steve.getUniqueId()).orElseThrow());
+
+        assertThat(shown).hasSize(2);
+        assertThat(shown.get(0).buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.CAPTCHA);
+        assertThat(world.captchas.code(newcomer.getUniqueId())).isPresent();
+        assertThat(shown.get(1).buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.LOGIN);
+    }
+
+    @Test
+    @DisplayName("a name that failed so often is shown the captcha before the login screen")
+    void theCaptchaComesBeforeTheLoginAfterFailures() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.captchaSettings = new com.uxplima.auth.application.protection.Captchas.Settings(
+                com.uxplima.auth.application.protection.Captchas.When.FAILURES,
+                1,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.DIALOG);
+        world.registered(steve, "hunter22");
+        world.captchas.failed(new PlayerName("Steve"));
+
+        offer(ScreenSettings.WaitingRoom.FROZEN)
+                .offer(steve, world.sessions.state(steve.getUniqueId()).orElseThrow());
+
+        assertThat(shown)
+                .singleElement()
+                .satisfies(spec -> assertThat(spec.buttons())
+                        .extracting(DialogSpec.Button::action)
+                        .contains(AuthScreens.CAPTCHA));
+    }
+
+    @Test
     @DisplayName("a player held to replace a weak password is shown the replace screen with why on top")
     void aHeldPlayerIsShownTheReplaceScreen() {
         PlayerMock steve = server.addPlayer("Steve");
@@ -184,15 +232,22 @@ final class InWorldScreensTest {
                 shipped.pin());
         AuthScreens screens =
                 new AuthScreens(() -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
-        return new InWorldScreens(
-                () -> settings, screens, sentToTheWorld::contains, later, stillWaiting, new ScreenShower() {
-                    @Override
-                    public void show(Audience who, DialogSpec spec) {
-                        shown.add(spec);
-                    }
+        ScreenShower shower = new ScreenShower() {
+            @Override
+            public void show(Audience who, DialogSpec spec) {
+                shown.add(spec);
+            }
 
-                    @Override
-                    public void close(Audience who) {}
-                });
+            @Override
+            public void close(Audience who) {}
+        };
+        return new InWorldScreens(
+                () -> settings,
+                screens,
+                sentToTheWorld::contains,
+                later,
+                stillWaiting,
+                shower,
+                new CaptchaScreen(world.captchas, screens, shower, world.messages, CaptchaScreen.Hand.NONE));
     }
 }

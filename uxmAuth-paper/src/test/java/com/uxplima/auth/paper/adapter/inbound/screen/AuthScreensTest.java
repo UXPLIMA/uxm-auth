@@ -40,17 +40,20 @@ final class AuthScreensTest {
                 new MessageCatalog(
                         Map.of(
                                 Locale.ENGLISH,
-                                Map.of(
-                                        "screen.register.title", "Welcome",
-                                        "screen.register.body", "Choose a password",
-                                        "screen.register.password", "Password",
-                                        "screen.register.confirm", "Again",
-                                        "screen.register.accept", "I accept",
-                                        "screen.register.submit", "Register",
-                                        "screen.register.cancel", "Leave",
-                                        "rules.line-1", "Be kind",
-                                        "screen.login.title", "Welcome back",
-                                        "screen.login.password", "Password")),
+                                Map.ofEntries(
+                                        Map.entry("screen.register.title", "Welcome"),
+                                        Map.entry("screen.register.body", "Choose a password"),
+                                        Map.entry("screen.register.password", "Password"),
+                                        Map.entry("screen.register.confirm", "Again"),
+                                        Map.entry("screen.register.accept", "I accept"),
+                                        Map.entry("screen.register.submit", "Register"),
+                                        Map.entry("screen.register.cancel", "Leave"),
+                                        Map.entry("rules.line-1", "Be kind"),
+                                        Map.entry("screen.login.title", "Welcome back"),
+                                        Map.entry("screen.login.password", "Password"),
+                                        Map.entry("screen.captcha.title", "Prove it"),
+                                        Map.entry("screen.captcha.body", "Type <code>"),
+                                        Map.entry("screen.captcha.code", "Code"))),
                         Locale.ENGLISH),
                 LocaleSource.ofDefault(Locale.ENGLISH));
     }
@@ -68,6 +71,23 @@ final class AuthScreensTest {
         assertThat(plain(spec.title())).isEqualTo("Welcome");
         assertThat(spec.inputs()).extracting(DialogSpec.Input::key).containsExactly("password", "confirm");
         assertThat(spec.buttons()).extracting(DialogSpec.Button::action).containsExactly("register", "cancel");
+        assertThat(spec.canClose()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the captcha screen shows the code of this showing and asks for it in a field as long as the code")
+    void theCaptchaScreenShowsTheCode() {
+        DialogSpec spec = screens(shipped(false), passwords(true))
+                .captcha(steve, "AB7KQ", net.kyori.adventure.text.Component.text("Solve it first"));
+
+        assertThat(plain(spec.title())).isEqualTo("Prove it");
+        assertThat(spec.body()).extracting(AuthScreensTest::plain).containsExactly("Solve it first", "Type AB7KQ");
+        assertThat(spec.inputs()).singleElement().isInstanceOfSatisfying(DialogSpec.TextInput.class, field -> {
+            assertThat(field.key()).isEqualTo("code");
+            assertThat(plain(field.label())).isEqualTo("Code");
+            assertThat(field.maxLength()).isEqualTo(5);
+        });
+        assertThat(spec.buttons()).extracting(DialogSpec.Button::action).containsExactly("captcha", "cancel");
         assertThat(spec.canClose()).isFalse();
     }
 

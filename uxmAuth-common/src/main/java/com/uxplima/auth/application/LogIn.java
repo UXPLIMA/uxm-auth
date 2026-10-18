@@ -16,6 +16,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.hash.Verification;
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
@@ -44,6 +45,32 @@ public final class LogIn {
         Optional<Duration> failed(String address, String host);
     }
 
+    /**
+     * Where a captcha stands before a login: whether this connection must solve one before the name it waits on
+     * may try a password, and where a wrong or a right password of the name counts toward it.
+     */
+    public interface Captcha {
+        /** No captcha: nothing waits, nothing counts. */
+        Captcha NONE = new Captcha() {
+            @Override
+            public boolean blocks(UUID connection, PlayerName name) {
+                return false;
+            }
+
+            @Override
+            public void failed(PlayerName name) {}
+
+            @Override
+            public void passed(PlayerName name) {}
+        };
+
+        boolean blocks(UUID connection, PlayerName name);
+
+        void failed(PlayerName name);
+
+        void passed(PlayerName name);
+    }
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
@@ -51,6 +78,7 @@ public final class LogIn {
     private final Clock clock;
     private final Failures failures;
     private final Supplier<PasswordPolicy> policy;
+    private final Captcha captcha;
 
     public LogIn(AccountRepository accounts, Hashing hashing, HashingLane lane, Sessions sessions, Clock clock) {
         this(accounts, hashing, lane, sessions, clock, (address, host) -> Optional.empty());
@@ -76,6 +104,19 @@ public final class LogIn {
             Clock clock,
             Failures failures,
             Supplier<PasswordPolicy> policy) {
+        this(accounts, hashing, lane, sessions, clock, failures, policy, Captcha.NONE);
+    }
+
+    /** @param captcha the captcha that stands before the logins of a name that failed so often */
+    public LogIn(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Clock clock,
+            Failures failures,
+            Supplier<PasswordPolicy> policy,
+            Captcha captcha) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -83,6 +124,7 @@ public final class LogIn {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.failures = Objects.requireNonNull(failures, "failures");
         this.policy = Objects.requireNonNull(policy, "policy");
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
     }
 
     /** The password is wiped once the answer is known, whatever it is. */
@@ -110,6 +152,10 @@ public final class LogIn {
                 .orElse(null);
         if (held == null) {
             return CompletableFuture.completedFuture(new LoginResult.Gone());
+        }
+        if (held.state() instanceof AuthState.Registered waiting
+                && captcha.blocks(connection, waiting.account().name())) {
+            return CompletableFuture.completedFuture(new LoginResult.CaptchaNeeded());
         }
         AtomicReference<AuthState.Registered> reserved = new AtomicReference<>();
         AuthState after = sessions.update(connection, held.generation(), current -> spend(current, reserved))
@@ -156,7 +202,10 @@ public final class LogIn {
             return new LoginResult.NotRegistered();
         }
         return switch (hashing.verify(password, stored)) {
-            case Verification.Wrong wrong -> wrongAnswer(spent.attempts(), address, held.host());
+            case Verification.Wrong wrong -> {
+                captcha.failed(current.name());
+                yield wrongAnswer(spent.attempts(), address, held.host());
+            }
             case Verification.Right right -> logIn(connection, generation, current, address, password);
             case Verification.RightButRehash rehash -> {
                 Account account = accounts.replacePassword(current.id(), stored, rehash.fresh())
@@ -184,6 +233,7 @@ public final class LogIn {
         }
         Instant now = clock.instant();
         accounts.recordLogin(account.id(), now, address);
+        captcha.passed(account.name());
         Account updated = account.loggedIn(now, address);
         PasswordVerdict today = policy.get().check(password);
         AuthState next = today instanceof PasswordVerdict.Accepted

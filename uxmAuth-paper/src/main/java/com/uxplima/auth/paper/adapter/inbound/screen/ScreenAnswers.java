@@ -21,6 +21,7 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.premium.ClaimName;
+import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.uxmlib.text.Text;
@@ -43,6 +44,7 @@ public final class ScreenAnswers {
     private static final String LOGIN_PERMISSION = "uxmauth.login";
     private static final String REGISTER_PERMISSION = "uxmauth.register";
     private static final String CLAIM_PERMISSION = "uxmauth.claim";
+    private static final String CAPTCHA_PERMISSION = "uxmauth.captcha";
 
     private final AuthScreens screens;
     private final RegisterAccount register;
@@ -55,6 +57,7 @@ public final class ScreenAnswers {
     private final Claims claims;
     private final Choices choices;
     private final Replacer replacer;
+    private final CaptchaScreen captcha;
     private final TimeWords times;
     private final PinPad pad = new PinPad();
 
@@ -124,8 +127,19 @@ public final class ScreenAnswers {
             Predicate<UUID> registering,
             Claims claims,
             Choices choices) {
-        this(screens, register, logIn, settings, passwords, messages, shower, registering, claims, choices, (Replacer)
-                (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()));
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
+                (Replacer) (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()),
+                new CaptchaScreen(Captchas.off(), screens, shower, messages, CaptchaScreen.Hand.NONE));
     }
 
     /**
@@ -144,8 +158,48 @@ public final class ScreenAnswers {
             Claims claims,
             Choices choices,
             ChangePassword change) {
-        this(screens, register, logIn, settings, passwords, messages, shower, registering, claims, choices, (Replacer)
-                Objects.requireNonNull(change, "change")::replaceWeak);
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
+                change,
+                new CaptchaScreen(Captchas.off(), screens, shower, messages, CaptchaScreen.Hand.NONE));
+    }
+
+    /** @param captcha the captcha that may stand before a registration or a login, and takes its answer */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices,
+            ChangePassword change,
+            CaptchaScreen captcha) {
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
+                (Replacer) Objects.requireNonNull(change, "change")::replaceWeak,
+                captcha);
     }
 
     private ScreenAnswers(
@@ -159,7 +213,8 @@ public final class ScreenAnswers {
             Predicate<UUID> registering,
             Claims claims,
             Choices choices,
-            Replacer replacer) {
+            Replacer replacer,
+            CaptchaScreen captcha) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -171,6 +226,7 @@ public final class ScreenAnswers {
         this.claims = Objects.requireNonNull(claims, "claims");
         this.choices = Objects.requireNonNull(choices, "choices");
         this.replacer = Objects.requireNonNull(replacer, "replacer");
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
         this.times = new TimeWords(messages);
     }
 
@@ -182,6 +238,7 @@ public final class ScreenAnswers {
     /** Drops anything a connection pressed and did not hand over. */
     public void forget(UUID connection) {
         pad.forget(connection);
+        captcha.forget(connection);
     }
 
     /** Runs one press, answering when the guest has been shown the outcome. */
@@ -200,6 +257,8 @@ public final class ScreenAnswers {
                 guest.may(REGISTER_PERMISSION) ? register(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.REPLACE ->
                 guest.may(LOGIN_PERMISSION) ? replace(guest, answer) : CompletableFuture.completedFuture(null);
+            case AuthScreens.CAPTCHA ->
+                guest.may(CAPTCHA_PERMISSION) ? captcha(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.CANCEL -> cancel(guest);
             case AuthScreens.CLAIM ->
                 guest.may(CLAIM_PERMISSION) && screens.offersClaim()
@@ -254,17 +313,7 @@ public final class ScreenAnswers {
         Audience reader = guest.audience();
         switch (result) {
             case LoginResult.LoggedIn loggedIn -> letIn(guest, AuthSettings.Moment.LOGGED_IN);
-            case LoginResult.Wrong wrong -> {
-                guest.fire(AuthSettings.Moment.WRONG_PASSWORD);
-                shower.show(
-                        reader,
-                        screens.login(
-                                reader,
-                                messages.render(
-                                        reader,
-                                        Keys.LOGIN_WRONG,
-                                        Text.placeholder("left", String.valueOf(wrong.attemptsLeft())))));
-            }
+            case LoginResult.Wrong wrong -> wrong(guest, wrong.attemptsLeft());
             case LoginResult.TooManyAttempts tooMany -> {
                 guest.fire(AuthSettings.Moment.TOO_MANY_ATTEMPTS);
                 guest.kick(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
@@ -274,10 +323,20 @@ public final class ScreenAnswers {
                 guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
             }
             case LoginResult.MustReplace mustReplace -> shower.show(reader, screens.replace(reader, mustReplace.why()));
+            case LoginResult.CaptchaNeeded needed ->
+                captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_NEEDED));
             case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
             case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
             case LoginResult.Gone gone -> {}
         }
+    }
+
+    private void wrong(Guest guest, int attemptsLeft) {
+        Audience reader = guest.audience();
+        guest.fire(AuthSettings.Moment.WRONG_PASSWORD);
+        Component reason =
+                messages.render(reader, Keys.LOGIN_WRONG, Text.placeholder("left", String.valueOf(attemptsLeft)));
+        shower.show(reader, screens.login(reader, reason));
     }
 
     private CompletableFuture<Void> register(Guest guest, Answer answer) {
@@ -313,6 +372,8 @@ public final class ScreenAnswers {
             case RegisterResult.TooManyAccounts tooMany ->
                 again(reader, messages.render(reader, Keys.REGISTER_TOO_MANY_ACCOUNTS));
             case RegisterResult.AlreadyRegistered already -> shower.show(reader, screens.login(reader, null));
+            case RegisterResult.CaptchaNeeded needed ->
+                captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_NEEDED));
             case RegisterResult.Gone gone -> {}
         }
     }
@@ -354,6 +415,19 @@ public final class ScreenAnswers {
         return guest.opening().isPresent()
                 ? register.run(guest.id(), guest.opening().getAsLong(), name, typed, repeated, guest.address())
                 : register.run(guest.id(), name, typed, repeated, guest.address());
+    }
+
+    /** The code of the latest showing brings back the screen the captcha stood before; any other, a new code. */
+    private CompletableFuture<Void> captcha(Guest guest, Answer answer) {
+        Audience reader = guest.audience();
+        if (!captcha.solve(guest.id(), orEmpty(answer.text(AuthScreens.CODE)))) {
+            captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_WRONG));
+        } else if (registering.test(guest.id())) {
+            shower.show(reader, screens.register(reader, null));
+        } else {
+            shower.show(reader, screens.login(reader, null));
+        }
+        return CompletableFuture.completedFuture(null);
     }
 
     private CompletableFuture<Void> cancel(Guest guest) {
