@@ -103,15 +103,18 @@ final class LegacyHashesTest {
     @DisplayName("a format nobody reads is named by its prefix alone, and nothing it holds is kept")
     void anUnknownFormatIsNamed() {
         assertThat(LegacyHashes.rewrite(Style.AS_IS, "$md5crypt$abc$def0123456789", null, null))
-                .isEqualTo(new Unknown("$md5crypt$"));
+                .isInstanceOfSatisfying(
+                        Unknown.class, unknown -> assertThat(unknown.format()).isEqualTo("$md5crypt$"));
         assertThat(LegacyHashes.rewrite(Style.ALGORITHM_COLUMN, DOUBLE_256, SALT, "WHIRLPOOL"))
-                .isEqualTo(new Unknown("WHIRLPOOL"));
+                .isInstanceOfSatisfying(
+                        Unknown.class, unknown -> assertThat(unknown.format()).isEqualTo("WHIRLPOOL"));
         assertThat(LegacyHashes.rewrite(Style.SALT_COLUMN, DOUBLE_512, "has$dollar", null))
                 .isInstanceOf(Unknown.class);
         assertThat(LegacyHashes.rewrite(Style.PLAIN, "abc", null, null)).isInstanceOf(Unknown.class);
         assertThat(LegacyHashes.rewrite(Style.AS_IS, "$SHA$" + DOUBLE_512 + "$" + SALT, null, null))
                 .as("a $SHA$ hash in another shape is not the website's, and only its layout can say what it is")
-                .isEqualTo(new Unknown("$SHA$"));
+                .isInstanceOfSatisfying(
+                        Unknown.class, unknown -> assertThat(unknown.format()).isEqualTo("$SHA$"));
         assertThat(LegacyHashes.rewrite(Style.AS_IS, "", null, null)).isInstanceOf(Unknown.class);
     }
 

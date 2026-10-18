@@ -69,8 +69,11 @@ public final class LegacyHashes {
         }
     }
 
-    /** A hash nothing here reads, named by its prefix or its algorithm's name. */
-    public record Unknown(String format) implements Read {
+    /**
+     * A hash nothing here reads, named by its prefix or its algorithm's name. The hash is kept as the source wrote
+     * it, so a later version that reads it finds it where it was; a report prints the format and never the hash.
+     */
+    public record Unknown(String format, @Nullable PasswordHash kept) implements Read {
         public Unknown {
             Objects.requireNonNull(format, "format");
         }
@@ -88,13 +91,14 @@ public final class LegacyHashes {
         Objects.requireNonNull(style, "style");
         String written = Objects.requireNonNull(raw, "raw").trim();
         if (written.isEmpty()) {
-            return new Unknown("empty");
+            return new Unknown("empty", null);
         }
         Optional<PasswordHash> read = styled(style, written, salt, algorithm).or(() -> asItIs(written));
         if (read.isPresent()) {
             return new Known(read.get());
         }
-        return new Unknown(style == Style.ALGORITHM_COLUMN && algorithm != null ? named(algorithm) : prefixOf(written));
+        String format = style == Style.ALGORITHM_COLUMN && algorithm != null ? named(algorithm) : prefixOf(written);
+        return new Unknown(format, new PasswordHash(written));
     }
 
     private static Optional<PasswordHash> styled(
