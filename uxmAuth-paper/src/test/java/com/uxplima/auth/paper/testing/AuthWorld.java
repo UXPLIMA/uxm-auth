@@ -233,7 +233,12 @@ public final class AuthWorld implements AutoCloseable {
                 },
                 remembering,
                 new com.uxplima.auth.paper.adapter.inbound.hold.LoginRecords(
-                        history, scheduler::async, clock, message -> {}, (account, name, address) -> {}, factorStates),
+                        history,
+                        scheduler::async,
+                        clock,
+                        message -> {},
+                        (account, name, address, method) -> {},
+                        factorStates),
                 Door.Duty.inTurn(lazy(this::setupDuty), lazy(this::addressDuty)));
         AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
         this.captchas = new com.uxplima.auth.application.protection.Captchas(

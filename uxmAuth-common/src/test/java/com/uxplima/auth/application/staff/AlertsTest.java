@@ -16,6 +16,7 @@ import java.util.function.UnaryOperator;
 
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.port.AddressTallies;
+import com.uxplima.auth.application.port.AuthNotices;
 import com.uxplima.auth.application.port.LoginHistory;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.protection.AddressBans;
@@ -75,7 +76,34 @@ final class AlertsTest {
             () -> this.now);
     private Alerts.Settings settings = ALL;
     private Instant now = START;
-    private final Alerts alerts = new Alerts(() -> settings, history, events, queued::add, () -> now);
+    private final List<String> noticed = new ArrayList<>();
+    private final AuthNotices notices = new AuthNotices() {
+        @Override
+        public void registered(PlayerName name, String address) {
+            noticed.add("registered " + name.value() + " " + address);
+        }
+
+        @Override
+        public void loggedIn(PlayerName name, String address, AuthMethod method) {
+            noticed.add("login " + name.value() + " " + address + " " + method);
+        }
+
+        @Override
+        public void knownAddress(PlayerName name, String address, int accounts) {
+            noticed.add("known " + name.value() + " " + address + " " + accounts);
+        }
+
+        @Override
+        public void banned(String address, Duration length) {
+            noticed.add("banned " + address + " " + length);
+        }
+
+        @Override
+        public void conflictSettled(String name) {
+            noticed.add("settled " + name);
+        }
+    };
+    private final Alerts alerts = new Alerts(() -> settings, history, events, queued::add, () -> now, notices);
 
     /** Runs what the alerts handed off the calling thread, as the server's async pool would. */
     private List<Bulletin> sent() {
@@ -130,14 +158,14 @@ final class AlertsTest {
         UUID third = UUID.randomUUID();
         history.record(steve, new LoginHistory.Entry(START, HOME, AuthMethod.PASSWORD));
 
-        alerts.landed(alex, new PlayerName("Alex"), HOME);
+        alerts.landed(alex, new PlayerName("Alex"), HOME, AuthMethod.PASSWORD);
         history.record(alex, new LoginHistory.Entry(START, HOME, AuthMethod.PASSWORD));
         assertThat(sent()).as("two accounts are below the threshold of three").isEmpty();
 
-        alerts.landed(third, new PlayerName("Third"), HOME);
+        alerts.landed(third, new PlayerName("Third"), HOME, AuthMethod.PASSWORD);
         history.record(third, new LoginHistory.Entry(START, HOME, AuthMethod.PASSWORD));
-        alerts.landed(steve, new PlayerName("Steve"), HOME);
-        alerts.landed(UUID.randomUUID(), new PlayerName("Nowhere"), "");
+        alerts.landed(steve, new PlayerName("Steve"), HOME, AuthMethod.PASSWORD);
+        alerts.landed(UUID.randomUUID(), new PlayerName("Nowhere"), "", AuthMethod.PASSWORD);
         assertThat(sent()).containsExactly(new Bulletin.SharedAddress(new PlayerName("Third"), HOME, 3));
     }
 
@@ -164,7 +192,7 @@ final class AlertsTest {
         settings = new Alerts.Settings(false, Duration.ofSeconds(60), true, 0, false);
         failures.failed(HOME, PLAY);
         failures.failed(HOME, PLAY);
-        alerts.landed(UUID.randomUUID(), new PlayerName("Third"), HOME);
+        alerts.landed(UUID.randomUUID(), new PlayerName("Third"), HOME, AuthMethod.PASSWORD);
         alerts.staffActed(Optional.empty(), StaffAction.UNBAN, HOME);
         assertThat(sent()).isEmpty();
         failures.failed(HOME, PLAY);
@@ -190,5 +218,34 @@ final class AlertsTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(new Alerts.Settings(true, Duration.ofSeconds(60), true, 0, true).sharedAddressAccounts())
                 .isZero();
+    }
+
+    @Test
+    @DisplayName("the notices hear every login and registration, a new account on a used address, a ban and a"
+            + " settled conflict, whatever the alert switches say")
+    void noticesHearWhatHappened() {
+        settings = new Alerts.Settings(false, Duration.ofSeconds(60), false, 0, false);
+        UUID steve = UUID.randomUUID();
+        history.record(steve, new LoginHistory.Entry(START, HOME, AuthMethod.PASSWORD));
+        LogIn.Failures failures = alerts.watching(bans);
+
+        alerts.landed(steve, new PlayerName("Steve"), HOME, AuthMethod.SESSION);
+        alerts.landed(UUID.randomUUID(), new PlayerName("Alex"), HOME, AuthMethod.REGISTERED);
+        alerts.landed(UUID.randomUUID(), new PlayerName("Far"), "198.51.100.9", AuthMethod.PREMIUM);
+        failures.failed(HOME, PLAY);
+        failures.failed(HOME, PLAY);
+        failures.failed(HOME, PLAY);
+        alerts.staffActed(Optional.empty(), StaffAction.RESOLVE, "Steve");
+        alerts.staffActed(Optional.empty(), StaffAction.UNBAN, HOME);
+
+        assertThat(noticed)
+                .containsExactly(
+                        "login Steve " + HOME + " SESSION",
+                        "registered Alex " + HOME,
+                        "known Alex " + HOME + " 2",
+                        "login Far 198.51.100.9 PREMIUM",
+                        "banned " + HOME + " PT5M",
+                        "settled Steve");
+        assertThat(sent()).as("every alert switch is off").isEmpty();
     }
 }

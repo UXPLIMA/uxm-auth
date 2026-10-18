@@ -28,7 +28,7 @@ public final class LoginRecords {
     /** Who hears of a login off the player's thread, before it is written. */
     @FunctionalInterface
     public interface Landed {
-        void landed(UUID account, PlayerName name, String address);
+        void landed(UUID account, PlayerName name, String address, AuthMethod method);
     }
 
     private final LoginHistory history;
@@ -40,7 +40,7 @@ public final class LoginRecords {
 
     /** @param async runs a task off every server and region thread */
     public LoginRecords(LoginHistory history, Consumer<Runnable> async, Clock clock, Consumer<String> warn) {
-        this(history, async, clock, warn, (account, name, address) -> {});
+        this(history, async, clock, warn, (account, name, address, method) -> {});
     }
 
     /** @param landed hears of each login first, which is the alerts */
@@ -82,10 +82,11 @@ public final class LoginRecords {
                 : from.getAddress().getHostAddress();
         UUID account = in.account().id();
         PlayerName name = in.account().name();
+        AuthMethod way = in.method();
         LoginHistory.Entry entry = new LoginHistory.Entry(clock.instant(), address, in.method());
         async.accept(() -> {
             try {
-                landed.landed(account, name, address);
+                landed.landed(account, name, address, way);
             } catch (RuntimeException failed) {
                 warn.accept("A login could not be told to the alerts: " + failed.getMessage());
             }

@@ -131,6 +131,7 @@ import com.uxplima.auth.paper.adapter.inbound.staff.WaitingAccounts;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.adapter.outbound.captcha.CaptchaMap;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
+import com.uxplima.auth.paper.adapter.outbound.discord.DiscordNotices;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
 import com.uxplima.auth.paper.adapter.outbound.handshake.PremiumHelloDoor;
 import com.uxplima.auth.paper.adapter.outbound.handshake.ServerHellos;
@@ -205,6 +206,10 @@ final class AuthGraph implements AutoCloseable {
     private final TaskHandle historyTask;
     private final NetworkEvents events;
     private final Alerts alerts;
+    private final DiscordNotices discord;
+    /** How many Discord messages may wait; past it the oldest goes. */
+    private static final int DISCORD_QUEUE = 100;
+
     private final ChannelReports channelReports;
     private final ServerHellos hellos;
     /** Who holds a name, by the operator's sources: the door asks it, and so do staff marking an account premium. */
@@ -243,12 +248,15 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
         this.events = bulletins(settings, plugin.getLogger());
+        this.discord = new DiscordNotices(
+                () -> settings.current().discord(), DiscordNotices.WEBHOOK, plugin.getLogger()::warning, DISCORD_QUEUE);
         this.alerts = new Alerts(
                 () -> settings.current().staff().alerts(),
                 history,
                 events,
                 task -> scheduler.async(task),
-                Instant::now);
+                Instant::now,
+                discord);
         LogIn.Failures failures = alerts.watching(bans);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
@@ -638,6 +646,7 @@ final class AuthGraph implements AutoCloseable {
             plugin.getLogger().warning("Could not close the country file: " + unclosable.getMessage());
         }
         events.close();
+        discord.close();
         staffing.close();
         filters.uninstall();
         hellos.close();

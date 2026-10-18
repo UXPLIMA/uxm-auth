@@ -13,12 +13,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.LogIn;
+import com.uxplima.auth.application.port.AuthNotices;
 import com.uxplima.auth.application.port.LoginHistory;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.protection.AddressKey;
+import com.uxplima.auth.domain.state.AuthMethod;
 
 /**
  * What staff hear as it happens: wrong answers from an address, once a window, the ban that ends them, a new account
@@ -59,6 +61,7 @@ public final class Alerts {
     private final NetworkEvents events;
     private final Executor async;
     private final Supplier<Instant> clock;
+    private final AuthNotices notices;
     private final Map<String, Instant> failedSince = new ConcurrentHashMap<>();
 
     /** @param async runs a task off every server and region thread */
@@ -68,6 +71,18 @@ public final class Alerts {
             NetworkEvents events,
             Executor async,
             Supplier<Instant> clock) {
+        this(settings, history, events, async, clock, AuthNotices.NONE);
+    }
+
+    /** @param notices hears what happened whatever the alert switches say, which is the Discord channel */
+    public Alerts(
+            Supplier<Settings> settings,
+            LoginHistory history,
+            NetworkEvents events,
+            Executor async,
+            Supplier<Instant> clock,
+            AuthNotices notices) {
+        this.notices = Objects.requireNonNull(notices, "notices");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.history = Objects.requireNonNull(history, "history");
         this.events = Objects.requireNonNull(events, "events");
@@ -88,6 +103,7 @@ public final class Alerts {
     }
 
     private void failed(String address, Optional<Duration> banned) {
+        banned.ifPresent(length -> notices.banned(address, length));
         Settings now = settings.get();
         if (banned.isPresent() && now.ban()) {
             publish(new Bulletin.Banned(address, banned.get()));
@@ -112,20 +128,31 @@ public final class Alerts {
     }
 
     /**
-     * This account logged in from this address. Told when it is new on the address and the address now has as
-     * many accounts as the operator's threshold, or more. Reads the history, so it runs off the server's threads,
-     * before the login is written.
+     * This account logged in from this address, this way. The notices hear it, and hear of a new account on an
+     * address other accounts used; staff are told when the address now has as many accounts as the operator's
+     * threshold, or more. Reads the history, so it runs off the server's threads, before the login is written.
      */
-    public void landed(UUID account, PlayerName name, String address) {
+    public void landed(UUID account, PlayerName name, String address, AuthMethod method) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(name, "name");
-        int threshold = settings.get().sharedAddressAccounts();
-        if (threshold == 0 || !AddressKey.isAddress(Objects.requireNonNull(address, "address"))) {
+        Objects.requireNonNull(address, "address");
+        if (Objects.requireNonNull(method, "method") == AuthMethod.REGISTERED) {
+            notices.registered(name, address);
+        } else {
+            notices.loggedIn(name, address, method);
+        }
+        if (!AddressKey.isAddress(address)) {
             return;
         }
         List<UUID> before = history.accountsOn(address, READ_AT_MOST);
-        if (!before.contains(account) && before.size() + 1 >= threshold) {
-            publish(new Bulletin.SharedAddress(name, address, before.size() + 1));
+        if (before.isEmpty() || before.contains(account)) {
+            return;
+        }
+        int accounts = before.size() + 1;
+        notices.knownAddress(name, address, accounts);
+        int threshold = settings.get().sharedAddressAccounts();
+        if (threshold > 0 && accounts >= threshold) {
+            publish(new Bulletin.SharedAddress(name, address, accounts));
         }
     }
 
@@ -138,6 +165,9 @@ public final class Alerts {
         Objects.requireNonNull(actor, "actor");
         Objects.requireNonNull(action, "action");
         Objects.requireNonNull(target, "target");
+        if (action == StaffAction.RESOLVE) {
+            notices.conflictSettled(target);
+        }
         if (settings.get().staffActions()) {
             publish(new Bulletin.StaffActed(actor, action.key(), target));
         }

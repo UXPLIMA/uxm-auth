@@ -816,6 +816,32 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("Discord sends nothing until the operator gives a url; every event is on with its own message, each"
+            + " switched and written by the operator, and a url that is no web address is refused by name")
+    void discordIsRead(@TempDir Path folder) throws IOException {
+        DiscordSettings shipped = settingsFrom(folder, "").discord();
+        assertThat(shipped.on()).isFalse();
+        assertThat(shipped.events()).containsOnlyKeys(DiscordSettings.Event.values());
+        assertThat(shipped.events().values()).allMatch(DiscordSettings.Notice::enabled);
+        assertThat(shipped.notice(DiscordSettings.Event.LOGIN).message()).contains("{player}", "{method}");
+
+        DiscordSettings written = settingsFrom(
+                        folder,
+                        "discord { url = \"https://discord.com/api/webhooks/1/abc\", server = \"lobby\","
+                                + " events { ban { enabled = false }, login { message = \"{player} in\" } } }\n")
+                .discord();
+        assertThat(written.on()).isTrue();
+        assertThat(written.server()).isEqualTo("lobby");
+        assertThat(written.notice(DiscordSettings.Event.BAN).enabled()).isFalse();
+        assertThat(written.notice(DiscordSettings.Event.LOGIN))
+                .isEqualTo(new DiscordSettings.Notice(true, "{player} in"));
+        assertThatThrownBy(() -> settingsFrom(folder, "discord { url = \"not a url\" }\n"))
+                .hasMessageContaining("discord.url");
+        assertThatThrownBy(() -> settingsFrom(folder, "discord { url = \"ftp://example.org/x\" }\n"))
+                .hasMessageContaining("discord.url");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

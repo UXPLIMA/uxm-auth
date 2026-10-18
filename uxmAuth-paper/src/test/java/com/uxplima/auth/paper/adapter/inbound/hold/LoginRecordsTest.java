@@ -83,8 +83,8 @@ final class LoginRecordsTest {
             + " accounts on its address; a failing read is told and the login is still written")
     void theAlertsHearItFirst() {
         List<String> told = new ArrayList<>();
-        LoginRecords.Landed landed = (account, name, address) -> {
-            told.add(name.value() + "@" + address + " written " + world.history.count(account));
+        LoginRecords.Landed landed = (account, name, address, method) -> {
+            told.add(name.value() + "@" + address + " " + method + " written " + world.history.count(account));
             throw new IllegalStateException("the read failed");
         };
         LoginRecords records =
@@ -95,7 +95,7 @@ final class LoginRecordsTest {
         later.forEach(Runnable::run);
         later.clear();
 
-        assertThat(told).containsExactly("Steve@" + address() + " written 0");
+        assertThat(told).containsExactly("Steve@" + address() + " PASSWORD written 0");
         assertThat(warned).singleElement().asString().contains("the read failed");
         assertThat(world.history.count(account().id())).isEqualTo(1);
         records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));
@@ -114,7 +114,7 @@ final class LoginRecordsTest {
                 later::add,
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 warned::add,
-                (account, name, address) -> {},
+                (account, name, address, method) -> {},
                 states);
 
         records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));
