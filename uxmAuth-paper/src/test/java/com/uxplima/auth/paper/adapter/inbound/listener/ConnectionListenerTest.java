@@ -184,7 +184,7 @@ final class ConnectionListenerTest {
     @DisplayName("a connection the door's rules refuse is turned away before its name is read, holding no session")
     void theDoorsRulesComeFirst() {
         admission = new Admission(
-                () -> new com.uxplima.auth.domain.premium.HostPatterns(List.of()),
+                com.uxplima.auth.domain.protection.SharedAddresses::none,
                 List.of(arrival -> Optional.of(new Admission.Refused(Keys.KICK_TIMEOUT, Map.of()))));
         UUID id = UUID.randomUUID();
 

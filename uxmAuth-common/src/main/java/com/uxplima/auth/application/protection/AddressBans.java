@@ -9,24 +9,27 @@ import java.util.function.Supplier;
 
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AddressTallies;
-import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.protection.AddressKey;
 import com.uxplima.auth.domain.protection.AddressTally;
 import com.uxplima.auth.domain.protection.BanSteps;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 
 /**
  * Wrong passwords count against the address they came from, and enough of them ban it for the operator's next
- * step. Through a shared-address host one player's address is everybody's, so nothing counts there.
+ * step. Through a shared-address filter one player's address is everybody's, so nothing counts there.
  */
 public final class AddressBans {
 
     private final AddressTallies tallies;
     private final Supplier<BanSteps> steps;
-    private final Supplier<HostPatterns> shared;
+    private final Supplier<SharedAddresses> shared;
     private final Supplier<Instant> clock;
 
     public AddressBans(
-            AddressTallies tallies, Supplier<BanSteps> steps, Supplier<HostPatterns> shared, Supplier<Instant> clock) {
+            AddressTallies tallies,
+            Supplier<BanSteps> steps,
+            Supplier<SharedAddresses> shared,
+            Supplier<Instant> clock) {
         this.tallies = Objects.requireNonNull(tallies, "tallies");
         this.steps = Objects.requireNonNull(steps, "steps");
         this.shared = Objects.requireNonNull(shared, "shared");
@@ -39,7 +42,7 @@ public final class AddressBans {
      */
     public Optional<Duration> failed(String address, String host) {
         Objects.requireNonNull(address, "address");
-        if (shared.get().matches(Objects.requireNonNull(host, "host")) || !AddressKey.isAddress(address)) {
+        if (shared.get().through(address, Objects.requireNonNull(host, "host")) || !AddressKey.isAddress(address)) {
             return Optional.empty();
         }
         Instant now = clock.get();

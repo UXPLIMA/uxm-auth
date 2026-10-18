@@ -49,7 +49,9 @@ import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.WhenUnknown;
+import com.uxplima.auth.domain.protection.AddressRanges;
 import com.uxplima.auth.domain.protection.BanSteps;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
@@ -123,6 +125,9 @@ public final class AuthWorld implements AutoCloseable {
     /** The shared-address hosts of this world; a test sets them. */
     public List<String> sharedHosts = List.of();
 
+    /** The addresses the shared-address filters of this world connect from; a test sets them. */
+    public List<String> sharedSources = List.of();
+
     /** For whom sessions are on in this world; a test sets it. */
     public Remember.Settings sessionSettings = new Remember.Settings(Remember.Mode.CHOSEN, Duration.ofMinutes(60));
 
@@ -150,8 +155,7 @@ public final class AuthWorld implements AutoCloseable {
                 messages);
         this.notices = new Notices(messages);
         this.remembered = new SqlRememberedSessions(database, clock);
-        this.remember =
-                new Remember(remembered, () -> sessionSettings, () -> new HostPatterns(sharedHosts), clock::instant);
+        this.remember = new Remember(remembered, () -> sessionSettings, this::sharedAddresses, clock::instant);
         this.remembering = new Remembering(remember, sessions, scheduler);
         this.door = new Door(
                 sessions,
@@ -180,12 +184,17 @@ public final class AuthWorld implements AutoCloseable {
                 },
                 remembering);
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
-        this.bans = new AddressBans(
-                new SqlAddressTallies(database), () -> banSteps, () -> new HostPatterns(sharedHosts), clock::instant);
+        this.bans =
+                new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);
         this.change =
                 new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered);
         this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS, remembered);
+    }
+
+    /** The shared-address filters of this world, as a test set them. */
+    public SharedAddresses sharedAddresses() {
+        return new SharedAddresses(new HostPatterns(sharedHosts), new AddressRanges(sharedSources));
     }
 
     /** The defaults the shipped file has. */

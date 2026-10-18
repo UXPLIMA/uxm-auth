@@ -106,7 +106,7 @@ final class PluginModule {
     /** Build the graph and register everything that the server must see. */
     void wire() {
         Scheduler scheduler = new PaperScheduler(plugin);
-        reportLanguageProblems();
+        reportProblems();
         this.database = openDatabase();
 
         FilePlayerLanguages chosen =
@@ -302,16 +302,17 @@ final class PluginModule {
     }
 
     /**
-     * Say once what is wrong with the files, and start anyway.
+     * Say once what is wrong with the files and the settings, and start anyway.
      *
      * <p>A file that cannot be read and a translation that is missing a key are both survivable: the catalog
      * falls back through the default language to the text each key carries. An operator still has to be told,
      * because a silent fallback looks like a plugin that ignores their file.
      */
-    private void reportLanguageProblems() {
+    private void reportProblems() {
         for (String problem : languages.problems()) {
             plugin.getSLF4JLogger().warn(problem);
         }
+        settings.current().protection().problems().forEach(plugin.getSLF4JLogger()::warn);
     }
 
     /**
@@ -368,7 +369,7 @@ final class PluginModule {
             return;
         }
         this.languages = readLanguages();
-        reportLanguageProblems();
+        reportProblems();
         screens.reload();
         styler().reload(loadTheme());
         messages.reload(styledCatalog());

@@ -77,6 +77,7 @@ final class ProxyModule {
         }
         this.database = opened;
         warnOfAFileDatabase(settings.current().storage());
+        settings.current().protection().problems().forEach(logger::warn);
         Messages words = new Messages(
                 catalog(settings), new ProxyLocales(() -> settings.current().language()));
         this.messages = words;

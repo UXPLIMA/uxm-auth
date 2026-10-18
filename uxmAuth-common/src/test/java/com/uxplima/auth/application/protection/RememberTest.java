@@ -11,6 +11,8 @@ import java.util.UUID;
 
 import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.domain.protection.AddressRanges;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 import com.uxplima.auth.testing.KeptSessions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ final class RememberTest {
 
     private static final UUID STEVE = UUID.fromString("8667ba71-b85a-4004-af54-457a9734eed7");
     private static final String HOME = "203.0.113.7";
+    private static final String FILTER = "198.51.100.20";
     private static final String PLAY = "play.example.org";
     private static final Instant NOW = Instant.parse("2026-10-18T10:00:00Z");
 
@@ -31,7 +34,8 @@ final class RememberTest {
         return new Remember(
                 kept,
                 () -> new Remember.Settings(mode, Duration.ofMinutes(60)),
-                () -> new HostPatterns(List.of("*.tcpshield.com")),
+                () -> new SharedAddresses(
+                        new HostPatterns(List.of("*.tcpshield.com")), new AddressRanges(List.of("198.51.100.0/24"))),
                 () -> clock.instant());
     }
 
@@ -78,14 +82,23 @@ final class RememberTest {
     }
 
     @Test
-    @DisplayName("through a shared-address host nobody is remembered and nobody resumes")
+    @DisplayName("through a shared-address filter nobody is remembered and nobody resumes")
     void aSharedHostRemembersNobody() {
         mode = Remember.Mode.EVERYONE;
-        remember().loggedIn(STEVE, HOME, "mc.tcpshield.com");
+        remember().loggedIn(STEVE, FILTER, "mc.tcpshield.com");
         assertThat(kept.until).isEmpty();
 
-        remember().loggedIn(STEVE, HOME, PLAY);
-        assertThat(remember().resumes(STEVE, HOME, "mc.tcpshield.com")).isFalse();
+        kept.remember(STEVE, FILTER, NOW.plusSeconds(600));
+        assertThat(remember().resumes(STEVE, FILTER, "mc.tcpshield.com")).isFalse();
+    }
+
+    @Test
+    @DisplayName("the filter's host typed from a home address is an ordinary connection, remembered by that address")
+    void aTypedFilterHostIsOrdinary() {
+        mode = Remember.Mode.EVERYONE;
+        remember().loggedIn(STEVE, HOME, "mc.tcpshield.com");
+
+        assertThat(remember().resumes(STEVE, HOME, "mc.tcpshield.com")).isTrue();
     }
 
     @Test
@@ -100,15 +113,14 @@ final class RememberTest {
     }
 
     @Test
-    @DisplayName("while the operator lists shared-address hosts, a host nobody knows counts as one of them")
+    @DisplayName("from the filter's address a host nobody knows counts as the filter's; from a home it is ordinary")
     void anUnknownHostCountsAsShared() {
         mode = Remember.Mode.EVERYONE;
-        remember().loggedIn(STEVE, HOME, "");
+        remember().loggedIn(STEVE, FILTER, "");
         assertThat(kept.until).isEmpty();
 
-        remember().loggedIn(STEVE, HOME, PLAY);
-        assertThat(remember().resumes(STEVE, HOME, "")).isFalse();
-        assertThat(remember().resumes(STEVE, HOME, PLAY)).isTrue();
+        remember().loggedIn(STEVE, HOME, "");
+        assertThat(remember().resumes(STEVE, HOME, "")).isTrue();
     }
 
     @Test
@@ -118,7 +130,7 @@ final class RememberTest {
         Remember plain = new Remember(
                 kept,
                 () -> new Remember.Settings(mode, Duration.ofMinutes(60)),
-                () -> new HostPatterns(List.of()),
+                SharedAddresses::none,
                 () -> clock.instant());
 
         plain.loggedIn(STEVE, HOME, "");
@@ -162,7 +174,7 @@ final class RememberTest {
         Remember remember = new Remember(
                 turnedOffMidway,
                 () -> new Remember.Settings(mode, Duration.ofMinutes(60)),
-                () -> new HostPatterns(List.of()),
+                SharedAddresses::none,
                 () -> clock.instant());
 
         remember.loggedIn(STEVE, HOME, PLAY);

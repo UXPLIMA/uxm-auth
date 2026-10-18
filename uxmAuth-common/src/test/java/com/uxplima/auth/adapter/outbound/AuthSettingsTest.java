@@ -484,15 +484,33 @@ final class AuthSettingsTest {
     }
 
     @Test
-    @DisplayName("no host is a shared-address filter until the operator lists one")
+    @DisplayName("no connection is through a shared-address filter until the operator lists its addresses")
     void sharedHostsAreListed(@TempDir Path folder) throws IOException {
-        assertThat(settingsFrom(folder, "").protection().sharedHosts().matches("mc.tcpshield.com"))
+        assertThat(settingsFrom(folder, "").protection().sharedAddresses().through("198.51.100.1", "mc.tcpshield.com"))
                 .isFalse();
+        com.uxplima.auth.domain.protection.SharedAddresses listed = settingsFrom(
+                        folder,
+                        "protection { shared-address-hosts = [\"*.tcpshield.com\"],"
+                                + " shared-address-sources = [\"198.51.100.0/24\"] }\n")
+                .protection()
+                .sharedAddresses();
+        assertThat(listed.through("198.51.100.1", "mc.tcpshield.com:25565")).isTrue();
+        assertThat(listed.through("203.0.113.7", "mc.tcpshield.com:25565")).isFalse();
         assertThat(settingsFrom(folder, "protection { shared-address-hosts = [\"*.tcpshield.com\"] }\n")
                         .protection()
-                        .sharedHosts()
-                        .matches("mc.tcpshield.com:25565"))
+                        .sharedAddresses()
+                        .unproven())
                 .isTrue();
+        assertThat(settingsFrom(folder, "protection { shared-address-hosts = [\"*.tcpshield.com\"] }\n")
+                        .protection()
+                        .problems())
+                .singleElement()
+                .asString()
+                .contains("shared-address-sources");
+        assertThat(settingsFrom(folder, "").protection().problems()).isEmpty();
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { shared-address-sources = [\"tcpshield.com\"] }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.shared-address-sources");
     }
 
     @Test

@@ -108,6 +108,7 @@ final class PlayerCommandsTest {
     @DisplayName("two players behind one shared-address host: one's wrong passwords ban neither of them")
     void aSharedHostBansNobody() {
         world.sharedHosts = java.util.List.of("*.tcpshield.com");
+        world.sharedSources = java.util.List.of(steve.getAddress().getAddress().getHostAddress());
         world.banSteps = new com.uxplima.auth.domain.protection.BanSteps(
                 java.util.List.of(java.time.Duration.ofMinutes(5)), 2, java.time.Duration.ofHours(24));
         PlayerMock alex = server.addPlayer("Alex");

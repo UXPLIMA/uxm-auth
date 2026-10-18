@@ -94,6 +94,7 @@ final class RememberingTest {
     @DisplayName("a login through a shared-address host is not remembered")
     void aSharedHostIsNotRemembered() {
         world.sharedHosts = java.util.List.of("*.tcpshield.com");
+        world.sharedSources = java.util.List.of(address());
         world.registered(steve, "hunter22");
         world.sessions.open(
                 steve.getUniqueId(),

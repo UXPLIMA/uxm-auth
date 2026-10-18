@@ -90,15 +90,15 @@ final class ProxyGraph implements AutoCloseable {
         Remember remember = new Remember(
                 new SqlRememberedSessions(database, clock),
                 () -> settings.current().protection().sessions(),
-                () -> settings.current().protection().sharedHosts(),
+                () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
         AddressBans bans = new AddressBans(
                 new SqlAddressTallies(database),
                 () -> settings.current().protection().bans(),
-                () -> settings.current().protection().sharedHosts(),
+                () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
         Admission admission =
-                new Admission(() -> settings.current().protection().sharedHosts(), List.of(bans.rule()));
+                new Admission(() -> settings.current().protection().sharedAddresses(), List.of(bans.rule()));
         ProxySessions sessions = listen(
                 door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
         waiting.open(settings, accounts, words, sessions, remember, bans::failed);

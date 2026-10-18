@@ -13,8 +13,10 @@ import java.util.function.UnaryOperator;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AddressTallies;
 import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.domain.protection.AddressRanges;
 import com.uxplima.auth.domain.protection.AddressTally;
 import com.uxplima.auth.domain.protection.BanSteps;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +27,7 @@ final class AddressBansTest {
     private static final String HOME = "203.0.113.7";
     private static final String PLAY = "play.example.org";
     private static final String SHIELD = "mc.tcpshield.com";
+    private static final String FILTER = "198.51.100.20";
 
     private final Map<String, AddressTally> kept = new ConcurrentHashMap<>();
     private final AddressTallies tallies = new AddressTallies() {
@@ -49,12 +52,17 @@ final class AddressBansTest {
         return new AddressBans(
                 tallies,
                 () -> new BanSteps(List.of(Duration.ofMinutes(5), Duration.ofMinutes(30)), 3, Duration.ofHours(24)),
-                () -> new HostPatterns(List.of("*.tcpshield.com")),
+                AddressBansTest::shield,
                 () -> now);
     }
 
     private Admission door() {
-        return new Admission(() -> new HostPatterns(List.of("*.tcpshield.com")), List.of(bans().rule()));
+        return new Admission(AddressBansTest::shield, List.of(bans().rule()));
+    }
+
+    private static SharedAddresses shield() {
+        return new SharedAddresses(
+                new HostPatterns(List.of("*.tcpshield.com")), new AddressRanges(List.of("198.51.100.0/24")));
     }
 
     @Test
@@ -84,14 +92,24 @@ final class AddressBansTest {
     }
 
     @Test
-    @DisplayName("through a shared-address host a failure counts against nobody, so one player cannot ban the rest")
+    @DisplayName("through a shared-address filter a failure counts against nobody, so one player cannot ban the rest")
     void aSharedHostCountsNothing() {
         for (int i = 0; i < 5; i++) {
-            assertThat(bans().failed(HOME, SHIELD)).isEmpty();
+            assertThat(bans().failed(FILTER, SHIELD)).isEmpty();
         }
 
         assertThat(kept).isEmpty();
-        assertThat(door().decide(new Admission.Arrival(HOME, PLAY))).isEmpty();
+        assertThat(door().decide(new Admission.Arrival(FILTER, PLAY))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the filter's host typed from a home address counts against that address, and cannot escape its ban")
+    void aTypedFilterHostStillCounts() {
+        bans().failed(HOME, SHIELD);
+        bans().failed(HOME, SHIELD);
+
+        assertThat(bans().failed(HOME, SHIELD)).contains(Duration.ofMinutes(5));
+        assertThat(door().decide(new Admission.Arrival(HOME, SHIELD))).isPresent();
     }
 
     @Test

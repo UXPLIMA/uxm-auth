@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.message.Keys;
-import com.uxplima.auth.domain.premium.HostPatterns;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 
 /**
  * The rules a connection meets at the door, before its name is read: the country it comes from, a ban on its
@@ -50,24 +50,24 @@ public final class Admission {
         Optional<Refused> check(Arrival arrival);
     }
 
-    private final Supplier<HostPatterns> shared;
+    private final Supplier<SharedAddresses> shared;
     private final List<Rule> rules;
 
-    /** @param shared the hosts every player of which arrives from one address */
-    public Admission(Supplier<HostPatterns> shared, List<Rule> rules) {
+    /** @param shared the filters every player of which arrives from the filter's own address */
+    public Admission(Supplier<SharedAddresses> shared, List<Rule> rules) {
         this.shared = Objects.requireNonNull(shared, "shared");
         this.rules = List.copyOf(Objects.requireNonNull(rules, "rules"));
     }
 
     /** A door with no rules: every connection is let in. */
     public static Admission none() {
-        return new Admission(() -> new HostPatterns(List.of()), List.of());
+        return new Admission(SharedAddresses::none, List.of());
     }
 
     /** Why this connection is turned away, or nothing when every rule lets it in. */
     public Optional<Refused> decide(Arrival arrival) {
         Objects.requireNonNull(arrival, "arrival");
-        if (shared(arrival.host())) {
+        if (shared.get().through(arrival.address(), arrival.host())) {
             return Optional.empty();
         }
         for (Rule rule : rules) {
@@ -77,10 +77,5 @@ public final class Admission {
             }
         }
         return Optional.empty();
-    }
-
-    /** Whether a player who typed this host arrives from a filter's address, which many players share. */
-    public boolean shared(String host) {
-        return shared.get().matches(Objects.requireNonNull(host, "host"));
     }
 }

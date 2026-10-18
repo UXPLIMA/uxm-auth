@@ -154,12 +154,12 @@ final class AuthGraph implements AutoCloseable {
         Remember remember = new Remember(
                 remembered,
                 () -> settings.current().protection().sessions(),
-                () -> settings.current().protection().sharedHosts(),
+                () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
         AddressBans bans = new AddressBans(
                 new SqlAddressTallies(database),
                 () -> settings.current().protection().bans(),
-                () -> settings.current().protection().sharedHosts(),
+                () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
@@ -295,7 +295,7 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        new Admission(() -> settings.current().protection().sharedHosts(), List.of(bans.rule())),
+                        new Admission(() -> settings.current().protection().sharedAddresses(), List.of(bans.rule())),
                         remember::resumes),
                 notices,
                 door,

@@ -16,7 +16,11 @@ final class ProtectionReader {
     private ProtectionReader() {}
 
     static ProtectionSettings protection(HoconConfig config) {
-        return new ProtectionSettings(list(config, "shared-address-hosts"), sessions(config), bans(config));
+        return new ProtectionSettings(
+                list(config, "shared-address-hosts"),
+                list(config, "shared-address-sources"),
+                sessions(config),
+                bans(config));
     }
 
     private static BanSteps bans(HoconConfig config) {

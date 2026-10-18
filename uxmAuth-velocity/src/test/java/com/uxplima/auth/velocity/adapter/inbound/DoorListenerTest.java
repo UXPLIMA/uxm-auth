@@ -57,7 +57,7 @@ final class DoorListenerTest {
                 remembered,
                 () -> new com.uxplima.auth.application.protection.Remember.Settings(
                         com.uxplima.auth.application.protection.Remember.Mode.CHOSEN, java.time.Duration.ofMinutes(60)),
-                () -> new com.uxplima.auth.domain.premium.HostPatterns(List.of()),
+                com.uxplima.auth.domain.protection.SharedAddresses::none,
                 world.clock::instant);
         when(connection.getRemoteAddress()).thenReturn(FROM);
         when(connection.getVirtualHost())
@@ -371,9 +371,8 @@ final class DoorListenerTest {
     @DisplayName("a connection the door's rules refuse is turned away before its name is read, with the rule's words")
     void theDoorsRulesComeFirst() {
         java.util.List<Admission.Arrival> seen = new java.util.ArrayList<>();
-        admission = new Admission(
-                () -> new com.uxplima.auth.domain.premium.HostPatterns(java.util.List.of()),
-                java.util.List.of(arrival -> {
+        admission =
+                new Admission(com.uxplima.auth.domain.protection.SharedAddresses::none, java.util.List.of(arrival -> {
                     seen.add(arrival);
                     return Optional.of(new Admission.Refused(
                             com.uxplima.auth.application.message.Keys.KICK_TIMEOUT, java.util.Map.of()));

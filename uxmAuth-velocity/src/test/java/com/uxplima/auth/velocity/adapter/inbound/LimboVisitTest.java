@@ -58,7 +58,7 @@ final class LimboVisitTest {
                 () -> new com.uxplima.auth.application.protection.Remember.Settings(
                         com.uxplima.auth.application.protection.Remember.Mode.EVERYONE,
                         java.time.Duration.ofMinutes(60)),
-                () -> new com.uxplima.auth.domain.premium.HostPatterns(java.util.List.of()),
+                com.uxplima.auth.domain.protection.SharedAddresses::none,
                 world.clock::instant);
         sessions.waiting(STEVE, new Claim.Waiting(false, false, false));
     }
