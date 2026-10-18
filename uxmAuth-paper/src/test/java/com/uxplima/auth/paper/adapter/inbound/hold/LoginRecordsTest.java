@@ -79,6 +79,31 @@ final class LoginRecordsTest {
     }
 
     @Test
+    @DisplayName("the alerts hear of a login off the thread and before it is written, so it is not yet among the"
+            + " accounts on its address; a failing read is told and the login is still written")
+    void theAlertsHearItFirst() {
+        List<String> told = new ArrayList<>();
+        LoginRecords.Landed landed = (account, name, address) -> {
+            told.add(name.value() + "@" + address + " written " + world.history.count(account));
+            throw new IllegalStateException("the read failed");
+        };
+        LoginRecords records =
+                new LoginRecords(world.history, later::add, Clock.fixed(NOW, ZoneOffset.UTC), warned::add, landed);
+
+        records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.PASSWORD));
+        assertThat(told).isEmpty();
+        later.forEach(Runnable::run);
+        later.clear();
+
+        assertThat(told).containsExactly("Steve@" + address() + " written 0");
+        assertThat(warned).singleElement().asString().contains("the read failed");
+        assertThat(world.history.count(account().id())).isEqualTo(1);
+        records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));
+        later.forEach(Runnable::run);
+        assertThat(told).hasSize(1);
+    }
+
+    @Test
     @DisplayName("a login the network vouched for was written where it first landed, so nothing is written here")
     void aNetworkLoginIsNotWrittenTwice() {
         records(world.history).loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));

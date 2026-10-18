@@ -777,6 +777,27 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("every alert is on by default, failed logins once a minute and an address told at three accounts;"
+            + " each is switched by name, and a threshold of one is refused by name")
+    void alertsAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").staff().alerts())
+                .isEqualTo(new com.uxplima.auth.application.staff.Alerts.Settings(
+                        true, Duration.ofSeconds(60), true, 3, true));
+        assertThat(settingsFrom(
+                                folder,
+                                "alerts { failed-login = false, failed-login-window-seconds = 300, ban = false,"
+                                        + " shared-address-accounts = 0, staff-actions = false }\n")
+                        .staff()
+                        .alerts())
+                .isEqualTo(new com.uxplima.auth.application.staff.Alerts.Settings(
+                        false, Duration.ofMinutes(5), false, 0, false));
+        assertThatThrownBy(() -> settingsFrom(folder, "alerts { shared-address-accounts = 1 }\n"))
+                .hasMessageContaining("alerts.shared-address-accounts");
+        assertThatThrownBy(() -> settingsFrom(folder, "alerts { failed-login-window-seconds = 0 }\n"))
+                .hasMessageContaining("alerts.failed-login-window-seconds");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

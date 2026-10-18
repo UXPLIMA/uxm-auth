@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthMethod;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -124,6 +125,51 @@ final class BulletinsTest {
         assertThatThrownBy(() -> new Bulletin.SessionsEnded(STEVE, Optional.of("a|b")))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new Bulletin.SessionsEnded(STEVE, Optional.of("")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("every alert travels whole, a name or a target with the separators in it too")
+    void alertsOpen() {
+        for (Bulletin alert : java.util.List.<Bulletin>of(
+                new Bulletin.FailedLogin("203.0.113.7"),
+                new Bulletin.Banned("2001:db8::1", Duration.ofMinutes(10)),
+                new Bulletin.SharedAddress(new PlayerName("Ste|ve;2"), "203.0.113.7", 4),
+                new Bulletin.StaffActed(Optional.of(new PlayerName("Mod")), "unregister", "Al ex|;"),
+                new Bulletin.StaffActed(Optional.empty(), "unban", "203.0.113.7"))) {
+            Bulletins.Sent sent = new Bulletins.Sent(alert, ORIGIN, NOW);
+
+            assertThat(bulletins.open(bulletins.seal(sent), NOW)).contains(sent);
+        }
+    }
+
+    @Test
+    @DisplayName("an alert that names no known kind, or misses a part, is not opened")
+    void aBrokenAlertIsNotOpened() {
+        String head = "b1|A|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + new UUID(0, 0) + "|";
+
+        assertThat(bulletins.open(claims.seal(head + "F;203.0.113.7"), NOW)).isPresent();
+        assertThat(bulletins.open(claims.seal(head + "X;203.0.113.7"), NOW)).isEmpty();
+        assertThat(bulletins.open(claims.seal(head + "B;203.0.113.7"), NOW)).isEmpty();
+        assertThat(bulletins.open(claims.seal(head + "B;203.0.113.7;soon"), NOW))
+                .isEmpty();
+        assertThat(bulletins.open(claims.seal(head + "S;Steve;203.0.113.7"), NOW))
+                .isEmpty();
+        assertThat(bulletins.open(claims.seal(head + "A;;unban"), NOW)).isEmpty();
+        assertThat(bulletins.open(claims.seal(head + "F;203.0.113.7;more"), NOW))
+                .isEmpty();
+        assertThat(bulletins.open(claims.seal(head + "F;"), NOW)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an alert names an address and a count that mean something")
+    void anAlertIsWhole() {
+        assertThatThrownBy(() -> new Bulletin.FailedLogin(" ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Bulletin.Banned("203.0.113.7", Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Bulletin.SharedAddress(new PlayerName("Steve"), "203.0.113.7", 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Bulletin.StaffActed(Optional.empty(), "Un Ban", "x"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

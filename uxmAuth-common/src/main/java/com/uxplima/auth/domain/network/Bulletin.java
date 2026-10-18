@@ -1,9 +1,12 @@
 package com.uxplima.auth.domain.network;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
+
+import com.uxplima.auth.domain.name.PlayerName;
 
 /** Something every member of a network hears at once, the proxies and the servers alike. */
 public sealed interface Bulletin {
@@ -51,6 +54,62 @@ public sealed interface Bulletin {
         }
     }
 
+    /** Something staff hear on every server: a failed login, a ban, an address many accounts share, staff acting. */
+    sealed interface Alert extends Bulletin {}
+
+    /** A wrong answer from this address, the first of its window. */
+    record FailedLogin(String address) implements Alert {
+        public FailedLogin {
+            requireText(address, "address");
+        }
+    }
+
+    /** This address is banned for this long, after its wrong answers. */
+    record Banned(String address, Duration length) implements Alert {
+        public Banned {
+            requireText(address, "address");
+            if (Objects.requireNonNull(length, "length").isNegative() || length.isZero()) {
+                throw new IllegalArgumentException("A ban lasts a while: " + length);
+            }
+        }
+    }
+
+    /** This name logged in from an address that this many accounts, its own among them, have used. */
+    record SharedAddress(PlayerName name, String address, int accounts) implements Alert {
+        public SharedAddress {
+            Objects.requireNonNull(name, "name");
+            requireText(address, "address");
+            if (accounts < 2) {
+                throw new IllegalArgumentException("An address is shared by two accounts or more: " + accounts);
+            }
+        }
+    }
+
+    /**
+     * Staff did this to this target, a name or an address.
+     *
+     * @param actor the staff player, or empty for the console
+     * @param action the key of the staff command
+     */
+    record StaffActed(Optional<PlayerName> actor, String action, String target) implements Alert {
+        public StaffActed {
+            Objects.requireNonNull(actor, "actor");
+            if (!ACTION.matcher(Objects.requireNonNull(action, "action")).matches()) {
+                throw new IllegalArgumentException("A staff action is its key: " + action);
+            }
+            requireText(target, "target");
+        }
+    }
+
+    private static void requireText(String text, String what) {
+        if (Objects.requireNonNull(text, what).isBlank()) {
+            throw new IllegalArgumentException("An alert names its " + what);
+        }
+    }
+
     /** What a visit token may be: the nonce of a proxy's claim, or a random id a server gave a connection. */
     Pattern VISIT = Pattern.compile("[A-Za-z0-9-]{1,64}");
+
+    /** What a staff command's key may be. */
+    Pattern ACTION = Pattern.compile("[a-z0-9-]{1,32}");
 }

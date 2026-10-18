@@ -389,6 +389,17 @@ public enum Keys implements MessageKey {
             "staff.no-password",
             "<etag:'ERROR'> <body><value><name><body> has no password to log in with. Set one first."),
     STAFF_REJOIN_KICK("staff.rejoin-kick", "<body>Staff changed how your account logs in. Join again."),
+    ALERT_FAILED_LOGIN("alert.failed-login", "<tag:'AUTH'> <body>A wrong password came from <value><address><body>."),
+    ALERT_BANNED(
+            "alert.banned",
+            "<tag:'AUTH'> <value><address><body> is banned for <value><time><body> after its wrong passwords."),
+    ALERT_SHARED_ADDRESS(
+            "alert.shared-address",
+            "<tag:'AUTH'> <value><name><body> logged in from <value><address><body>, which <value><count><body> accounts have used."),
+    ALERT_STAFF_ACTED(
+            "alert.staff-acted",
+            "<tag:'AUTH'> <value><actor><body> ran <value><action><body> on <value><target><body>."),
+    ALERT_CONSOLE("alert.console", "the console"),
     STAFF_RESOLVED_PREMIUM(
             "staff.resolved-premium",
             "<tag:'AUTH'> <body><value><name><body> goes to its paid owner. The cracked account moved to a marked name with everything it had."),

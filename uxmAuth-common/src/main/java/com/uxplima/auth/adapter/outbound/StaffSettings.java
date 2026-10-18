@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.uxplima.auth.application.staff.AccountInfo;
+import com.uxplima.auth.application.staff.Alerts;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.uxmlib.config.HoconConfig;
 
@@ -18,11 +19,17 @@ import com.uxplima.uxmlib.config.HoconConfig;
  * @param info how many recent logins and other accounts a view shows
  * @param datePattern how a date and time read to staff, in Java's pattern letters
  * @param inGame the destructive staff commands the operator opened to staff in game
+ * @param alerts which alerts staff hear in game
  */
 public record StaffSettings(
-        Duration historyKeep, AccountInfo.Settings info, String datePattern, Set<StaffAction> inGame) {
+        Duration historyKeep,
+        AccountInfo.Settings info,
+        String datePattern,
+        Set<StaffAction> inGame,
+        Alerts.Settings alerts) {
     public StaffSettings {
         Objects.requireNonNull(historyKeep, "historyKeep");
+        Objects.requireNonNull(alerts, "alerts");
         Objects.requireNonNull(info, "info");
         Objects.requireNonNull(datePattern, "datePattern");
         inGame = Set.copyOf(inGame);
@@ -51,7 +58,22 @@ public record StaffSettings(
                         SettingsReader.positive(config, "staff.recent-logins", 10),
                         SettingsReader.positive(config, "staff.alts-shown", 20)),
                 config.getString("staff.date-format", "yyyy-MM-dd HH:mm"),
-                inGame(config));
+                inGame(config),
+                alerts(config));
+    }
+
+    private static Alerts.Settings alerts(HoconConfig config) {
+        int shared = config.getInt("alerts.shared-address-accounts", 3);
+        if (shared < 0 || shared == 1) {
+            throw new IllegalArgumentException(
+                    "alerts.shared-address-accounts must be 0 for off, or at least 2, got: " + shared);
+        }
+        return new Alerts.Settings(
+                config.getBoolean("alerts.failed-login", true),
+                Duration.ofSeconds(SettingsReader.positive(config, "alerts.failed-login-window-seconds", 60)),
+                config.getBoolean("alerts.ban", true),
+                shared,
+                config.getBoolean("alerts.staff-actions", true));
     }
 
     private static Set<StaffAction> inGame(HoconConfig config) {

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.random.RandomGenerator;
 
@@ -24,11 +25,13 @@ import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
+import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
 import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
+import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
@@ -48,6 +51,8 @@ import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
+import com.uxplima.auth.application.staff.Alerts;
+import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
@@ -123,7 +128,15 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
-        ProxyMail mail = new ProxyMail(proxy, logger, folder, settings, database, bans::failed, words);
+        // The proxy tells its own wrong passwords; the servers behind it deliver every alert to their staff.
+        LogIn.Failures failures = new Alerts(
+                        () -> settings.current().staff().alerts(),
+                        new SqlLoginHistory(database),
+                        current(),
+                        task -> proxy.getScheduler().buildTask(plugin, task).schedule(),
+                        clock::instant)
+                .watching(bans);
+        ProxyMail mail = new ProxyMail(proxy, logger, folder, settings, database, failures, words);
         this.mail = mail;
         SecondStep secondStep = new SecondStep(
                 factors, mail.emails, () -> settings.current().secondFactor().step(), mail::loginMailed);
@@ -143,8 +156,23 @@ final class ProxyGraph implements AutoCloseable {
                 accounts,
                 words,
                 sessions,
-                guards(settings, accounts, remember, bans, clock, remembered, Codes.of(factors, secondStep, mail)));
+                guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+    }
+
+    /** The bulletins as they are when one is published: the network's, once the proxy has opened it. */
+    private NetworkEvents current() {
+        return new NetworkEvents() {
+            @Override
+            public void publish(Bulletin bulletin) {
+                events.publish(bulletin);
+            }
+
+            @Override
+            public void listen(Consumer<Bulletin> listener) {
+                events.listen(listener);
+            }
+        };
     }
 
     /** What guards the waiting world's own logins and registrations. */
@@ -152,7 +180,7 @@ final class ProxyGraph implements AutoCloseable {
             PluginSettings settings,
             SqlAccountRepository accounts,
             Remember remember,
-            AddressBans bans,
+            LogIn.Failures failures,
             Clock clock,
             SqlRememberedSessions remembered,
             Codes codes) {
@@ -164,7 +192,7 @@ final class ProxyGraph implements AutoCloseable {
                 logger::warn);
         return new WaitingWorld.Guards(
                 remember,
-                bans::failed,
+                failures,
                 cap::full,
                 breaches,
                 events,

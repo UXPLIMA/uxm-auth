@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
@@ -71,6 +72,17 @@ public final class StaffDesk implements StaffActions {
         }
     }
 
+    /** Who hears what staff changed. */
+    @FunctionalInterface
+    public interface Witness {
+        /**
+         * Staff did this to this target, a name or an address.
+         *
+         * @param actor the staff player, or empty for the console
+         */
+        void acted(Optional<PlayerName> actor, StaffAction action, String target);
+    }
+
     private final StaffGate gate;
     private final Cases cases;
     private final Reach reach;
@@ -78,8 +90,12 @@ public final class StaffDesk implements StaffActions {
     private final Replies replies;
     private final Messages messages;
     private final Consumer<String> log;
+    private final Witness witness;
 
-    /** @param log where the line each action leaves goes, which is the console */
+    /**
+     * @param log where the line each action leaves goes, which is the console
+     * @param witness hears every action that changed something, which is the alerts
+     */
     public StaffDesk(
             StaffGate gate,
             Cases cases,
@@ -87,7 +103,8 @@ public final class StaffDesk implements StaffActions {
             HashingLane lane,
             Replies replies,
             Messages messages,
-            Consumer<String> log) {
+            Consumer<String> log,
+            Witness witness) {
         this.gate = Objects.requireNonNull(gate, "gate");
         this.cases = Objects.requireNonNull(cases, "cases");
         this.reach = Objects.requireNonNull(reach, "reach");
@@ -95,6 +112,15 @@ public final class StaffDesk implements StaffActions {
         this.replies = Objects.requireNonNull(replies, "replies");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.log = Objects.requireNonNull(log, "log");
+        this.witness = Objects.requireNonNull(witness, "witness");
+    }
+
+    /** Leaves the line in the console and tells the witness who did what to which target. */
+    private void done(CommandSender sender, StaffAction action, String target, String line) {
+        log.accept(sender.getName() + line);
+        Optional<PlayerName> actor =
+                sender instanceof Player player ? Optional.of(new PlayerName(player.getName())) : Optional.empty();
+        witness.acted(actor, action, target);
     }
 
     @Override
@@ -109,7 +135,7 @@ public final class StaffDesk implements StaffActions {
                 return;
             }
             messages.send(sender, Keys.STAFF_FORCED_LOGIN, Text.placeholder("name", name));
-            log.accept(sender.getName() + " let " + name + " in past the login.");
+            done(sender, StaffAction.FORCE_LOGIN, name, " let " + name + " in past the login.");
         });
     }
 
@@ -129,7 +155,7 @@ public final class StaffDesk implements StaffActions {
                     },
                     Text.placeholder("address", address));
             if (unban != AddressBans.Unban.NOT_AN_ADDRESS) {
-                log.accept(sender.getName() + " lifted any ban on " + address + ".");
+                done(sender, StaffAction.UNBAN, address, " lifted any ban on " + address + ".");
             }
         });
     }
@@ -146,7 +172,7 @@ public final class StaffDesk implements StaffActions {
                 return;
             }
             messages.send(sender, Keys.STAFF_REMOVED, Text.placeholder("name", name));
-            log.accept(sender.getName() + " removed the account of " + name + ".");
+            done(sender, StaffAction.UNREGISTER, name, " removed the account of " + name + ".");
         });
     }
 
@@ -163,7 +189,7 @@ public final class StaffDesk implements StaffActions {
             switch (outcome) {
                 case SetPassword.Outcome.Set set -> {
                     messages.send(sender, Keys.STAFF_PASSWORD_SET, who);
-                    log.accept(sender.getName() + " set the password of " + name + ".");
+                    done(sender, StaffAction.SET_PASSWORD, name, " set the password of " + name + ".");
                 }
                 case SetPassword.Outcome.Rejected rejected ->
                     PasswordWords.reason(messages, sender, rejected.verdict()).ifPresent(sender::sendMessage);
@@ -188,7 +214,7 @@ public final class StaffDesk implements StaffActions {
             switch (outcome) {
                 case ForceRegister.Outcome.Made made -> {
                     messages.send(sender, Keys.STAFF_REGISTERED, who);
-                    log.accept(sender.getName() + " made an account for " + name + ".");
+                    done(sender, StaffAction.FORCE_REGISTER, name, " made an account for " + name + ".");
                     reach.registered().accept(made.account());
                 }
                 case ForceRegister.Outcome.Taken taken -> messages.send(sender, Keys.STAFF_NAME_TAKEN, who);
@@ -210,7 +236,7 @@ public final class StaffDesk implements StaffActions {
             switch (off) {
                 case OFF -> {
                     messages.send(sender, Keys.STAFF_FACTOR_OFF, who);
-                    log.accept(sender.getName() + " turned off every second factor of " + name + ".");
+                    done(sender, StaffAction.DISABLE_2FA, name, " turned off every second factor of " + name + ".");
                 }
                 case NONE -> messages.send(sender, Keys.STAFF_FACTOR_NONE, who);
                 case UNKNOWN -> messages.send(sender, Keys.STAFF_UNKNOWN, who);
@@ -245,7 +271,7 @@ public final class StaffDesk implements StaffActions {
                     TagResolver who = Text.placeholder("name", name);
                     messages.send(sender, marked == MarkKind.Marked.DONE ? done : markWord(marked), who);
                     if (marked == MarkKind.Marked.DONE) {
-                        log.accept(sender.getName() + " marked " + name + " " + kind + ".");
+                        done(sender, action, name, " marked " + name + " " + kind + ".");
                     }
                 });
     }
@@ -277,8 +303,12 @@ public final class StaffDesk implements StaffActions {
                 case NO_DISPUTE -> messages.send(sender, Keys.STAFF_NO_DISPUTE, who);
             }
             if (resolved != ResolveConflict.Resolved.NO_DISPUTE) {
-                log.accept(sender.getName() + " settled the dispute over " + name + " for the "
-                        + side.name().toLowerCase(java.util.Locale.ROOT) + " side.");
+                done(
+                        sender,
+                        StaffAction.RESOLVE,
+                        name,
+                        " settled the dispute over " + name + " for the "
+                                + side.name().toLowerCase(java.util.Locale.ROOT) + " side.");
             }
         });
     }

@@ -51,14 +51,19 @@ public final class AddressBans {
      * address the server could not read is everybody's whose address it could not read, so it counts nothing.
      */
     public Optional<Duration> failed(String address, String host) {
-        Objects.requireNonNull(address, "address");
-        if (shared.get().through(address, Objects.requireNonNull(host, "host")) || !AddressKey.isAddress(address)) {
+        if (!counts(address, host)) {
             return Optional.empty();
         }
         Instant now = clock.get();
         BanSteps rules = steps.get();
         AddressTally after = tallies.change(AddressKey.of(address), tally -> tally.failedAt(now, rules));
         return after.bannedAt(now) ? Optional.of(after.leftAt(now)) : Optional.empty();
+    }
+
+    /** Whether a wrong password from this address through this host counts: it is read, and nobody shares it. */
+    public boolean counts(String address, String host) {
+        Objects.requireNonNull(address, "address");
+        return !shared.get().through(address, Objects.requireNonNull(host, "host")) && AddressKey.isAddress(address);
     }
 
     /** Staff lift the ban on this address and forget its wrong passwords. */

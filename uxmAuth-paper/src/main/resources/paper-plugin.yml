@@ -124,6 +124,9 @@ permissions:
   uxmauth.admin.resolve:
     description: Settle a name a cracked holder and a paid owner both want; from the console only unless staff.in-game opens it
     default: op
+  uxmauth.admin.alerts:
+    description: Hear failed logins, bans, addresses many accounts use and what staff did, as they happen
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

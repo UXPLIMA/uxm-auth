@@ -35,6 +35,7 @@ public final class RemovedAccounts implements Consumer<Bulletin> {
             case Bulletin.Rejoin rejoin -> sendAway(rejoin.account(), Keys.STAFF_REJOIN_KICK);
             case Bulletin.SessionsEnded ended -> {}
             case Bulletin.LetIn letIn -> {}
+            case Bulletin.Alert alert -> {}
         }
     }
 

@@ -35,6 +35,10 @@ public final class Bulletins {
     private static final String LET_IN = "L";
     private static final String UNREGISTERED = "U";
     private static final String REJOIN = "R";
+    private static final String ALERT = "A";
+    /** An alert is about no one account, so it fills the account part with the nil id. */
+    private static final UUID NOBODY = new UUID(0, 0);
+
     private static final int PARTS = 6;
 
     private final Claims claims;
@@ -53,6 +57,7 @@ public final class Bulletins {
                     case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), letIn.nonce());
                     case Bulletin.Unregistered removed -> text(sent, UNREGISTERED, removed.account(), "");
                     case Bulletin.Rejoin rejoin -> text(sent, REJOIN, rejoin.account(), "");
+                    case Bulletin.Alert alert -> text(sent, ALERT, NOBODY, AlertText.write(alert));
                 });
     }
 
@@ -114,6 +119,7 @@ public final class Bulletins {
                         case UNREGISTERED ->
                             more.isEmpty() ? Optional.of(new Bulletin.Unregistered(account)) : Optional.empty();
                         case REJOIN -> more.isEmpty() ? Optional.of(new Bulletin.Rejoin(account)) : Optional.empty();
+                        case ALERT -> account.equals(NOBODY) ? AlertText.read(more) : Optional.empty();
                         default -> Optional.empty();
                     };
             return bulletin.map(read ->

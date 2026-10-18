@@ -58,6 +58,7 @@ import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.AccountInfo;
+import com.uxplima.auth.application.staff.Alerts;
 import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
@@ -115,6 +116,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
+import com.uxplima.auth.paper.adapter.inbound.staff.AlertDelivery;
 import com.uxplima.auth.paper.adapter.inbound.staff.ForcedLogins;
 import com.uxplima.auth.paper.adapter.inbound.staff.RemovedAccounts;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffDesk;
@@ -191,6 +193,7 @@ final class AuthGraph implements AutoCloseable {
     private @Nullable TaskHandle countryTask;
     private final TaskHandle historyTask;
     private final NetworkEvents events;
+    private final Alerts alerts;
     private final ChannelReports channelReports;
     private final ServerHellos hellos;
     /** Who holds a name, by the operator's sources: the door asks it, and so do staff marking an account premium. */
@@ -228,6 +231,14 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
+        this.events = bulletins(settings, plugin.getLogger());
+        this.alerts = new Alerts(
+                () -> settings.current().staff().alerts(),
+                history,
+                events,
+                task -> scheduler.async(task),
+                Instant::now);
+        LogIn.Failures failures = alerts.watching(bans);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
 
@@ -291,14 +302,14 @@ final class AuthGraph implements AutoCloseable {
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
         CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
-        this.mail = new MailGraph(plugin, settings, database, bans::failed, hashing, lane, messages);
+        this.mail = new MailGraph(plugin, settings, database, failures, hashing, lane, messages);
         this.factors = new FactorGraph(
                 plugin,
                 settings,
                 database,
                 accounts,
                 sessions,
-                bans::failed,
+                failures,
                 id -> bedrock.player(id).isPresent(),
                 hashing,
                 lane,
@@ -314,7 +325,7 @@ final class AuthGraph implements AutoCloseable {
                 lane,
                 sessions,
                 clock,
-                bans::failed,
+                failures,
                 () -> settings.current().passwordPolicy(),
                 captchas,
                 factors.secondStep);
@@ -338,7 +349,6 @@ final class AuthGraph implements AutoCloseable {
                 cap::full,
                 breaches,
                 captchas::blocksRegistration);
-        this.events = bulletins(settings, plugin.getLogger());
         ChangePassword change = new ChangePassword(
                 accounts,
                 hashing,
@@ -391,8 +401,8 @@ final class AuthGraph implements AutoCloseable {
         MailGraph.Email email = mail.email(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         this.email = email.command();
         this.addressDuty = email.duty();
-        LoginRecords records =
-                new LoginRecords(history, task -> scheduler.async(task), clock, plugin.getLogger()::warning);
+        LoginRecords records = new LoginRecords(
+                history, task -> scheduler.async(task), clock, plugin.getLogger()::warning, alerts::landed);
         // At start, and once a day after, a login older than the window goes.
         this.historyTask = scheduler.asyncTimer(
                 Duration.ZERO,
@@ -499,6 +509,7 @@ final class AuthGraph implements AutoCloseable {
         ForceLogin force = new ForceLogin(accounts, sessions, events, clock);
         events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
         events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
+        events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
         this.desk = staffing.desk(
                 new StaffDesk.Cases(
                         force,
@@ -536,7 +547,8 @@ final class AuthGraph implements AutoCloseable {
                                 door,
                                 scheduler,
                                 messages)),
-                action -> settings.current().staff().allowsInGame(action));
+                action -> settings.current().staff().allowsInGame(action),
+                alerts::staffActed);
         this.recover =
                 mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);

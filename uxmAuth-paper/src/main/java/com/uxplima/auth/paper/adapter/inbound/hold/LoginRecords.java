@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.application.port.LoginHistory;
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 
@@ -20,17 +21,31 @@ import com.uxplima.auth.domain.state.AuthState;
  */
 public final class LoginRecords {
 
+    /** Who hears of a login off the player's thread, before it is written. */
+    @FunctionalInterface
+    public interface Landed {
+        void landed(UUID account, PlayerName name, String address);
+    }
+
     private final LoginHistory history;
     private final Consumer<Runnable> async;
     private final Clock clock;
     private final Consumer<String> warn;
+    private final Landed landed;
 
     /** @param async runs a task off every server and region thread */
     public LoginRecords(LoginHistory history, Consumer<Runnable> async, Clock clock, Consumer<String> warn) {
+        this(history, async, clock, warn, (account, name, address) -> {});
+    }
+
+    /** @param landed hears of each login first, which is the alerts */
+    public LoginRecords(
+            LoginHistory history, Consumer<Runnable> async, Clock clock, Consumer<String> warn, Landed landed) {
         this.history = Objects.requireNonNull(history, "history");
         this.async = Objects.requireNonNull(async, "async");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.warn = Objects.requireNonNull(warn, "warn");
+        this.landed = Objects.requireNonNull(landed, "landed");
     }
 
     /** The player is in by this login. */
@@ -44,8 +59,14 @@ public final class LoginRecords {
                 ? ""
                 : from.getAddress().getHostAddress();
         UUID account = in.account().id();
+        PlayerName name = in.account().name();
         LoginHistory.Entry entry = new LoginHistory.Entry(clock.instant(), address, in.method());
         async.accept(() -> {
+            try {
+                landed.landed(account, name, address);
+            } catch (RuntimeException failed) {
+                warn.accept("A login could not be told to the alerts: " + failed.getMessage());
+            }
             try {
                 history.record(account, entry);
             } catch (RuntimeException failed) {

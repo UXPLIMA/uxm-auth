@@ -56,6 +56,8 @@ final class StaffDeskTest {
     private PlayerMock staff;
     private final Set<StaffAction> opened = EnumSet.noneOf(StaffAction.class);
     private final List<String> logged = new ArrayList<>();
+    private final List<String> acted = java.util.Collections.synchronizedList(new ArrayList<>());
+    private final java.util.concurrent.atomic.AtomicInteger lines = new java.util.concurrent.atomic.AtomicInteger();
     private StaffGate gate;
     private StaffDesk desk;
     private com.uxplima.auth.adapter.outbound.SqlDisputes disputes;
@@ -115,13 +117,28 @@ final class StaffDeskTest {
                         world.door,
                         world.scheduler,
                         world.messages));
-        desk = new StaffDesk(gate, cases, reach, world.lane, world.replies, world.messages, logged::add);
+        desk = new StaffDesk(
+                gate,
+                cases,
+                reach,
+                world.lane,
+                world.replies,
+                world.messages,
+                line -> {
+                    lines.incrementAndGet();
+                    logged.add(line);
+                },
+                (actor, action, target) ->
+                        acted.add(actor.map(PlayerName::value).orElse("console") + " " + action.key() + " " + target));
     }
 
     @AfterEach
     void tearDown() {
         world.close();
         MockBukkit.unmock();
+        assertThat(acted)
+                .as("every staff command that leaves a line in the console is told to the alerts")
+                .hasSize(lines.get());
     }
 
     @Test
@@ -216,6 +233,17 @@ final class StaffDeskTest {
         assertThat(staff.nextComponentMessage())
                 .isEqualTo(world.messages.render(
                         staff, Keys.STAFF_NOT_AN_ADDRESS, Text.placeholder("address", "nowhere")));
+    }
+
+    @Test
+    @DisplayName("what staff changed is told to the alerts with who ran it and on what; what changed nothing is not")
+    void staffActionsAreWitnessed() {
+        world.scheduler.settle(desk.unban(server.getConsoleSender(), HOME));
+        world.scheduler.settle(desk.forceRegister(staff, "Alex", "hunter22"));
+        world.scheduler.settle(desk.forceRegister(staff, "alex", "hunter22"));
+        world.scheduler.settle(desk.unregister(server.getConsoleSender(), "Nobody"));
+
+        assertThat(acted).containsExactly("console unban " + HOME, "Staff forceregister Alex");
     }
 
     private void until(java.util.function.BooleanSupplier done) {
