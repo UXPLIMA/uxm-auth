@@ -25,13 +25,21 @@ import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.LinkEmail;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.MailLogin;
+import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.BreachedPasswords;
+import com.uxplima.auth.application.port.NetworkEvents;
+import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.paper.adapter.inbound.command.EmailCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.RecoverCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.auth.paper.adapter.inbound.mail.BedrockEmailForms;
+import com.uxplima.auth.paper.adapter.inbound.mail.BedrockRecoveryForm;
 import com.uxplima.auth.paper.adapter.inbound.mail.EmailLink;
+import com.uxplima.auth.paper.adapter.inbound.mail.Recovery;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
@@ -105,6 +113,38 @@ final class MailGraph implements AutoCloseable {
                 new BedrockEmailForms(BedrockScreen.forServer(plugin.getServer()), messages),
                 bedrock,
                 lane,
+                replies,
+                moments,
+                messages));
+    }
+
+    /** {@code /recover}, for a player at the login. */
+    RecoverCommand recover(
+            Sessions sessions,
+            AccountRepository accounts,
+            Hashing hashing,
+            RememberedSessions remembered,
+            NetworkEvents events,
+            BreachedPasswords breaches,
+            Predicate<UUID> bedrock,
+            Replies replies,
+            MomentRunner moments) {
+        RecoverPassword recover = new RecoverPassword(
+                sessions,
+                emails,
+                codes,
+                accounts,
+                hashing,
+                lane,
+                () -> settings.current().passwordPolicy(),
+                breaches,
+                remembered,
+                events);
+        return new RecoverCommand(new Recovery(
+                recover,
+                sessions,
+                new BedrockRecoveryForm(BedrockScreen.forServer(plugin.getServer()), messages),
+                bedrock,
                 replies,
                 moments,
                 messages));

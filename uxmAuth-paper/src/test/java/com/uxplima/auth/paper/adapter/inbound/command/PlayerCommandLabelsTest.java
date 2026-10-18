@@ -37,7 +37,9 @@ final class PlayerCommandLabelsTest {
                         "2fa",
                         "dogrulama",
                         "email",
-                        "eposta")
+                        "eposta",
+                        "recover",
+                        "kurtar")
                 .doesNotContain("uxmauth", "auth");
     }
 

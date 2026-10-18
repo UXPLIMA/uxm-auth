@@ -29,7 +29,8 @@ public final class PlayerCommandLabels {
             ClaimCommand.class,
             CaptchaCommand.class,
             TwoFactorCommand.class,
-            EmailCommand.class);
+            EmailCommand.class,
+            RecoverCommand.class);
 
     private PlayerCommandLabels() {}
 

@@ -67,6 +67,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PlayerCommandLabels;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.RecoverCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
@@ -145,6 +146,7 @@ final class AuthGraph implements AutoCloseable {
     final FactorGraph factors;
     final TwoFactorCommand twoFactor;
     final EmailCommand email;
+    final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
     final ScreenClickListener screenClicks;
@@ -432,6 +434,16 @@ final class AuthGraph implements AutoCloseable {
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
         this.email = mail.command(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
+        this.recover = mail.recover(
+                sessions,
+                accounts,
+                hashing,
+                remembered,
+                events,
+                breaches,
+                id -> bedrock.player(id).isPresent(),
+                replies,
+                moments);
         formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }

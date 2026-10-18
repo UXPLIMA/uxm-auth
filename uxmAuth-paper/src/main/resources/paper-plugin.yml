@@ -67,6 +67,9 @@ permissions:
   uxmauth.2fa:
     description: Turn a code from an authenticator app after the password on and off
     default: true
+  uxmauth.recover:
+    description: Set a forgotten password by a code mailed to the linked address
+    default: true
   uxmauth.email:
     description: Link an address a forgotten password is sent to
     default: true

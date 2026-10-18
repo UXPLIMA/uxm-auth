@@ -301,6 +301,27 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Your login code goes to this address. Turn that off first with <value>/2fa email off"
                     + " <code><body>."),
     EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
+    RECOVER_SENT(
+            "recover.sent",
+            "<good>A code went to <value><address><good>. Type <value>/recover <code> <new"
+                    + " password><good> within <value><minutes><good> minutes."),
+    RECOVER_COOLDOWN(
+            "recover.cooldown",
+            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body>" + " seconds."),
+    RECOVER_NO_ADDRESS(
+            "recover.no-address",
+            "<etag:'ERROR'> <body>No address is linked to this account, so no code can be sent. Ask" + " the staff."),
+    RECOVER_NOT_WAITING(
+            "recover.not-waiting", "<etag:'ERROR'> <body>A password is recovered at the login, before it is typed."),
+    RECOVER_DONE("recover.done", "<good>Your new password is set. Log in with <value>/login <password><good>."),
+    RECOVER_WRONG("recover.wrong", "<etag:'ERROR'> <body>That is not the code. Tries left: <value><left><body>."),
+    RECOVER_EXPIRED(
+            "recover.expired", "<etag:'ERROR'> <body>That code is too old. Ask a new one with <value>/recover<body>."),
+    RECOVER_NOTHING_PENDING(
+            "recover.nothing-pending", "<etag:'ERROR'> <body>No code waits. Ask one with <value>/recover<body>."),
+    RECOVER_TOO_MANY_ATTEMPTS(
+            "recover.too-many-attempts",
+            "<etag:'ERROR'> <body>The tries for that code are spent. Ask a new one with" + " <value>/recover<body>."),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(
             "session.not-chosen",
@@ -397,6 +418,10 @@ public enum Keys implements MessageKey {
     SCREEN_EMAIL_ADDRESS("screen.email.address", "Address"),
     SCREEN_EMAIL_CODE_BODY("screen.email.code-body", "<body>Type the code that went to the address."),
     SCREEN_EMAIL_CODE("screen.email.code", "Code"),
+    SCREEN_RECOVER_TITLE("screen.recover.title", "<value>Forgotten password"),
+    SCREEN_RECOVER_BODY("screen.recover.body", "<body>Type the code that went to your address and a new password."),
+    SCREEN_RECOVER_CODE("screen.recover.code", "Code"),
+    SCREEN_RECOVER_PASSWORD("screen.recover.password", "New password"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

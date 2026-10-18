@@ -29,6 +29,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.LanguageSuggestions;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.RecoverCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
@@ -277,6 +278,7 @@ final class PluginModule {
         registerIfEnabled(commands, CaptchaCommand.KEY, "captcha", graph.captchaCommand, resolvers, scheduler);
         registerIfEnabled(commands, TwoFactorCommand.KEY, "2fa", graph.twoFactor, resolvers, scheduler);
         registerIfEnabled(commands, EmailCommand.KEY, "email", graph.email, resolvers, scheduler);
+        registerIfEnabled(commands, RecoverCommand.KEY, "recover", graph.recover, resolvers, scheduler);
     }
 
     private void registerIfEnabled(
