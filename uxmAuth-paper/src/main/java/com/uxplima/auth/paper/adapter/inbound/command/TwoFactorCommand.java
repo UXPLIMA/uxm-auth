@@ -15,8 +15,9 @@ import com.uxplima.uxmlib.command.annotation.annotations.PlayerOnly;
 import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
 
 /**
- * {@code /2fa setup|confirm <code>|off <code>}: a logged-in player turns a code from an authenticator app after
- * the password on, and off again. {@code /2fa <code>} is the code of the second step, after the password.
+ * {@code /2fa setup|confirm <code>|backup <code>|off <code>}: a logged-in player turns a code from an authenticator
+ * app after the password on, asks a new set of backup codes, and turns it off again. {@code /2fa <code>} is the code
+ * of the second step, after the password.
  */
 @FromConfig(
         value = TwoFactorCommand.KEY,
@@ -72,5 +73,12 @@ public final class TwoFactorCommand {
     @PlayerOnly
     public void off(Sender sender, @Arg("code") String code) {
         CompletableFuture<Void> unused = setup.off((Player) sender.bukkit(), code);
+    }
+
+    @FromConfig(value = "backup", fallbackName = "backup", description = "Get new backup codes for a code")
+    @Permission(PERMISSION)
+    @PlayerOnly
+    public void backup(Sender sender, @Arg("code") String code) {
+        CompletableFuture<Void> unused = setup.backup((Player) sender.bukkit(), code);
     }
 }

@@ -6,12 +6,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SplittableRandom;
 import java.util.UUID;
 
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.FactorKind;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.factor.TotpSecret;
@@ -42,8 +45,10 @@ final class ConfirmFactorTest {
         return Optional.ofNullable(ban);
     };
     private Instant now = AuthFixture.NOW;
+    private final FactorCheck check =
+            new FactorCheck(factors, fixture.hashing, () -> TOTP, () -> new BackupCodes(8, 10));
     private final ConfirmFactor confirm =
-            new ConfirmFactor(fixture.accounts, factors, fixture.sessions, () -> TOTP, failures, () -> now);
+            new ConfirmFactor(fixture.accounts, fixture.sessions, check, failures, () -> now);
     private final Account steve = AuthFixture.account("Steve", new PasswordHash("$hash$x"));
 
     @AfterEach
@@ -178,5 +183,23 @@ final class ConfirmFactorTest {
 
         assertThat(confirm.confirm(connection, codeAt(now), "203.0.113.7"))
                 .isEqualTo(new ConfirmFactor.Result.Wrong(2));
+    }
+
+    @Test
+    @DisplayName("a backup code logs in once; typed again it is a wrong code")
+    void aBackupCodeLogsInOnce() {
+        UUID first = waiting(AuthMethod.PASSWORD, null);
+        List<String> codes = check.newBackupCodes(steve.id(), new SplittableRandom(9));
+
+        assertThat(confirm.confirm(first, codes.get(2).toLowerCase(Locale.ROOT), "203.0.113.7"))
+                .isInstanceOf(ConfirmFactor.Result.LoggedIn.class);
+        UUID second = UUID.randomUUID();
+        fixture.sessions.open(
+                second,
+                new AuthState.SecondFactor(steve, AuthMethod.PASSWORD, Set.of(FactorKind.APP), Attempts.fresh(3), null),
+                "visit",
+                "play.example.net");
+        assertThat(confirm.confirm(second, codes.get(2), "203.0.113.7")).isEqualTo(new ConfirmFactor.Result.Wrong(2));
+        assertThat(factors.backupCodes(steve.id())).hasSize(7);
     }
 }

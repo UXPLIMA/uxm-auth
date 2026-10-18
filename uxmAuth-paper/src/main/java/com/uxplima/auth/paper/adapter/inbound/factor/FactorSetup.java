@@ -1,10 +1,10 @@
 package com.uxplima.auth.paper.adapter.inbound.factor;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -18,8 +18,10 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.Addresses;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -30,8 +32,9 @@ import com.uxplima.uxmlib.text.message.Messages;
 /**
  * Turning the app on and off in the world. A setup tells the key and the link in chat, each to click and copy,
  * puts the QR code on a map where it takes no item's place, and shows a Bedrock player a form with the key to copy
- * and a field for the first code. The table is read and written off the player's thread; the player is answered
- * on it.
+ * and a field for the first code. Backup codes are told once in chat to click and copy, and in a form to a Bedrock
+ * player. The table is read and written, and backup codes hashed, on the hashing lane; the player is answered on
+ * their own thread.
  */
 public final class FactorSetup {
 
@@ -55,10 +58,22 @@ public final class FactorSetup {
         void take(Player player);
     }
 
-    /** The Bedrock form of a setup: the key to copy, and a field whose code comes back to {@code answer}. */
-    @FunctionalInterface
+    /** The Bedrock forms of a setup. */
     public interface Form {
+        /** No form: chat is all there is. */
+        Form NONE = new Form() {
+            @Override
+            public void show(Player player, String key, int digits, Consumer<String> answer) {}
+
+            @Override
+            public void codes(Player player, List<String> codes) {}
+        };
+
+        /** The key to copy, and a field whose code comes back to {@code answer}. */
         void show(Player player, String key, int digits, Consumer<String> answer);
+
+        /** The backup codes, as they are shown, to copy. */
+        void codes(Player player, List<String> codes);
     }
 
     private final SetUpTotp setUp;
@@ -67,13 +82,13 @@ public final class FactorSetup {
     private final Hand hand;
     private final Form form;
     private final Predicate<UUID> bedrock;
-    private final Executor async;
+    private final HashingLane lane;
     private final Replies replies;
     private final MomentRunner moments;
     private final Messages messages;
     private final TimeWords times;
 
-    /** @param async where the table is read and written, never a server or region thread */
+    /** @param lane where the table is read and written and backup codes hashed, never a server or region thread */
     public FactorSetup(
             SetUpTotp setUp,
             Sessions sessions,
@@ -81,7 +96,7 @@ public final class FactorSetup {
             Hand hand,
             Form form,
             Predicate<UUID> bedrock,
-            Executor async,
+            HashingLane lane,
             Replies replies,
             MomentRunner moments,
             Messages messages) {
@@ -91,7 +106,7 @@ public final class FactorSetup {
         this.hand = Objects.requireNonNull(hand, "hand");
         this.form = Objects.requireNonNull(form, "form");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
-        this.async = Objects.requireNonNull(async, "async");
+        this.lane = Objects.requireNonNull(lane, "lane");
         this.replies = Objects.requireNonNull(replies, "replies");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -112,9 +127,7 @@ public final class FactorSetup {
         }
         Account in = account.get();
         return replies.on(
-                player,
-                CompletableFuture.supplyAsync(() -> setUp.start(in.id(), in.name()), async),
-                outcome -> answer(player, outcome));
+                player, lane.submit(() -> setUp.start(in.id(), in.name())), outcome -> answer(player, outcome));
     }
 
     /** {@code /2fa confirm <code>}: the first code from the app, which turns it on. */
@@ -126,14 +139,26 @@ public final class FactorSetup {
             return done();
         }
         UUID id = account.get().id();
-        return replies.on(
-                player,
-                CompletableFuture.supplyAsync(() -> setUp.confirm(id, code), async),
-                outcome -> answer(player, outcome));
+        return replies.on(player, lane.submit(() -> setUp.confirm(id, code)), outcome -> answer(player, outcome));
     }
 
-    /** {@code /2fa off <code>}: a code from the app, which turns it off; a wrong one counts against the address. */
+    /** {@code /2fa off <code>}: a code from the app or a backup code turns it off; a wrong one counts against the address. */
     public CompletableFuture<Void> off(Player player, String code) {
+        return proven(player, code, setUp::off);
+    }
+
+    /** {@code /2fa backup <code>}: a code from the app or a backup code buys a new set of backup codes. */
+    public CompletableFuture<Void> backup(Player player, String code) {
+        return proven(player, code, setUp::backup);
+    }
+
+    /** What a code proves, from the logged-in player and the address and host they came by. */
+    @FunctionalInterface
+    private interface Proof {
+        SetUpTotp.Outcome run(UUID account, String code, String address, String host);
+    }
+
+    private CompletableFuture<Void> proven(Player player, String code, Proof proof) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(code, "code");
         Optional<Account> account = account(player);
@@ -145,9 +170,7 @@ public final class FactorSetup {
         String host =
                 sessions.held(player.getUniqueId()).map(Sessions.Held::host).orElse("");
         return replies.on(
-                player,
-                CompletableFuture.supplyAsync(() -> setUp.off(id, code, address, host), async),
-                outcome -> answer(player, outcome));
+                player, lane.submit(() -> proof.run(id, code, address, host)), outcome -> answer(player, outcome));
     }
 
     /** The player left: an open setup goes, and so does the map. */
@@ -163,7 +186,9 @@ public final class FactorSetup {
             case SetUpTotp.Outcome.On on -> {
                 hand.take(player);
                 messages.send(player, Keys.FACTOR_ON);
+                codes(player, on.backupCodes());
             }
+            case SetUpTotp.Outcome.NewCodes fresh -> codes(player, fresh.codes());
             case SetUpTotp.Outcome.Off off -> messages.send(player, Keys.FACTOR_OFF);
             case SetUpTotp.Outcome.Wrong wrong -> messages.send(player, Keys.FACTOR_WRONG);
             case SetUpTotp.Outcome.Banned banned -> {
@@ -193,6 +218,15 @@ public final class FactorSetup {
             form.show(player, key, now.totp().digits(), code -> {
                 CompletableFuture<Void> unused = confirm(player, code);
             });
+        }
+    }
+
+    /** The backup codes in chat to click and copy all at once, and in a form to a Bedrock player. */
+    private void codes(Player player, List<String> codes) {
+        List<String> shown = codes.stream().map(BackupCodes::shown).toList();
+        messages.send(player, Keys.FACTOR_BACKUP_CODES, Text.component("codes", copied(String.join(" ", shown))));
+        if (bedrock.test(player.getUniqueId())) {
+            form.codes(player, shown);
         }
     }
 

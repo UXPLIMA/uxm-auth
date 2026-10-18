@@ -16,14 +16,17 @@ import java.util.random.RandomGenerator;
 
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.port.Factors;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.factor.TotpSecret;
 import com.uxplima.auth.domain.name.PlayerName;
 
 /**
  * Turns an authenticator app on and off. A setup draws a fresh secret and keeps it in this server's memory only;
- * nothing is stored until a code from the app proves the player set it up. Turning it off takes a code from the
- * app, and a wrong one counts against the address as a wrong password does.
+ * nothing is stored until a code from the app proves the player set it up, and that hands over a set of backup codes
+ * to keep. Turning it off or asking a new set takes a code from the app or a backup code, and a wrong one counts
+ * against the address as a wrong password does. Backup codes are hashed here, so all but a setup run off the server
+ * thread.
  */
 public final class SetUpTotp {
 
@@ -34,13 +37,15 @@ public final class SetUpTotp {
      * @param label the account's line in the app, with the player's name where it says {player}
      * @param totp how codes are made and taken
      * @param setupTime how long a setup waits for its first code
+     * @param backup how many backup codes a set holds, and how long each is
      */
-    public record Settings(String issuer, String label, Totp totp, Duration setupTime) {
+    public record Settings(String issuer, String label, Totp totp, Duration setupTime, BackupCodes backup) {
         public Settings {
             Objects.requireNonNull(issuer, "issuer");
             Objects.requireNonNull(label, "label");
             Objects.requireNonNull(totp, "totp");
             Objects.requireNonNull(setupTime, "setupTime");
+            Objects.requireNonNull(backup, "backup");
             if (issuer.isBlank()) {
                 throw new IllegalArgumentException("second-factor.issuer must not be empty");
             }
@@ -63,8 +68,19 @@ public final class SetUpTotp {
             }
         }
 
-        /** The app is on. */
-        record On() implements Outcome {}
+        /** The app is on, with backup codes to show only now. */
+        record On(List<String> backupCodes) implements Outcome {
+            public On {
+                backupCodes = List.copyOf(backupCodes);
+            }
+        }
+
+        /** A new set of backup codes, to show only now, in place of every code before it. */
+        record NewCodes(List<String> codes) implements Outcome {
+            public NewCodes {
+                codes = List.copyOf(codes);
+            }
+        }
 
         /** The app is off. */
         record Off() implements Outcome {}
@@ -94,19 +110,22 @@ public final class SetUpTotp {
 
     private final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
     private final Factors factors;
+    private final FactorCheck check;
     private final Supplier<Settings> settings;
     private final LogIn.Failures failures;
     private final RandomGenerator random;
     private final Supplier<Instant> clock;
 
-    /** @param random where secrets come from; a server passes a secure one */
+    /** @param random where secrets and backup codes come from; a server passes a secure one */
     public SetUpTotp(
             Factors factors,
+            FactorCheck check,
             Supplier<Settings> settings,
             LogIn.Failures failures,
             RandomGenerator random,
             Supplier<Instant> clock) {
         this.factors = Objects.requireNonNull(factors, "factors");
+        this.check = Objects.requireNonNull(check, "check");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.failures = Objects.requireNonNull(failures, "failures");
         this.random = Objects.requireNonNull(random, "random");
@@ -148,37 +167,44 @@ public final class SetUpTotp {
         }
         factors.setApp(account, waiting.secret());
         factors.useStep(account, step.getAsLong());
-        return new Outcome.On();
+        return new Outcome.On(check.newBackupCodes(account, random));
     }
 
     /**
-     * Turns the app off with a code from it, and the backup codes with it: {@link Outcome.Off},
+     * Turns the app off with a code from it or a backup code, and the backup codes with it: {@link Outcome.Off},
      * {@link Outcome.Wrong}, {@link Outcome.Banned} or {@link Outcome.NotOn}.
      */
     public Outcome off(UUID account, String typed, String address, String host) {
+        return proven(account, typed, address, host).orElseGet(() -> {
+            factors.removeApp(account);
+            factors.setBackupCodes(account, List.of());
+            return new Outcome.Off();
+        });
+    }
+
+    /**
+     * Hands over a new set of backup codes for a code from the app or a backup code, voiding every old one:
+     * {@link Outcome.NewCodes}, {@link Outcome.Wrong}, {@link Outcome.Banned} or {@link Outcome.NotOn}.
+     */
+    public Outcome backup(UUID account, String typed, String address, String host) {
+        return proven(account, typed, address, host)
+                .orElseGet(() -> new Outcome.NewCodes(check.newBackupCodes(account, random)));
+    }
+
+    /** Nothing when the code passes for an account with the app on; otherwise why not. */
+    private Optional<Outcome> proven(UUID account, String typed, String address, String host) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(typed, "typed");
         Objects.requireNonNull(address, "address");
         Objects.requireNonNull(host, "host");
-        Optional<Factors.App> app = factors.app(account);
-        if (app.isEmpty()) {
-            return new Outcome.NotOn();
+        if (!active(account)) {
+            return Optional.of(new Outcome.NotOn());
         }
-        OptionalLong step = settings.get()
-                .totp()
-                .verify(
-                        app.get().secret().bytes(),
-                        typed,
-                        clock.get(),
-                        app.get().lastStep());
-        if (step.isEmpty() || !factors.useStep(account, step.getAsLong())) {
-            return failures.failed(address, host)
-                    .<Outcome>map(Outcome.Banned::new)
-                    .orElseGet(Outcome.Wrong::new);
+        if (check.passes(account, typed, clock.get())) {
+            return Optional.empty();
         }
-        factors.removeApp(account);
-        factors.setBackupCodes(account, List.of());
-        return new Outcome.Off();
+        return Optional.of(
+                failures.failed(address, host).<Outcome>map(Outcome.Banned::new).orElseGet(Outcome.Wrong::new));
     }
 
     /** The player left: a setup they had open goes. */

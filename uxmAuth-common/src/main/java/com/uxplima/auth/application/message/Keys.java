@@ -209,8 +209,8 @@ public enum Keys implements MessageKey {
     SESSION_OFF("session.off", "<good>You will be asked your password at every join."),
     FACTOR_USAGE(
             "factor.usage",
-            "<body>Use <value>/2fa setup<body> to ask a code from an authenticator app after your password, or"
-                    + " <value>/2fa off <code><body> to stop."),
+            "<body>Use <value>/2fa setup<body> to ask a code from an authenticator app after your password,"
+                    + " <value>/2fa backup <code><body> for new backup codes, or <value>/2fa off <code><body> to stop."),
     FACTOR_SECRET(
             "factor.secret",
             "<body>Add an account in your authenticator app with this key: <value><secret><body>. Click it to copy."),
@@ -225,7 +225,11 @@ public enum Keys implements MessageKey {
                     + " <value><minutes><body> minutes."),
     FACTOR_ON("factor.on", "<good>From now on your account asks a code from your app after the password."),
     FACTOR_OFF("factor.off", "<good>Your account no longer asks a code from an app."),
-    FACTOR_WRONG("factor.wrong", "<etag:'ERROR'> <body>That is not the code your app shows now."),
+    FACTOR_WRONG("factor.wrong", "<etag:'ERROR'> <body>That is neither the code your app shows now nor a backup code."),
+    FACTOR_BACKUP_CODES(
+            "factor.backup-codes",
+            "<body>Your backup codes, for a lost phone: <value><codes><body>. Each works once in place of the app's"
+                    + " code. Click them to copy and keep them safe, they are not shown again."),
     FACTOR_NOTHING_STARTED(
             "factor.nothing-started",
             "<etag:'ERROR'> <body>No setup is waiting. Start one with <value>/2fa setup<body>."),
@@ -236,10 +240,12 @@ public enum Keys implements MessageKey {
     FACTOR_NOT_ON("factor.not-on", "<etag:'ERROR'> <body>Your account asks no code from an app."),
     FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     FACTOR_CODE_NEEDED(
-            "factor.code-needed", "<body>Now type the code from your authenticator app with <value>/2fa <code><body>."),
+            "factor.code-needed",
+            "<body>Now type the code from your authenticator app, or a backup code, with <value>/2fa <code><body>."),
     FACTOR_LOGIN_WRONG(
             "factor.login-wrong",
-            "<etag:'ERROR'> <body>That is not the code your app shows now. Tries left: <value><left><body>."),
+            "<etag:'ERROR'> <body>That is neither the code your app shows now nor a backup code. Tries left:"
+                    + " <value><left><body>."),
     FACTOR_NOTHING_ASKED("factor.nothing-asked", "<etag:'ERROR'> <body>No code is asked of you now."),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(
@@ -313,7 +319,9 @@ public enum Keys implements MessageKey {
     SCREEN_CAPTCHA_SUBMIT("screen.captcha.submit", "Continue"),
     SCREEN_CAPTCHA_CANCEL("screen.captcha.cancel", "Leave"),
     SCREEN_CODE_TITLE("screen.code.title", "<value>One more step"),
-    SCREEN_CODE_BODY("screen.code.body", "<body>Type the code your authenticator app shows for this server."),
+    SCREEN_CODE_BODY(
+            "screen.code.body",
+            "<body>Type the code your authenticator app shows for this server, or one of your backup codes."),
     SCREEN_CODE_CODE("screen.code.code", "Code"),
     SCREEN_CODE_SUBMIT("screen.code.submit", "Log in"),
     SCREEN_CODE_CANCEL("screen.code.cancel", "Leave"),
@@ -323,6 +331,12 @@ public enum Keys implements MessageKey {
             "<body>Add an account in your authenticator app with the key below, then type its code."),
     SCREEN_FACTOR_KEY("screen.factor.key", "Key"),
     SCREEN_FACTOR_CODE("screen.factor.code", "Code from the app"),
+    SCREEN_BACKUP_TITLE("screen.backup.title", "<value>Backup codes"),
+    SCREEN_BACKUP_BODY(
+            "screen.backup.body",
+            "<body>Each code works once in place of the app's code. Copy them and keep them safe, they are not shown"
+                    + " again."),
+    SCREEN_BACKUP_CODES("screen.backup.codes", "Codes"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

@@ -87,4 +87,29 @@ final class BedrockSetupFormTest {
 
         assertThat(answered).containsExactly("123456");
     }
+
+    @Test
+    @DisplayName("the backup codes come in a field a phone copies from, and closing the form is all it asks")
+    @SuppressWarnings("unchecked")
+    void theCodesComeInAField() {
+        BedrockScreen forms = Mockito.mock(BedrockScreen.class);
+
+        new BedrockSetupForm(forms, world.messages).codes(steve, List.of("ABCDE-FGHJK", "MNPQR-STUVW"));
+
+        ArgumentCaptor<List<BedrockWidget>> widgets = ArgumentCaptor.forClass(List.class);
+        Mockito.verify(forms)
+                .sendCustomForm(
+                        Mockito.eq((Player) steve),
+                        Mockito.eq(Text.plain(world.messages.render(steve, Keys.SCREEN_BACKUP_TITLE))),
+                        Mockito.eq(Text.plain(world.messages.render(steve, Keys.SCREEN_BACKUP_BODY))),
+                        widgets.capture(),
+                        Mockito.any(Consumer.class),
+                        Mockito.any(Runnable.class));
+        assertThat(widgets.getValue())
+                .containsExactly(new BedrockWidget.Input(
+                        BedrockSetupForm.CODES,
+                        Text.plain(world.messages.render(steve, Keys.SCREEN_BACKUP_CODES)),
+                        "",
+                        "ABCDE-FGHJK MNPQR-STUVW"));
+    }
 }

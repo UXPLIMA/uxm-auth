@@ -22,8 +22,10 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.SecretSeal;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.application.LoginResult;
+import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SetUpTotp;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.factor.TotpSecret;
 import com.uxplima.auth.domain.password.Password;
@@ -58,6 +60,7 @@ final class FactorSetupTest {
     private final Set<UUID> bedrock = new HashSet<>();
     private @Nullable String formKey;
     private @Nullable Consumer<String> formAnswer;
+    private List<String> formCodes = List.of();
 
     @BeforeEach
     void setUp() {
@@ -65,9 +68,11 @@ final class FactorSetupTest {
         world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords());
         steve = server.addPlayer("Steve");
         factors = new SqlFactors(world.database, SecretSeal.fromPassphrase("lab"), world.clock);
-        SetUpTotp.Settings settings = new SetUpTotp.Settings("Uxplima", "{player}", TOTP, Duration.ofMinutes(10));
+        SetUpTotp.Settings settings =
+                new SetUpTotp.Settings("Uxplima", "{player}", TOTP, Duration.ofMinutes(10), new BackupCodes(8, 10));
+        FactorCheck check = new FactorCheck(factors, world.hashing, settings::totp, settings::backup);
         SetUpTotp setUp = new SetUpTotp(
-                factors, () -> settings, world.bans::failed, new SplittableRandom(5), world.clock::instant);
+                factors, check, () -> settings, world.bans::failed, new SplittableRandom(5), world.clock::instant);
         FactorSetup.Hand hand = new FactorSetup.Hand() {
             @Override
             public boolean give(Player player, String link) {
@@ -80,9 +85,17 @@ final class FactorSetupTest {
                 taken.add(player.getName());
             }
         };
-        FactorSetup.Form form = (player, key, digits, answer) -> {
-            formKey = key;
-            formAnswer = answer;
+        FactorSetup.Form form = new FactorSetup.Form() {
+            @Override
+            public void show(Player player, String key, int digits, Consumer<String> answer) {
+                formKey = key;
+                formAnswer = answer;
+            }
+
+            @Override
+            public void codes(Player player, List<String> codes) {
+                formCodes = codes;
+            }
         };
         setup = new FactorSetup(
                 setUp,
@@ -91,7 +104,7 @@ final class FactorSetupTest {
                 hand,
                 form,
                 bedrock::contains,
-                world.scheduler::async,
+                world.lane,
                 world.replies,
                 world.moments,
                 world.messages);
@@ -127,6 +140,11 @@ final class FactorSetupTest {
         List<String> copied = new ArrayList<>();
         collect(message, copied);
         return copied.getFirst();
+    }
+
+    /** The backup codes of a message, as the click copies them. */
+    private static List<String> codesOf(Component message) {
+        return List.of(keyOf(message).split(" "));
     }
 
     private static void collect(Component component, List<String> copied) {
@@ -185,6 +203,31 @@ final class FactorSetupTest {
         assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_ON));
         assertThat(factors.app(steve.getUniqueId())).isPresent();
         assertThat(taken).containsExactly("Steve");
+        List<String> codes = codesOf(steve.nextComponentMessage());
+        assertThat(codes).hasSize(8).allMatch(shown -> shown.matches("[A-HJKMNP-Z2-9]{5}-[A-HJKMNP-Z2-9]{5}"));
+        assertThat(factors.backupCodes(steve.getUniqueId())).hasSize(8);
+        assertThat(formCodes).as("a Java player gets no form").isEmpty();
+    }
+
+    @Test
+    @DisplayName("backup hands over a new set for a code and voids the old one; a wrong code is said")
+    void backupHandsOverANewSet() {
+        loggedIn();
+        TotpSecret secret = new TotpSecret(new byte[20]);
+        factors.setApp(steve.getUniqueId(), secret);
+
+        world.scheduler.settle(setup.backup(steve, "000000"));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_WRONG));
+        world.scheduler.settle(setup.backup(steve, code(secret.base32())));
+        List<String> first = codesOf(steve.nextComponentMessage());
+        world.scheduler.settle(setup.backup(steve, first.get(0)));
+        List<String> second = codesOf(steve.nextComponentMessage());
+
+        assertThat(second).hasSize(8).doesNotContainAnyElementsOf(first);
+        world.scheduler.settle(setup.off(steve, first.get(1)));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_WRONG));
+        world.scheduler.settle(setup.off(steve, second.get(1)));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_OFF));
     }
 
     @Test
@@ -210,9 +253,11 @@ final class FactorSetupTest {
 
         assertThat(formKey).isEqualTo(key);
         java.util.Objects.requireNonNull(formAnswer).accept(code(key));
-        world.scheduler.drain();
+        assertThat(awaitedMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_ON));
         assertThat(factors.app(steve.getUniqueId())).isPresent();
-        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_ON));
+        assertThat(formCodes)
+                .as("the form shows the codes chat shows")
+                .isEqualTo(codesOf(steve.nextComponentMessage()));
     }
 
     @Test
@@ -303,6 +348,18 @@ final class FactorSetupTest {
 
         assertThat(taken).contains("Steve");
         assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_NOTHING_STARTED));
+    }
+
+    /** The next message, once the lane's answer has reached the player's thread; at most ten seconds. */
+    private Component awaitedMessage() {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        Component message;
+        while ((message = steve.nextComponentMessage()) == null) {
+            assertThat(System.nanoTime()).as("an answer within ten seconds").isLessThan(deadline);
+            world.scheduler.drain();
+            Thread.onSpinWait();
+        }
+        return message;
     }
 
     private void drain() {

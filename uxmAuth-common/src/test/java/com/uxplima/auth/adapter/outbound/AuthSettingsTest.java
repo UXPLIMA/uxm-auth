@@ -16,6 +16,7 @@ import java.util.Set;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.network.AfterLogin;
@@ -597,20 +598,30 @@ final class AuthSettingsTest {
     }
 
     @Test
-    @DisplayName("the app's name, line, code shape and setup time are read, with the defaults every app speaks")
+    @DisplayName(
+            "the app's name, line, code shape, setup time and backup codes are read, with the defaults every app speaks")
     void theSecondFactorIsRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").secondFactor().setup())
                 .isEqualTo(new SetUpTotp.Settings(
-                        "Minecraft", "{player}", new Totp(6, Duration.ofSeconds(30), 1), Duration.ofMinutes(10)));
+                        "Minecraft",
+                        "{player}",
+                        new Totp(6, Duration.ofSeconds(30), 1),
+                        Duration.ofMinutes(10),
+                        new BackupCodes(8, 10)));
 
         assertThat(settingsFrom(
                                 folder,
                                 "second-factor { issuer = \"Uxplima\", label = \"mc {player}\", digits = 8,"
-                                        + " period-seconds = 60, window-steps = 2, setup-minutes = 3 }\n")
+                                        + " period-seconds = 60, window-steps = 2, setup-minutes = 3,"
+                                        + " backup-codes = 12, backup-code-length = 14 }\n")
                         .secondFactor()
                         .setup())
                 .isEqualTo(new SetUpTotp.Settings(
-                        "Uxplima", "mc {player}", new Totp(8, Duration.ofSeconds(60), 2), Duration.ofMinutes(3)));
+                        "Uxplima",
+                        "mc {player}",
+                        new Totp(8, Duration.ofSeconds(60), 2),
+                        Duration.ofMinutes(3),
+                        new BackupCodes(12, 14)));
         assertThat(settingsFrom(folder, "").secondFactor().step()).isEqualTo(new SecondStep.Settings(true, false, 3));
         assertThat(settingsFrom(folder, """
                                 second-factor { premium-skips = false }
@@ -623,6 +634,9 @@ final class AuthSettingsTest {
         assertThatThrownBy(() -> settingsFrom(folder, "second-factor { issuer = \"\" }\n"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("second-factor.issuer");
+        assertThatThrownBy(() -> settingsFrom(folder, "second-factor { backup-codes = 0 }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("second-factor.backup-codes");
     }
 
     @Test

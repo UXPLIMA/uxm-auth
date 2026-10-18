@@ -13,7 +13,7 @@ import com.uxplima.auth.domain.factor.TotpSecret;
 import com.uxplima.auth.domain.hash.PasswordHash;
 
 /** The factor table in memory, for the use cases' tests. */
-public final class InMemoryFactors implements Factors {
+public class InMemoryFactors implements Factors {
 
     private final Map<UUID, App> apps = new ConcurrentHashMap<>();
     private final Map<UUID, List<PasswordHash>> codes = new ConcurrentHashMap<>();

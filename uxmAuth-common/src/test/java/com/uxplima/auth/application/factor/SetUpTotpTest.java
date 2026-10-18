@@ -12,8 +12,12 @@ import java.util.SplittableRandom;
 import java.util.UUID;
 
 import com.uxplima.auth.application.LogIn;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.factor.TotpSecret;
+import com.uxplima.auth.domain.hash.Argon2idHasher;
+import com.uxplima.auth.domain.hash.BcryptHasher;
+import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.testing.InMemoryFactors;
@@ -26,6 +30,7 @@ final class SetUpTotpTest {
     private static final UUID STEVE = UUID.fromString("8667ba71-b85a-4004-af54-457a9734eed7");
     private static final PlayerName NAME = new PlayerName("Steve");
     private static final Totp TOTP = new Totp(6, Duration.ofSeconds(30), 1);
+    private static final BackupCodes BACKUP = new BackupCodes(8, 10);
 
     private Instant now = Instant.parse("2026-10-18T12:00:00Z");
     private final InMemoryFactors factors = new InMemoryFactors();
@@ -35,9 +40,14 @@ final class SetUpTotpTest {
         return Optional.empty();
     };
     private SetUpTotp.Settings settings =
-            new SetUpTotp.Settings("Uxplima Network", "{player}", TOTP, Duration.ofMinutes(10));
+            new SetUpTotp.Settings("Uxplima Network", "{player}", TOTP, Duration.ofMinutes(10), BACKUP);
+    private final FactorCheck check = new FactorCheck(
+            factors,
+            new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4))),
+            () -> settings.totp(),
+            () -> settings.backup());
     private final SetUpTotp setUp =
-            new SetUpTotp(factors, () -> settings, failures, new SplittableRandom(3), () -> now);
+            new SetUpTotp(factors, check, () -> settings, failures, new SplittableRandom(3), () -> now);
 
     private String codeAt(TotpSecret secret, Instant at) {
         return TOTP.code(secret.bytes(), TOTP.step(at));
@@ -61,7 +71,7 @@ final class SetUpTotpTest {
     @Test
     @DisplayName("the label is the operator's, with the player's name where it says {player}, and both are encoded")
     void theLabelIsTheOperators() {
-        settings = new SetUpTotp.Settings("A&B", "mc/{player}?", TOTP, Duration.ofMinutes(10));
+        settings = new SetUpTotp.Settings("A&B", "mc/{player}?", TOTP, Duration.ofMinutes(10), BACKUP);
 
         String link = ((SetUpTotp.Outcome.Started) setUp.start(STEVE, NAME)).link();
 
@@ -166,6 +176,7 @@ final class SetUpTotpTest {
         factors.setApp(STEVE, new TotpSecret(new byte[20]));
         SetUpTotp banning = new SetUpTotp(
                 factors,
+                check,
                 () -> settings,
                 (address, host) -> Optional.of(Duration.ofMinutes(5)),
                 new SplittableRandom(3),
@@ -173,11 +184,81 @@ final class SetUpTotpTest {
 
         assertThat(banning.off(STEVE, "000000", "203.0.113.7", "play.example.net"))
                 .isEqualTo(new SetUpTotp.Outcome.Banned(Duration.ofMinutes(5)));
-        assertThatThrownBy(() -> new SetUpTotp.Settings(" ", "{player}", TOTP, Duration.ofMinutes(10)))
+        assertThatThrownBy(() -> new SetUpTotp.Settings(" ", "{player}", TOTP, Duration.ofMinutes(10), BACKUP))
                 .hasMessageContaining("issuer");
-        assertThatThrownBy(() -> new SetUpTotp.Settings("Uxplima", "", TOTP, Duration.ofMinutes(10)))
+        assertThatThrownBy(() -> new SetUpTotp.Settings("Uxplima", "", TOTP, Duration.ofMinutes(10), BACKUP))
                 .hasMessageContaining("label");
-        assertThatThrownBy(() -> new SetUpTotp.Settings("Uxplima", "{player}", TOTP, Duration.ZERO))
+        assertThatThrownBy(() -> new SetUpTotp.Settings("Uxplima", "{player}", TOTP, Duration.ZERO, BACKUP))
                 .hasMessageContaining("setup-minutes");
+    }
+
+    private List<String> turnedOn() {
+        SetUpTotp.Outcome.Started started = (SetUpTotp.Outcome.Started) setUp.start(STEVE, NAME);
+        SetUpTotp.Outcome.On on = (SetUpTotp.Outcome.On) setUp.confirm(STEVE, codeAt(started.secret(), now));
+        return on.backupCodes();
+    }
+
+    @Test
+    @DisplayName("turning the app on hands over a set of backup codes once, and keeps only their hashes")
+    void turningOnHandsOverBackupCodes() {
+        List<String> codes = turnedOn();
+
+        assertThat(codes)
+                .hasSize(8)
+                .allSatisfy(code -> assertThat(BACKUP.read(code)).contains(code));
+        assertThat(factors.backupCodes(STEVE))
+                .hasSize(8)
+                .extracting(PasswordHash::encoded)
+                .doesNotContainAnyElementsOf(codes);
+        assertThat(check.passes(STEVE, codes.get(0), now)).isTrue();
+        assertThat(check.passes(STEVE, codes.get(0), now)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a new set takes a code, voids every old one, and is handed over once")
+    void aNewSetVoidsTheOld() {
+        List<String> old = turnedOn();
+        now = now.plusSeconds(60);
+        TotpSecret secret = factors.app(STEVE).orElseThrow().secret();
+
+        SetUpTotp.Outcome.NewCodes fresh = (SetUpTotp.Outcome.NewCodes)
+                setUp.backup(STEVE, codeAt(secret, now), "203.0.113.7", "play.example.net");
+
+        assertThat(fresh.codes()).hasSize(8).doesNotContainAnyElementsOf(old);
+        assertThat(old)
+                .allSatisfy(code -> assertThat(check.passes(STEVE, code, now)).isFalse());
+        assertThat(check.passes(STEVE, fresh.codes().get(3), now)).isTrue();
+        assertThat(setUp.backup(STEVE, fresh.codes().get(4), "203.0.113.7", "play.example.net"))
+                .as("a backup code buys a new set too")
+                .isInstanceOf(SetUpTotp.Outcome.NewCodes.class);
+    }
+
+    @Test
+    @DisplayName(
+            "a new set asked with a wrong code is refused and counts against the address; without the app there is none")
+    void aNewSetNeedsTheRightCode() {
+        List<String> old = turnedOn();
+
+        assertThat(setUp.backup(STEVE, "000000", "203.0.113.7", "play.example.net"))
+                .isInstanceOf(SetUpTotp.Outcome.Wrong.class);
+        assertThat(failedFrom).containsExactly("203.0.113.7@play.example.net");
+        assertThat(check.passes(STEVE, old.get(0), now))
+                .as("the old set stands")
+                .isTrue();
+        UUID alex = UUID.randomUUID();
+        assertThat(setUp.backup(alex, "000000", "203.0.113.7", "play.example.net"))
+                .isInstanceOf(SetUpTotp.Outcome.NotOn.class);
+        assertThat(factors.backupCodes(alex)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a backup code turns the app off, and the codes go with it")
+    void aBackupCodeTurnsItOff() {
+        List<String> codes = turnedOn();
+
+        assertThat(setUp.off(STEVE, codes.get(7), "203.0.113.7", "play.example.net"))
+                .isInstanceOf(SetUpTotp.Outcome.Off.class);
+        assertThat(setUp.active(STEVE)).isFalse();
+        assertThat(factors.backupCodes(STEVE)).isEmpty();
     }
 }

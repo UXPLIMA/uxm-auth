@@ -124,6 +124,7 @@ public final class ProxyWorld implements AutoCloseable {
             new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1);
 
     public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
+    public final com.uxplima.auth.application.factor.FactorCheck factorCheck;
     public final com.uxplima.auth.application.factor.SecondStep secondStep;
 
     /** Which ways in ask the code on this proxy; a test changes it. */
@@ -137,6 +138,8 @@ public final class ProxyWorld implements AutoCloseable {
         this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
                 database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("network"), clock);
         this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
+        this.factorCheck = new com.uxplima.auth.application.factor.FactorCheck(
+                factors, hashing, () -> TOTP, () -> new com.uxplima.auth.domain.factor.BackupCodes(8, 10));
     }
 
     /** Turns the app on for the account under this name, and answers its secret. */
@@ -230,7 +233,7 @@ public final class ProxyWorld implements AutoCloseable {
     private LimboLogin.CodeCheck codes(LogIn.Failures failures) {
         com.uxplima.auth.application.factor.ConfirmFactor confirm =
                 new com.uxplima.auth.application.factor.ConfirmFactor(
-                        accounts, factors, sessions, () -> TOTP, failures, clock::instant);
+                        accounts, sessions, factorCheck, failures, clock::instant);
         return (id, code, address) ->
                 java.util.concurrent.CompletableFuture.completedFuture(confirm.confirm(id, code, address));
     }

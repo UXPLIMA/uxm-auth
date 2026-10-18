@@ -620,7 +620,7 @@ final class ScreenAnswersTest {
                 world.sessions::chose,
                 world.change,
                 new CaptchaScreen(world.captchas, screens, shower, world.messages, hand),
-                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.scheduler::async));
+                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.lane));
     }
 
     private Guest guest() {

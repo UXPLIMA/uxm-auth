@@ -15,7 +15,8 @@ import com.uxplima.uxmlib.text.message.Messages;
 
 /**
  * The setup as a Bedrock form: the key in a field of its own, so a phone can copy it, and a field for the app's
- * first code. Closing the form leaves the setup waiting for {@code /2fa confirm}.
+ * first code. Closing the form leaves the setup waiting for {@code /2fa confirm}. Backup codes come the same way, in
+ * a field to copy from.
  */
 public final class BedrockSetupForm implements FactorSetup.Form {
 
@@ -23,6 +24,8 @@ public final class BedrockSetupForm implements FactorSetup.Form {
     static final String KEY = "key";
 
     static final String CODE = "code";
+
+    static final String CODES = "codes";
 
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
 
@@ -47,6 +50,20 @@ public final class BedrockSetupForm implements FactorSetup.Form {
                         new BedrockWidget.Input(KEY, plain(player, Keys.SCREEN_FACTOR_KEY), "", key),
                         new BedrockWidget.Input(CODE, plain(player, Keys.SCREEN_FACTOR_CODE), "0".repeat(digits), "")),
                 values -> answer.accept(values.getOrDefault(CODE, "")),
+                () -> {});
+    }
+
+    @Override
+    public void codes(Player player, List<String> codes) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(codes, "codes");
+        forms.sendCustomForm(
+                player,
+                plain(player, Keys.SCREEN_BACKUP_TITLE),
+                plain(player, Keys.SCREEN_BACKUP_BODY),
+                List.of(new BedrockWidget.Input(
+                        CODES, plain(player, Keys.SCREEN_BACKUP_CODES), "", String.join(" ", codes))),
+                values -> {},
                 () -> {});
     }
 

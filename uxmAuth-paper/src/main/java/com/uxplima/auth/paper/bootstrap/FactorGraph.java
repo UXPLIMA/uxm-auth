@@ -19,9 +19,12 @@ import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.ConfirmFactor;
+import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
@@ -36,7 +39,6 @@ import com.uxplima.auth.paper.adapter.inbound.screen.Guest;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.factor.QrMap;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
-import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
 
@@ -64,7 +66,8 @@ final class FactorGraph {
             Sessions sessions,
             LogIn.Failures failures,
             Predicate<UUID> bedrock,
-            Scheduler scheduler,
+            Hashing hashing,
+            HashingLane lane,
             Replies replies,
             MomentRunner moments,
             Messages messages,
@@ -78,16 +81,20 @@ final class FactorGraph {
                 new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
         this.secondStep =
                 new SecondStep(factors, () -> settings.current().secondFactor().step());
-        ConfirmFactor confirm = new ConfirmFactor(
-                accounts,
+        FactorCheck check = new FactorCheck(
                 factors,
-                sessions,
+                hashing,
                 () -> settings.current().secondFactor().setup().totp(),
-                failures,
-                Instant::now);
-        this.screen = new FactorScreen(confirm, screens, shower, messages, scheduler::async);
+                () -> settings.current().secondFactor().setup().backup());
+        ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, failures, Instant::now);
+        this.screen = new FactorScreen(confirm, screens, shower, messages, lane);
         SetUpTotp setUp = new SetUpTotp(
-                factors, () -> settings.current().secondFactor().setup(), failures, new SecureRandom(), Instant::now);
+                factors,
+                check,
+                () -> settings.current().secondFactor().setup(),
+                failures,
+                new SecureRandom(),
+                Instant::now);
         Optional<QrMap> qr = QrMap.open(plugin.getServer(), folder.resolve("qr-map.id"), plugin.getLogger());
         this.setup = new FactorSetup(
                 setUp,
@@ -96,7 +103,7 @@ final class FactorGraph {
                 qr.<FactorSetup.Hand>map(map -> map).orElse(FactorSetup.Hand.NONE),
                 new BedrockSetupForm(BedrockScreen.forServer(plugin.getServer()), messages),
                 bedrock,
-                scheduler::async,
+                lane,
                 replies,
                 moments,
                 messages);

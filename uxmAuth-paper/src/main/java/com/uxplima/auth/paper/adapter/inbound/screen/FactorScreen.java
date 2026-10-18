@@ -2,7 +2,6 @@ package com.uxplima.auth.paper.adapter.inbound.screen;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
@@ -10,6 +9,7 @@ import net.kyori.adventure.text.Component;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.factor.ConfirmFactor;
+import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.uxmlib.text.Text;
@@ -26,17 +26,17 @@ public final class FactorScreen implements FactorOffer {
     private final AuthScreens screens;
     private final ScreenShower shower;
     private final Messages messages;
-    private final Executor async;
+    private final HashingLane lane;
     private final TimeWords times;
 
-    /** @param async where the factor table is read, never a server or region thread */
+    /** @param lane where the factor table is read and backup codes hashed, never a server or region thread */
     public FactorScreen(
-            ConfirmFactor confirm, AuthScreens screens, ScreenShower shower, Messages messages, Executor async) {
+            ConfirmFactor confirm, AuthScreens screens, ScreenShower shower, Messages messages, HashingLane lane) {
         this.confirm = Objects.requireNonNull(confirm, "confirm");
         this.screens = Objects.requireNonNull(screens, "screens");
         this.shower = Objects.requireNonNull(shower, "shower");
         this.messages = Objects.requireNonNull(messages, "messages");
-        this.async = Objects.requireNonNull(async, "async");
+        this.lane = Objects.requireNonNull(lane, "lane");
         this.times = new TimeWords(messages);
     }
 
@@ -51,8 +51,7 @@ public final class FactorScreen implements FactorOffer {
         Objects.requireNonNull(code, "code");
         String address = guest.address();
         return guest.after(
-                CompletableFuture.supplyAsync(() -> confirm.confirm(guest.id(), code, address), async),
-                result -> answered(guest, result));
+                lane.submit(() -> confirm.confirm(guest.id(), code, address)), result -> answered(guest, result));
     }
 
     private void answered(Guest guest, ConfirmFactor.Result result) {

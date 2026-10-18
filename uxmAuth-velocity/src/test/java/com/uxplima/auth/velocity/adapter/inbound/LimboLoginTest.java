@@ -342,6 +342,23 @@ final class LimboLoginTest {
     }
 
     @Test
+    @DisplayName("a backup code, typed as it was shown, lets the player in once")
+    void aBackupCodeLetsThePlayerIn() throws Exception {
+        registeredWithTheApp();
+        java.util.List<String> codes = world.factorCheck.newBackupCodes(
+                world.accounts.findByName(NAME).orElseThrow().id(), new java.util.SplittableRandom(2));
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+        said(login, "/login hunter22");
+
+        assertThat(said(login, "/2fa " + com.uxplima.auth.domain.factor.BackupCodes.shown(codes.get(5))))
+                .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.PASSWORD));
+        assertThat(world.factors.backupCodes(
+                        world.accounts.findByName(NAME).orElseThrow().id()))
+                .hasSize(7);
+    }
+
+    @Test
     @DisplayName("/2fa from a player no code is asked of says so")
     void noCodeIsAsked() throws Exception {
         LimboLogin login = world.limboLogin(true);

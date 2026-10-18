@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -12,17 +11,16 @@ import java.util.function.Supplier;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.port.AccountRepository;
-import com.uxplima.auth.application.port.Factors;
 import com.uxplima.auth.domain.account.Account;
-import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.state.AuthState;
 import org.jspecify.annotations.Nullable;
 
 /**
  * Takes the code of the second step. A try is spent on the session before the code is checked, so codes sent
  * together cannot try more than the limit allows; a code is taken once across every server, inside its window; a
- * wrong one counts against the address as a wrong password does. The login is recorded only once the code passed.
- * The table is read here, so this runs off the server thread.
+ * wrong one counts against the address as a wrong password does; a backup code is spent the same way. The login is
+ * recorded only once the code passed. The table is read and backup codes are hashed here, so this runs off the
+ * server thread.
  */
 public final class ConfirmFactor {
 
@@ -56,23 +54,20 @@ public final class ConfirmFactor {
     }
 
     private final AccountRepository accounts;
-    private final Factors factors;
     private final Sessions sessions;
-    private final Supplier<Totp> totp;
+    private final FactorCheck check;
     private final LogIn.Failures failures;
     private final Supplier<Instant> clock;
 
     public ConfirmFactor(
             AccountRepository accounts,
-            Factors factors,
             Sessions sessions,
-            Supplier<Totp> totp,
+            FactorCheck check,
             LogIn.Failures failures,
             Supplier<Instant> clock) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
-        this.factors = Objects.requireNonNull(factors, "factors");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
-        this.totp = Objects.requireNonNull(totp, "totp");
+        this.check = Objects.requireNonNull(check, "check");
         this.failures = Objects.requireNonNull(failures, "failures");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -94,7 +89,7 @@ public final class ConfirmFactor {
             return refusal(after);
         }
         Instant now = clock.get();
-        if (!taken(spent.account(), code, now)) {
+        if (!check.passes(spent.account().id(), code, now)) {
             return wrong(spent, address, held.host());
         }
         return logIn(connection, held.generation(), spent, address, now);
@@ -116,17 +111,6 @@ public final class ConfirmFactor {
             return new Result.Gone();
         }
         return after instanceof AuthState.SecondFactor ? new Result.TooManyAttempts() : new Result.NotWaiting();
-    }
-
-    /** Whether the code is the app's for now, and this server took its step before any other did. */
-    private boolean taken(Account account, String code, Instant now) {
-        Optional<Factors.App> app = factors.app(account.id());
-        if (app.isEmpty()) {
-            return false;
-        }
-        OptionalLong step = totp.get()
-                .verify(app.get().secret().bytes(), code, now, app.get().lastStep());
-        return step.isPresent() && factors.useStep(account.id(), step.getAsLong());
     }
 
     private Result wrong(AuthState.SecondFactor spent, String address, String host) {

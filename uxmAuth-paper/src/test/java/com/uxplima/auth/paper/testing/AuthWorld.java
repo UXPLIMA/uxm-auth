@@ -147,12 +147,17 @@ public final class AuthWorld implements AutoCloseable {
 
     public final com.uxplima.auth.application.protection.Captchas captchas;
 
+    /** The backup codes of this world: eight of ten characters. */
+    public static final com.uxplima.auth.domain.factor.BackupCodes BACKUP =
+            new com.uxplima.auth.domain.factor.BackupCodes(8, 10);
+
     /** The codes of the second step in this world: six digits every 30 seconds, one step either side. */
     public static final com.uxplima.auth.domain.factor.Totp TOTP =
             new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1);
 
     public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
     public final com.uxplima.auth.application.factor.SecondStep secondStep;
+    public final com.uxplima.auth.application.factor.FactorCheck factorCheck;
     public final com.uxplima.auth.application.factor.ConfirmFactor confirmFactor;
 
     /** Which ways in ask the code in this world; a test changes it. */
@@ -232,8 +237,10 @@ public final class AuthWorld implements AutoCloseable {
         this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
                 database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
         this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
+        this.factorCheck =
+                new com.uxplima.auth.application.factor.FactorCheck(factors, hashing, () -> TOTP, () -> BACKUP);
         this.confirmFactor = new com.uxplima.auth.application.factor.ConfirmFactor(
-                accounts, factors, sessions, () -> TOTP, bans::failed, clock::instant);
+                accounts, sessions, factorCheck, bans::failed, clock::instant);
         this.logIn =
                 new LogIn(accounts, hashing, lane, sessions, clock, bans::failed, () -> policy, captchas, secondStep);
         this.change =
@@ -331,22 +338,18 @@ public final class AuthWorld implements AutoCloseable {
                         "Minecraft",
                         "{player}",
                         new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1),
-                        Duration.ofMinutes(10));
+                        Duration.ofMinutes(10),
+                        BACKUP);
         com.uxplima.auth.application.factor.SetUpTotp setUp = new com.uxplima.auth.application.factor.SetUpTotp(
-                new com.uxplima.auth.adapter.outbound.SqlFactors(
-                        database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock),
-                () -> settings,
-                bans::failed,
-                new java.util.SplittableRandom(1),
-                clock::instant);
+                factors, factorCheck, () -> settings, bans::failed, new java.util.SplittableRandom(1), clock::instant);
         return new com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup(
                 setUp,
                 sessions,
                 () -> settings,
                 com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup.Hand.NONE,
-                (player, key, digits, answer) -> {},
+                com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup.Form.NONE,
                 id -> false,
-                scheduler::async,
+                lane,
                 replies,
                 moments,
                 messages);

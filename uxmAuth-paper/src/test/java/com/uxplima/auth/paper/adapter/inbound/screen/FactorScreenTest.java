@@ -70,7 +70,7 @@ final class FactorScreenTest {
                 closed++;
             }
         };
-        screen = new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.scheduler::async);
+        screen = new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.lane);
         world.registered(steve, "hunter22");
         secret = world.appOn(steve);
         assertThat(world.logIn

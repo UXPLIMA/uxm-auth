@@ -5,13 +5,14 @@ import java.util.Objects;
 
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.uxmlib.config.HoconConfig;
 
 /**
  * The second-factor block of config.conf.
  *
- * @param setup how the app is named, how its codes are made, and how long a setup waits
+ * @param setup how the app is named, how its codes are made, how long a setup waits, and the backup codes
  * @param step which ways in lead to the code, and how many tries it gets
  */
 public record SecondFactorSettings(SetUpTotp.Settings setup, SecondStep.Settings step) {
@@ -32,7 +33,10 @@ public record SecondFactorSettings(SetUpTotp.Settings setup, SecondStep.Settings
                             config.getString("second-factor.issuer", "Minecraft"),
                             config.getString("second-factor.label", "{player}"),
                             totp,
-                            Duration.ofMinutes(config.getInt("second-factor.setup-minutes", 10))),
+                            Duration.ofMinutes(config.getInt("second-factor.setup-minutes", 10)),
+                            new BackupCodes(
+                                    config.getInt("second-factor.backup-codes", 8),
+                                    config.getInt("second-factor.backup-code-length", 10))),
                     new SecondStep.Settings(
                             config.getBoolean("second-factor.premium-skips", true),
                             config.getBoolean("sessions.skip-second-factor", false),

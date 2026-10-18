@@ -21,6 +21,7 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.ConfirmFactor;
+import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
@@ -189,24 +190,19 @@ final class WaitingWorld implements AutoCloseable {
                 labels,
                 () -> settings.current().passwords().confirmOnRegister(),
                 guards.secondStep(),
-                codes(settings, accounts, sessions, guards, hashingLane));
+                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane)));
     }
 
-    /** The code of the second step, checked on the hashing lane: the factor table is read. */
+    /** The code of the second step, checked on the hashing lane: the factor table is read, backup codes hashed. */
     private static LimboLogin.CodeCheck codes(
-            PluginSettings settings,
-            SqlAccountRepository accounts,
-            Sessions sessions,
-            Guards guards,
-            HashingLane lane) {
-        ConfirmFactor confirm = new ConfirmFactor(
-                accounts,
+            PluginSettings settings, SqlAccountRepository accounts, Sessions sessions, Guards guards, Hashers hashers) {
+        FactorCheck check = new FactorCheck(
                 guards.factors(),
-                sessions,
+                hashers.hashing(),
                 () -> settings.current().secondFactor().setup().totp(),
-                guards.failures(),
-                Instant::now);
-        return (id, code, address) -> lane.submit(() -> confirm.confirm(id, code, address));
+                () -> settings.current().secondFactor().setup().backup());
+        ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, guards.failures(), Instant::now);
+        return (id, code, address) -> hashers.lane().submit(() -> confirm.confirm(id, code, address));
     }
 
     /** The hashers of the waiting world and the lane they run on. */

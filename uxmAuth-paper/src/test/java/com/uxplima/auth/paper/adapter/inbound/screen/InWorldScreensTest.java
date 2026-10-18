@@ -277,6 +277,6 @@ final class InWorldScreensTest {
                 stillWaiting,
                 shower,
                 new CaptchaScreen(world.captchas, screens, shower, world.messages, CaptchaScreen.Hand.NONE),
-                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.scheduler::async));
+                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.lane));
     }
 }
