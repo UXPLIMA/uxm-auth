@@ -50,6 +50,22 @@ final class RemovedAccountsTest {
     }
 
     @Test
+    @DisplayName("an account staff changed sends its player to join again, with that reason")
+    void aRejoinSendsThePlayerAway() {
+        Player steve = mock(Player.class);
+        RemovedAccounts removed =
+                new RemovedAccounts(id -> id.equals(STEVE) ? Optional.of(steve) : Optional.empty(), sessions, messages);
+
+        removed.accept(new Bulletin.Rejoin(STEVE));
+
+        org.mockito.ArgumentCaptor<Component> reason = org.mockito.ArgumentCaptor.forClass(Component.class);
+        verify(steve).disconnect(reason.capture());
+        assertThat(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                        .serialize(reason.getValue()))
+                .contains("changed how your account logs in");
+    }
+
+    @Test
     @DisplayName("any other bulletin sends nobody away")
     void otherBulletinsSendNobody() {
         Player steve = mock(Player.class);

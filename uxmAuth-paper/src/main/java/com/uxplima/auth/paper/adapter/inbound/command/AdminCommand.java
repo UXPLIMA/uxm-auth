@@ -198,6 +198,20 @@ public final class AdminCommand {
         CompletableFuture<Void> unused = actions.disableFactor(sender.bukkit(), player);
     }
 
+    /** Turns a cracked account premium when Mojang names a paid account under its name. */
+    @FromConfig(value = "markpremium", fallbackName = "markpremium", description = "Turn an account premium")
+    @Permission("uxmauth.admin.markpremium")
+    public void markPremium(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = actions.markPremium(sender.bukkit(), player);
+    }
+
+    /** Turns a premium account cracked; it logs in with its password from then on. */
+    @FromConfig(value = "markcracked", fallbackName = "markcracked", description = "Turn an account cracked")
+    @Permission("uxmauth.admin.markcracked")
+    public void markCracked(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = actions.markCracked(sender.bukkit(), player);
+    }
+
     /** Everything staff read of one account: its dates, logins, factors, address and the other accounts. */
     @FromConfig(value = "info", fallbackName = "info", description = "Read what is known of an account")
     @Permission("uxmauth.admin.info")

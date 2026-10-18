@@ -369,6 +369,26 @@ public enum Keys implements MessageKey {
             "staff.factor-off",
             "<tag:'AUTH'> <body>Every second factor of <value><name><body> is off. The next login asks the password only."),
     STAFF_FACTOR_NONE("staff.factor-none", "<tag:'AUTH'> <body><value><name><body> has no second factor."),
+    STAFF_MARKED_PREMIUM(
+            "staff.marked-premium",
+            "<tag:'AUTH'> <body><value><name><body> is a premium account now. Its player joins again and proves the name."),
+    STAFF_MARKED_CRACKED(
+            "staff.marked-cracked",
+            "<tag:'AUTH'> <body><value><name><body> is a password account now. Its player joins again and logs in with the password."),
+    STAFF_MARK_ALREADY(
+            "staff.mark-already",
+            "<etag:'ERROR'> <body><value><name><body> is that kind of account already, or a kind this does not change."),
+    STAFF_NOT_PAID("staff.not-paid", "<etag:'ERROR'> <body>No paid account holds the name <value><name><body>."),
+    STAFF_NO_ANSWER(
+            "staff.no-answer",
+            "<etag:'ERROR'> <body>No source could say who holds <value><name><body> now. Try again in a while."),
+    STAFF_PAID_TAKEN(
+            "staff.paid-taken",
+            "<etag:'ERROR'> <body>Another account holds the paid account of <value><name><body> already."),
+    STAFF_NO_PASSWORD(
+            "staff.no-password",
+            "<etag:'ERROR'> <body><value><name><body> has no password to log in with. Set one first."),
+    STAFF_REJOIN_KICK("staff.rejoin-kick", "<body>Staff changed how your account logs in. Join again."),
     INFO_HEADER("info.header", "<tag:'AUTH'> <value><name><body>, <value><kind><body>."),
     INFO_KIND_CRACKED("info.kind.cracked", "a password account"),
     INFO_KIND_PREMIUM("info.kind.premium", "a premium account"),

@@ -55,6 +55,16 @@ final class BulletinsTest {
     }
 
     @Test
+    @DisplayName("an account whose player must join again travels whole too")
+    void aRejoinOpens() {
+        Bulletins.Sent rejoin = new Bulletins.Sent(new Bulletin.Rejoin(STEVE), ORIGIN, NOW);
+
+        assertThat(bulletins.open(bulletins.seal(rejoin), NOW)).contains(rejoin);
+        assertThat(bulletins.open(claims.seal("b1|R|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + STEVE + "|x"), NOW))
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("a let-in opens once: the same sealed text again inside the fresh time lets nobody in twice")
     void aLetInIsNotReplayed() {
         Bulletins.Sent letIn = new Bulletins.Sent(new Bulletin.LetIn(STEVE, "n0nce-2"), ORIGIN, NOW);

@@ -38,6 +38,16 @@ public interface StaffActions {
         public CompletableFuture<Void> disableFactor(CommandSender sender, String name) {
             return CompletableFuture.completedFuture(null);
         }
+
+        @Override
+        public CompletableFuture<Void> markPremium(CommandSender sender, String name) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Void> markCracked(CommandSender sender, String name) {
+            return CompletableFuture.completedFuture(null);
+        }
     };
 
     /** Lets the waiting player of the account under this name in, on whichever server they wait. */
@@ -57,4 +67,10 @@ public interface StaffActions {
 
     /** Turns off every second factor of the account under this name. */
     CompletableFuture<Void> disableFactor(CommandSender sender, String name);
+
+    /** Turns the cracked account under this name premium, when Mojang names a paid account under it. */
+    CompletableFuture<Void> markPremium(CommandSender sender, String name);
+
+    /** Turns the premium account under this name cracked; it logs in with its password then. */
+    CompletableFuture<Void> markCracked(CommandSender sender, String name);
 }

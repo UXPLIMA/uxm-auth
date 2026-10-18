@@ -18,6 +18,7 @@ import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
+import com.uxplima.auth.application.staff.MarkKind;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.application.staff.Unregister;
@@ -41,7 +42,8 @@ public final class StaffDesk implements StaffActions {
             Unregister unregister,
             SetPassword setPassword,
             ForceRegister register,
-            FactorOff factorOff) {
+            FactorOff factorOff,
+            MarkKind marks) {
         public Cases {
             Objects.requireNonNull(force, "force");
             Objects.requireNonNull(bans, "bans");
@@ -49,6 +51,7 @@ public final class StaffDesk implements StaffActions {
             Objects.requireNonNull(setPassword, "setPassword");
             Objects.requireNonNull(register, "register");
             Objects.requireNonNull(factorOff, "factorOff");
+            Objects.requireNonNull(marks, "marks");
         }
     }
 
@@ -210,5 +213,48 @@ public final class StaffDesk implements StaffActions {
                 case UNKNOWN -> messages.send(sender, Keys.STAFF_UNKNOWN, who);
             }
         });
+    }
+
+    @Override
+    public CompletableFuture<Void> markPremium(CommandSender sender, String name) {
+        return mark(sender, name, StaffAction.MARK_PREMIUM, Keys.STAFF_MARKED_PREMIUM, "premium");
+    }
+
+    @Override
+    public CompletableFuture<Void> markCracked(CommandSender sender, String name) {
+        return mark(sender, name, StaffAction.MARK_CRACKED, Keys.STAFF_MARKED_CRACKED, "cracked");
+    }
+
+    /** Marks the account one kind or the other; asking Mojang may take a while, so it runs on the lane. */
+    private CompletableFuture<Void> mark(
+            CommandSender sender, String name, StaffAction action, Keys done, String kind) {
+        Objects.requireNonNull(name, "name");
+        if (!gate.allows(Objects.requireNonNull(sender, "sender"), action)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        PlayerName player = new PlayerName(name);
+        boolean premium = action == StaffAction.MARK_PREMIUM;
+        return replies.on(
+                sender,
+                lane.submit(() ->
+                        premium ? cases.marks().premium(player) : cases.marks().cracked(player)),
+                marked -> {
+                    TagResolver who = Text.placeholder("name", name);
+                    messages.send(sender, marked == MarkKind.Marked.DONE ? done : markWord(marked), who);
+                    if (marked == MarkKind.Marked.DONE) {
+                        log.accept(sender.getName() + " marked " + name + " " + kind + ".");
+                    }
+                });
+    }
+
+    private static Keys markWord(MarkKind.Marked marked) {
+        return switch (marked) {
+            case DONE, ALREADY -> Keys.STAFF_MARK_ALREADY;
+            case NOT_PAID -> Keys.STAFF_NOT_PAID;
+            case NO_ANSWER -> Keys.STAFF_NO_ANSWER;
+            case TAKEN -> Keys.STAFF_PAID_TAKEN;
+            case NO_PASSWORD -> Keys.STAFF_NO_PASSWORD;
+            case UNKNOWN -> Keys.STAFF_UNKNOWN;
+        };
     }
 }

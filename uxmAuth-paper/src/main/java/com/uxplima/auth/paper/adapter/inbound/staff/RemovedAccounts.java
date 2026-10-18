@@ -13,7 +13,10 @@ import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.text.message.Messages;
 import org.jspecify.annotations.Nullable;
 
-/** What a server does when staff remove an account: its player here is sent away, on their own thread. */
+/**
+ * What a server does when staff remove an account, or change how it logs in: its player here is sent away, on their
+ * own thread, with the reason.
+ */
 public final class RemovedAccounts implements Consumer<Bulletin> {
 
     private final Function<UUID, @Nullable Player> online;
@@ -29,11 +32,18 @@ public final class RemovedAccounts implements Consumer<Bulletin> {
 
     @Override
     public void accept(Bulletin bulletin) {
-        if (Objects.requireNonNull(bulletin, "bulletin") instanceof Bulletin.Unregistered removed) {
-            Player player = online.apply(removed.account());
-            if (player != null) {
-                scheduler.entity(player, () -> player.kick(messages.render(player, Keys.STAFF_REMOVED_KICK)));
-            }
+        switch (Objects.requireNonNull(bulletin, "bulletin")) {
+            case Bulletin.Unregistered removed -> sendAway(removed.account(), Keys.STAFF_REMOVED_KICK);
+            case Bulletin.Rejoin rejoin -> sendAway(rejoin.account(), Keys.STAFF_REJOIN_KICK);
+            case Bulletin.SessionsEnded ended -> {}
+            case Bulletin.LetIn letIn -> {}
+        }
+    }
+
+    private void sendAway(UUID account, Keys reason) {
+        Player player = online.apply(account);
+        if (player != null) {
+            scheduler.entity(player, () -> player.kick(messages.render(player, reason)));
         }
     }
 }

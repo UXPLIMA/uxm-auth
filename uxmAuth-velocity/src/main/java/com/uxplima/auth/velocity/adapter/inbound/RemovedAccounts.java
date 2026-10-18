@@ -12,8 +12,8 @@ import com.uxplima.uxmlib.text.message.Messages;
 import com.velocitypowered.api.proxy.Player;
 
 /**
- * What the proxy does when staff remove an account: its player leaves the network, whichever server they stand
- * on, and the proxy forgets what it held for them.
+ * What the proxy does when staff remove an account, or change how it logs in: its player leaves the network,
+ * whichever server they stand on, with the reason, and the proxy forgets their login.
  */
 public final class RemovedAccounts implements Consumer<Bulletin> {
 
@@ -30,10 +30,16 @@ public final class RemovedAccounts implements Consumer<Bulletin> {
 
     @Override
     public void accept(Bulletin bulletin) {
-        if (Objects.requireNonNull(bulletin, "bulletin") instanceof Bulletin.Unregistered removed) {
-            sessions.loggedOut(removed.account());
-            online.apply(removed.account())
-                    .ifPresent(player -> player.disconnect(messages.render(player, Keys.STAFF_REMOVED_KICK)));
+        switch (Objects.requireNonNull(bulletin, "bulletin")) {
+            case Bulletin.Unregistered removed -> sendAway(removed.account(), Keys.STAFF_REMOVED_KICK);
+            case Bulletin.Rejoin rejoin -> sendAway(rejoin.account(), Keys.STAFF_REJOIN_KICK);
+            case Bulletin.SessionsEnded ended -> {}
+            case Bulletin.LetIn letIn -> {}
         }
+    }
+
+    private void sendAway(UUID account, Keys reason) {
+        sessions.loggedOut(account);
+        online.apply(account).ifPresent(player -> player.disconnect(messages.render(player, reason)));
     }
 }

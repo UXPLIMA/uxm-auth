@@ -19,11 +19,14 @@ import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
+import com.uxplima.auth.application.staff.MarkKind;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
+import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
@@ -42,6 +45,7 @@ import org.mockbukkit.mockbukkit.entity.PlayerMock;
 final class StaffDeskTest {
 
     private static final String HOME = "203.0.113.7";
+    private static final java.util.UUID MOJANG = java.util.UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
 
     @TempDir
     Path folder;
@@ -91,7 +95,12 @@ final class StaffDeskTest {
                         () -> world.policy,
                         BreachedPasswords.NONE,
                         world.clock),
-                new FactorOff(world.accounts, world.factors, world.emails));
+                new FactorOff(world.accounts, world.factors, world.emails),
+                new MarkKind(
+                        world.accounts,
+                        name -> new PremiumAnswer.Premium(MOJANG, name.value()),
+                        UuidScheme.KEEP_FIRST,
+                        events));
         StaffDesk.Reach reach = new StaffDesk.Reach(
                 name -> java.util.Optional.ofNullable(server.getPlayerExact(name))
                         .map(org.bukkit.entity.Player::getUniqueId),
@@ -333,5 +342,50 @@ final class StaffDeskTest {
         assertThat(staff.nextComponentMessage())
                 .isEqualTo(world.messages.render(staff, Keys.STAFF_FACTOR_NONE, Text.placeholder("name", "Steve")));
         assertThat(logged).singleElement().asString().contains("Steve");
+    }
+
+    @Test
+    @DisplayName("staff mark a paid name premium in game, and its player is sent to join again under the handshake")
+    void aMarkedPremiumRejoins() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+
+        world.scheduler.settle(desk.markPremium(staff, "Steve"));
+        until(() -> !steve.isOnline());
+
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_MARKED_PREMIUM, Text.placeholder("name", "Steve")));
+        assertThat(world.accounts
+                        .findByName(new PlayerName("Steve"))
+                        .orElseThrow()
+                        .premiumId())
+                .isEqualTo(MOJANG);
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(logged).singleElement().asString().contains("Steve");
+    }
+
+    @Test
+    @DisplayName("marking cracked is refused in game unless opened; from the console the account turns cracked")
+    void aMarkedCrackedNeedsTheConsole() {
+        world.registered(server.addPlayer("Steve"), "hunter22");
+        world.scheduler.settle(desk.markPremium(server.getConsoleSender(), "Steve"));
+        logged.clear();
+
+        world.scheduler.settle(desk.markCracked(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        staff, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", "markcracked")));
+        world.scheduler.settle(desk.markCracked(server.getConsoleSender(), "Steve"));
+
+        assertThat(world.accounts
+                        .findByName(new PlayerName("Steve"))
+                        .orElseThrow()
+                        .kind())
+                .isEqualTo(com.uxplima.auth.domain.account.AccountKind.CRACKED);
+        assertThat(logged).singleElement().asString().contains("Steve");
+        opened.add(StaffAction.MARK_CRACKED);
+        world.scheduler.settle(desk.markCracked(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_MARK_ALREADY, Text.placeholder("name", "Steve")));
     }
 }

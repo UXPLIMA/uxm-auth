@@ -27,8 +27,9 @@ public final class EndedSessions implements Consumer<Bulletin> {
             }
             // Staff letting a player in is answered where the player waits.
             case Bulletin.LetIn letIn -> {}
-            // A removed account's player is sent away by RemovedAccounts.
+            // A removed or changed account's player is sent away by RemovedAccounts.
             case Bulletin.Unregistered removed -> {}
+            case Bulletin.Rejoin rejoin -> {}
         }
     }
 }

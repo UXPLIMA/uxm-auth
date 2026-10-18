@@ -115,6 +115,12 @@ permissions:
   uxmauth.admin.disable2fa:
     description: Turn off an account's second factor; from the console only unless staff.in-game opens it
     default: op
+  uxmauth.admin.markpremium:
+    description: Turn a cracked account premium when Mojang names a paid account under it
+    default: op
+  uxmauth.admin.markcracked:
+    description: Turn a premium account cracked; from the console only unless staff.in-game opens it
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

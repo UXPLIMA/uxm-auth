@@ -34,6 +34,7 @@ public final class Bulletins {
     private static final String SESSIONS_ENDED = "S";
     private static final String LET_IN = "L";
     private static final String UNREGISTERED = "U";
+    private static final String REJOIN = "R";
     private static final int PARTS = 6;
 
     private final Claims claims;
@@ -51,6 +52,7 @@ public final class Bulletins {
                         text(sent, SESSIONS_ENDED, ended.account(), ended.keep().orElse(""));
                     case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), letIn.nonce());
                     case Bulletin.Unregistered removed -> text(sent, UNREGISTERED, removed.account(), "");
+                    case Bulletin.Rejoin rejoin -> text(sent, REJOIN, rejoin.account(), "");
                 });
     }
 
@@ -111,6 +113,7 @@ public final class Bulletins {
                             more.isEmpty() ? Optional.empty() : Optional.of(new Bulletin.LetIn(account, more));
                         case UNREGISTERED ->
                             more.isEmpty() ? Optional.of(new Bulletin.Unregistered(account)) : Optional.empty();
+                        case REJOIN -> more.isEmpty() ? Optional.of(new Bulletin.Rejoin(account)) : Optional.empty();
                         default -> Optional.empty();
                     };
             return bulletin.map(read ->

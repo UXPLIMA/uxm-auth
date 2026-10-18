@@ -44,6 +44,13 @@ public sealed interface Bulletin {
         }
     }
 
+    /** Staff changed how this account logs in: its player is sent away to join again under the new way. */
+    record Rejoin(UUID account) implements Bulletin {
+        public Rejoin {
+            Objects.requireNonNull(account, "account");
+        }
+    }
+
     /** What a visit token may be: the nonce of a proxy's claim, or a random id a server gave a connection. */
     Pattern VISIT = Pattern.compile("[A-Za-z0-9-]{1,64}");
 }

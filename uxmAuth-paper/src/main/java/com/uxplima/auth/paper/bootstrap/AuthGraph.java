@@ -61,6 +61,7 @@ import com.uxplima.auth.application.staff.AccountInfo;
 import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
+import com.uxplima.auth.application.staff.MarkKind;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.hash.Hashing;
@@ -191,6 +192,8 @@ final class AuthGraph implements AutoCloseable {
     private final NetworkEvents events;
     private final ChannelReports channelReports;
     private final ServerHellos hellos;
+    /** Who holds a name, by the operator's sources: the door asks it, and so do staff marking an account premium. */
+    private final PremiumLookup lookup;
 
     AuthGraph(
             Plugin plugin,
@@ -255,6 +258,10 @@ final class AuthGraph implements AutoCloseable {
         Greeter greeter = new Greeter(
                 moments, (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task), hold::isHeld);
         SqlDisputes disputes = new SqlDisputes(database);
+        this.lookup = new PremiumLookup(
+                new PremiumSources(web, () -> settings.current().premium(), clock)::ordered,
+                () -> settings.current().premium().keepAnswers(),
+                clock);
         AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
         this.hellos = ServerHellos.startOn(new PremiumHelloDoor(atTheDoor, scheduler), plugin.getLogger());
         ClaimName claims = new ClaimName(
@@ -510,7 +517,8 @@ final class AuthGraph implements AutoCloseable {
                                 () -> settings.current().passwordPolicy(),
                                 breaches,
                                 clock),
-                        new FactorOff(accounts, factors.factors, mail.emails)),
+                        new FactorOff(accounts, factors.factors, mail.emails),
+                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events)),
                 new StaffDesk.Reach(
                         name -> Optional.ofNullable(plugin.getServer().getPlayerExact(name))
                                 .map(Player::getUniqueId),
@@ -647,10 +655,6 @@ final class AuthGraph implements AutoCloseable {
     /** The decision at the hello: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(
             PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
-        PremiumLookup lookup = new PremiumLookup(
-                new PremiumSources(web, () -> settings.current().premium(), clock)::ordered,
-                () -> settings.current().premium().keepAnswers(),
-                clock);
         return new AtTheDoor(
                 accounts,
                 () -> settings.current().namePolicy(),
