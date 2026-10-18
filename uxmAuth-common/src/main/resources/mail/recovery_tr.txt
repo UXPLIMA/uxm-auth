@@ -1,0 +1,9 @@
+Subject: {server} için yeni şifre belirle
+
+Merhaba {player},
+
+{server} sunucusundaki hesabın için yeni bir şifre istendi. Bunu sen istediysen şunu yaz:
+
+    /recover {code} <yeni şifre>
+
+Kod bir kez, {minutes} dakika boyunca geçerli. Sen istemediysen bu postayı yok say: şifren olduğu gibi kalır.

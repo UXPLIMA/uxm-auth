@@ -12,6 +12,7 @@ import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
+import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyLocales;
 import com.uxplima.uxmlib.storage.sql.Database;
@@ -165,6 +166,7 @@ final class ProxyModule {
         }
         copyIfAbsent("theme.conf", ThemeFiles.shared(folder, THEME_FOLDER));
         LanguageFiles.extractShipped(getClass().getClassLoader(), MESSAGES, folder.resolve(MESSAGES));
+        MailFiles.extractShipped(getClass().getClassLoader(), folder.resolve(MailFiles.FOLDER));
     }
 
     private void copyIfAbsent(String resource, Path target) {

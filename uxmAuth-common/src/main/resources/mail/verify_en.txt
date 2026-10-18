@@ -1,0 +1,9 @@
+Subject: Confirm your address on {server}
+
+Hello {player},
+
+Type this code on {server} to confirm this address:
+
+    /email confirm {code}
+
+The code works for {minutes} minutes. If you did not ask for it, ignore this mail: nothing changes until the code is typed.

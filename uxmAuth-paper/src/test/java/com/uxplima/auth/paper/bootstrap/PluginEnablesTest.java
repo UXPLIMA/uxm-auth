@@ -59,6 +59,15 @@ class PluginEnablesTest {
     }
 
     @Test
+    @DisplayName("the first start writes the mails, one file per kind and language, where an operator edits them")
+    void theFirstStartWritesTheMails() {
+        Path mail = plugin.getDataFolder().toPath().resolve("mail");
+
+        assertThat(mail.resolve("login-code_en.txt")).isRegularFile();
+        assertThat(mail.resolve("recovery_tr.txt")).isRegularFile();
+    }
+
+    @Test
     @DisplayName("the first start writes its UUID scheme into the database, for every later start to be held to")
     void theFirstStartRecordsTheUuidScheme() {
         Path file = plugin.getDataFolder().toPath().resolve("auth.db");

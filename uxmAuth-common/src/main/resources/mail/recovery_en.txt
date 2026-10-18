@@ -1,0 +1,9 @@
+Subject: Set a new password on {server}
+
+Hello {player},
+
+Someone asked to set a new password for your account on {server}. If it was you, type:
+
+    /recover {code} <new password>
+
+The code works once, for {minutes} minutes. If it was not you, ignore this mail: your password stays as it is.

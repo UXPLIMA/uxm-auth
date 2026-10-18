@@ -1,0 +1,9 @@
+Subject: {server} giriş kodun
+
+Merhaba {player},
+
+{server} giriş kodun:
+
+    {code}
+
+/2fa {code} ile yaz. Bir kez, {minutes} dakika boyunca geçerli. Şu an giriş yapmıyorsan başka biri şifreni biliyor: şifreni değiştir.

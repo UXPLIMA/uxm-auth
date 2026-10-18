@@ -1,0 +1,9 @@
+Subject: Your login code for {server}
+
+Hello {player},
+
+Your login code for {server} is:
+
+    {code}
+
+Type it with /2fa {code}. It works once, for {minutes} minutes. If you are not logging in right now, someone else knows your password: change it.

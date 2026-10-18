@@ -1,0 +1,9 @@
+Subject: {server} adresini doğrula
+
+Merhaba {player},
+
+Bu adresi doğrulamak için {server} sunucusunda şu kodu yaz:
+
+    /email confirm {code}
+
+Kod {minutes} dakika geçerli. Bunu sen istemediysen bu postayı yok say: kod yazılmadıkça hiçbir şey değişmez.

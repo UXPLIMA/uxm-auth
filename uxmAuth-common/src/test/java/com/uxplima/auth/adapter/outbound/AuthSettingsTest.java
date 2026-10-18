@@ -649,6 +649,55 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName(
+            "mail is off by default; the server, its security, the login and the sender are read, the password never printed")
+    void mailIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").mail())
+                .isEqualTo(new MailSettings(
+                        false,
+                        "",
+                        587,
+                        MailSettings.Security.STARTTLS,
+                        "",
+                        "",
+                        "",
+                        "Minecraft",
+                        Duration.ofSeconds(10),
+                        2));
+
+        MailSettings read = settingsFrom(folder, """
+                        mail {
+                          enabled = true, host = "smtp.example.com", port = 465, security = ssl
+                          username = "mailer", password = "s3cret", from-address = "auth@example.com"
+                          from-name = "Example", timeout-seconds = 20
+                        }
+                        """).mail();
+        assertThat(read)
+                .isEqualTo(new MailSettings(
+                        true,
+                        "smtp.example.com",
+                        465,
+                        MailSettings.Security.SSL,
+                        "mailer",
+                        "s3cret",
+                        "auth@example.com",
+                        "Example",
+                        Duration.ofSeconds(20),
+                        2));
+        assertThat(read.toString()).doesNotContain("s3cret");
+        assertThat(settingsFrom(folder, "mail { security = plain }\n").mail().security())
+                .isEqualTo(MailSettings.Security.PLAIN);
+        assertThatThrownBy(() -> settingsFrom(folder, "mail { security = tls13 }\n"))
+                .hasMessageContaining("mail.security");
+        assertThatThrownBy(() -> settingsFrom(folder, "mail { enabled = true, from-address = \"a@example.com\" }\n"))
+                .hasMessageContaining("mail.host");
+        assertThatThrownBy(() -> settingsFrom(folder, "mail { enabled = true, host = \"smtp.example.com\" }\n"))
+                .hasMessageContaining("mail.from-address");
+        assertThatThrownBy(() -> settingsFrom(folder, "mail { port = 0 }\n")).hasMessageContaining("mail.port");
+        assertThatThrownBy(() -> settingsFrom(folder, "mail { threads = 0 }\n")).hasMessageContaining("mail.threads");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

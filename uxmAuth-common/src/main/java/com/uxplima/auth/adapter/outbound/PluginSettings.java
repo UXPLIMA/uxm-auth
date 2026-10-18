@@ -68,6 +68,7 @@ public final class PluginSettings {
             AuthSettings.Network network,
             ProtectionSettings protection,
             SecondFactorSettings secondFactor,
+            MailSettings mail,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -82,6 +83,7 @@ public final class PluginSettings {
             Objects.requireNonNull(timeouts, "timeouts");
             Objects.requireNonNull(protection, "protection");
             Objects.requireNonNull(secondFactor, "secondFactor");
+            Objects.requireNonNull(mail, "mail");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -234,6 +236,7 @@ public final class PluginSettings {
                 SettingsReader.network(config),
                 ProtectionReader.protection(config),
                 SecondFactorSettings.read(config),
+                MailSettings.read(config),
                 lists,
                 common(lists));
     }

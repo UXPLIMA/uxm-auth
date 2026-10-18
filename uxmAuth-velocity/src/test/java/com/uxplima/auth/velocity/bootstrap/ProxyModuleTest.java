@@ -130,6 +130,7 @@ final class ProxyModuleTest {
 
         assertThat(folder.resolve("config.conf")).isRegularFile();
         assertThat(folder.resolve("messages").resolve("messages_en.conf")).isRegularFile();
+        assertThat(folder.resolve("mail").resolve("verify_tr.txt")).isRegularFile();
         try (Database database = AuthSchema.migrate(Database.builder()
                 .sqlite(folder.resolve("auth.db"))
                 .poolName("check")

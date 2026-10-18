@@ -18,6 +18,7 @@ import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
+import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
@@ -431,6 +432,7 @@ final class PluginModule {
         // The language files are discovered in the jar rather than named in a list here. A plugin gains a
         // language by gaining a file, and a list is the one place that gets forgotten when it does.
         LanguageFiles.extractShipped(getClass().getClassLoader(), MESSAGES, dataFolder.resolve(MESSAGES));
+        MailFiles.extractShipped(getClass().getClassLoader(), dataFolder.resolve(MailFiles.FOLDER));
     }
 
     /**
