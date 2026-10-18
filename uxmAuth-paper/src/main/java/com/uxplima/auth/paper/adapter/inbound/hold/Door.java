@@ -38,6 +38,34 @@ public final class Door {
 
         /** Holds the player until they have, and runs {@code proceed} on their thread then. */
         void hold(Player player, AuthState.Authenticated in, Runnable proceed);
+
+        /** Both duties, one after the other: the second is asked once the first is done. */
+        static Duty inTurn(Duty first, Duty second) {
+            Objects.requireNonNull(first, "first");
+            Objects.requireNonNull(second, "second");
+            return new Duty() {
+                @Override
+                public boolean owes(Player player) {
+                    return first.owes(player) || second.owes(player);
+                }
+
+                @Override
+                public void hold(Player player, AuthState.Authenticated in, Runnable proceed) {
+                    Runnable then = () -> {
+                        if (second.owes(player)) {
+                            second.hold(player, in, proceed);
+                        } else {
+                            proceed.run();
+                        }
+                    };
+                    if (first.owes(player)) {
+                        first.hold(player, in, then);
+                    } else {
+                        then.run();
+                    }
+                }
+            };
+        }
     }
 
     private final Sessions sessions;

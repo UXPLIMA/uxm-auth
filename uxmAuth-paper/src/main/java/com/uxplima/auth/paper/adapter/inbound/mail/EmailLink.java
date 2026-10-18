@@ -57,6 +57,7 @@ public final class EmailLink {
     private final Replies replies;
     private final MomentRunner moments;
     private final Messages messages;
+    private final Consumer<Player> linked;
     private final TimeWords times;
 
     /** @param lane where the table is read and codes hashed, never a server or region thread */
@@ -69,6 +70,20 @@ public final class EmailLink {
             Replies replies,
             MomentRunner moments,
             Messages messages) {
+        this(link, sessions, forms, bedrock, lane, replies, moments, messages, player -> {});
+    }
+
+    /** @param linked told of a player whose address was just confirmed, on their thread */
+    public EmailLink(
+            LinkEmail link,
+            Sessions sessions,
+            Forms forms,
+            Predicate<UUID> bedrock,
+            HashingLane lane,
+            Replies replies,
+            MomentRunner moments,
+            Messages messages,
+            Consumer<Player> linked) {
         this.link = Objects.requireNonNull(link, "link");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.forms = Objects.requireNonNull(forms, "forms");
@@ -77,6 +92,7 @@ public final class EmailLink {
         this.replies = Objects.requireNonNull(replies, "replies");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.messages = Objects.requireNonNull(messages, "messages");
+        this.linked = Objects.requireNonNull(linked, "linked");
         this.times = new TimeWords(messages);
     }
 
@@ -139,8 +155,10 @@ public final class EmailLink {
                         Text.placeholder(
                                 "seconds",
                                 String.valueOf(Math.max(1, cooldown.left().toSeconds()))));
-            case LinkEmail.Outcome.Confirmed confirmed ->
+            case LinkEmail.Outcome.Confirmed confirmed -> {
                 messages.send(player, Keys.EMAIL_CONFIRMED, masked(confirmed.masked()));
+                linked.accept(player);
+            }
             case LinkEmail.Outcome.Wrong wrong ->
                 messages.send(player, Keys.EMAIL_WRONG, Text.placeholder("left", String.valueOf(wrong.attemptsLeft())));
             case LinkEmail.Outcome.AlreadyLinked linked ->
@@ -167,6 +185,7 @@ public final class EmailLink {
             case LinkEmail.Outcome.TooManyAttempts tooMany -> Keys.EMAIL_TOO_MANY_ATTEMPTS;
             case LinkEmail.Outcome.NoneLinked none -> Keys.EMAIL_NONE_LINKED;
             case LinkEmail.Outcome.FactorOn on -> Keys.EMAIL_FACTOR_ON;
+            case LinkEmail.Outcome.Required required -> Keys.EMAIL_REQUIRED_KEEP;
             default -> throw new IllegalStateException("an answer with words of its own: " + outcome);
         };
     }
@@ -188,10 +207,16 @@ public final class EmailLink {
         return Text.placeholder("address", address);
     }
 
-    /** The account of a logged-in player, or the refusal told. */
+    /** The account of a logged-in player, held or not for a duty, or the refusal told. */
     private Optional<Account> account(Player player) {
-        if (sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated in) {
-            return Optional.of(in.account());
+        switch (sessions.state(player.getUniqueId()).orElse(null)) {
+            case AuthState.Authenticated in -> {
+                return Optional.of(in.account());
+            }
+            case AuthState.SettingUp held -> {
+                return Optional.of(held.account());
+            }
+            case null, default -> {}
         }
         messages.send(player, Keys.EMAIL_LOG_IN_FIRST);
         return Optional.empty();

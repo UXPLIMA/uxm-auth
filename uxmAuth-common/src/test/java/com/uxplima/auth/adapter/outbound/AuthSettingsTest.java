@@ -700,21 +700,25 @@ final class AuthSettingsTest {
     }
 
     @Test
-    @DisplayName("every domain and fifteen-minute codes of six digits with five tries and a minute between by default")
+    @DisplayName("every domain, fifteen-minute codes of six digits with five tries and a minute between, and no"
+            + " address required, by default")
     void emailIsRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").email())
                 .isEqualTo(new EmailSettings(
                         new DomainRule(List.of(), List.of()),
-                        new MailCodes.Settings(Duration.ofMinutes(15), 5, Duration.ofSeconds(60), 6)));
+                        new MailCodes.Settings(Duration.ofMinutes(15), 5, Duration.ofSeconds(60), 6),
+                        false));
         assertThat(settingsFrom(folder, """
                                 email {
                                   allowed-domains = ["example.com"], denied-domains = ["temp.example.com"]
                                   code-minutes = 5, code-attempts = 3, cooldown-seconds = 120, code-length = 8
+                                  required-at-registration = true
                                 }
                                 """).email())
                 .isEqualTo(new EmailSettings(
                         new DomainRule(List.of("example.com"), List.of("temp.example.com")),
-                        new MailCodes.Settings(Duration.ofMinutes(5), 3, Duration.ofMinutes(2), 8)));
+                        new MailCodes.Settings(Duration.ofMinutes(5), 3, Duration.ofMinutes(2), 8),
+                        true));
         assertThatThrownBy(() -> settingsFrom(folder, "email { code-attempts = 0 }\n"))
                 .hasMessageContaining("email.code-attempts");
         assertThatThrownBy(() -> settingsFrom(folder, "email { denied-domains = [\"no domain\"] }\n"))

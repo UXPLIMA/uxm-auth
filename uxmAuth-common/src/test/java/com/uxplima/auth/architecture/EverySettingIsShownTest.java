@@ -34,8 +34,13 @@ import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
  */
 final class EverySettingIsShownTest {
 
-    private static final Path READER =
-            SourcePaths.of(EverySettingIsShownTest.class, "adapter", "outbound", "PluginSettings.java");
+    /**
+     * Where the readers are. {@code PluginSettings} hands whole blocks to readers of their own, the mail, the
+     * email, the second factor and the protection blocks, and a key one of them reads is as much a setting as
+     * one {@code PluginSettings} reads. Asking only {@code PluginSettings} let {@code email.required-at-registration}
+     * leave the shipped file without a test failing.
+     */
+    private static final Path READERS = SourcePaths.of(EverySettingIsShownTest.class, "adapter", "outbound");
 
     private static final Path RESOURCES = Path.of("src", "main", "resources");
 
@@ -206,12 +211,22 @@ final class EverySettingIsShownTest {
                 .isNotEmpty();
     }
 
-    /** Every path the reader names in a typed read, which is what the other direction asks about. */
+    /** Every path a reader of the config names in a typed read, which is what the other direction asks about. */
     private static Set<String> settingsRead() throws IOException {
         Set<String> paths = new LinkedHashSet<>();
-        Matcher read = READ.matcher(Files.readString(READER, StandardCharsets.UTF_8));
-        while (read.find()) {
-            paths.add(read.group(1));
+        try (java.util.stream.Stream<Path> files = Files.list(READERS)) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".java"))
+                    .sorted()
+                    .toList()) {
+                String source = Files.readString(file, StandardCharsets.UTF_8);
+                if (!source.contains("HoconConfig config")) {
+                    continue;
+                }
+                Matcher read = READ.matcher(source);
+                while (read.find()) {
+                    paths.add(read.group(1));
+                }
+            }
         }
         return paths;
     }

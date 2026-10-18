@@ -224,17 +224,7 @@ public final class AuthWorld implements AutoCloseable {
                     }
                 },
                 remembering,
-                new Door.Duty() {
-                    @Override
-                    public boolean owes(Player player) {
-                        return setupDuty().owes(player);
-                    }
-
-                    @Override
-                    public void hold(Player player, AuthState.Authenticated in, Runnable proceed) {
-                        setupDuty().hold(player, in, proceed);
-                    }
-                });
+                Door.Duty.inTurn(lazy(this::setupDuty), lazy(this::addressDuty)));
         AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
         this.captchas = new com.uxplima.auth.application.protection.Captchas(
                 () -> captchaSettings, new java.util.SplittableRandom(11), clock::instant);
@@ -261,6 +251,7 @@ public final class AuthWorld implements AutoCloseable {
                             mailLogin.send(account, java.util.Locale.ENGLISH);
                 });
         this.owedSetups = new com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups(sessions);
+        this.addressOwed = new com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups(sessions);
         com.uxplima.auth.application.mail.MailCodes codes = mailCodes();
         this.factorCheck = new com.uxplima.auth.application.factor.FactorCheck(
                 factors,
@@ -440,14 +431,63 @@ public final class AuthWorld implements AutoCloseable {
                         emails,
                         mailCodes(),
                         () -> new com.uxplima.auth.domain.mail.DomainRule(List.of(), deniedDomains),
-                        lane),
+                        lane,
+                        () -> emailRequired),
                 sessions,
                 forms,
                 bedrock,
                 lane,
                 replies,
                 moments,
-                messages);
+                messages,
+                addressOwed::release);
+    }
+
+    /** Whether this world requires a confirmed address of a password account; off until a test sets it. */
+    public boolean emailRequired;
+
+    /** Whether this world's mail is on; a world with it off holds nobody for an address. */
+    public boolean mailEnabled = true;
+
+    /** The players held for an address in this world. */
+    public final com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups addressOwed;
+
+    private com.uxplima.auth.paper.adapter.inbound.mail.@org.jspecify.annotations.Nullable AddressDuty address;
+
+    /** The address duty of this world, made at first use; it shows the chat usage of /email. */
+    public com.uxplima.auth.paper.adapter.inbound.mail.AddressDuty addressDuty() {
+        com.uxplima.auth.paper.adapter.inbound.mail.AddressDuty made = address;
+        if (made == null) {
+            made = new com.uxplima.auth.paper.adapter.inbound.mail.AddressDuty(
+                    addressOwed,
+                    () -> emailRequired && mailEnabled,
+                    id -> emails.address(id).isPresent(),
+                    player -> {
+                        java.util.concurrent.CompletableFuture<Void> unused = emailLink(
+                                        com.uxplima.auth.paper.adapter.inbound.mail.EmailLink.Forms.NONE, id -> false)
+                                .usage(player);
+                    },
+                    lane,
+                    replies,
+                    messages);
+            address = made;
+        }
+        return made;
+    }
+
+    /** A duty made when it is first asked, so the world can build it from parts made after the door. */
+    private static Door.Duty lazy(java.util.function.Supplier<? extends Door.Duty> made) {
+        return new Door.Duty() {
+            @Override
+            public boolean owes(Player player) {
+                return made.get().owes(player);
+            }
+
+            @Override
+            public void hold(Player player, AuthState.Authenticated in, Runnable proceed) {
+                made.get().hold(player, in, proceed);
+            }
+        };
     }
 
     /** Who must set the app up before playing: holders of this node; nobody when it is empty. */

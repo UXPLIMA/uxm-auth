@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
@@ -72,18 +73,29 @@ public final class LinkEmail {
 
         /** The login code goes to the linked address, so it stays until that is turned off with a code. */
         record FactorOn() implements Outcome {}
+
+        /** The server requires an address: it may be replaced, never removed. */
+        record Required() implements Outcome {}
     }
 
     private final Emails emails;
     private final MailCodes codes;
     private final Supplier<DomainRule> domains;
     private final HashingLane lane;
+    private final BooleanSupplier required;
 
     public LinkEmail(Emails emails, MailCodes codes, Supplier<DomainRule> domains, HashingLane lane) {
+        this(emails, codes, domains, lane, () -> false);
+    }
+
+    /** @param required whether the server requires an address, which then may not be removed */
+    public LinkEmail(
+            Emails emails, MailCodes codes, Supplier<DomainRule> domains, HashingLane lane, BooleanSupplier required) {
         this.emails = Objects.requireNonNull(emails, "emails");
         this.codes = Objects.requireNonNull(codes, "codes");
         this.domains = Objects.requireNonNull(domains, "domains");
         this.lane = Objects.requireNonNull(lane, "lane");
+        this.required = Objects.requireNonNull(required, "required");
     }
 
     /** The address the account has linked, read from the table on the caller's thread. */
@@ -171,6 +183,9 @@ public final class LinkEmail {
             }
             if (emails.mailsLoginCode(account)) {
                 return new Outcome.FactorOn();
+            }
+            if (required.getAsBoolean()) {
+                return new Outcome.Required();
             }
             emails.removeAddress(account);
             return new Outcome.Removed(linked.get().masked());

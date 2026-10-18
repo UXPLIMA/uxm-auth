@@ -12,8 +12,9 @@ import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.domain.state.AuthState;
 
 /**
- * The players held until the app the operator requires is on, and what lets each of them in then. The hold ends
- * with the connection: a player who leaves owes it again at the next login.
+ * The players held until a duty the operator requires is done, the app or the address, and what lets each of them
+ * in then. Each duty has its own. The hold ends with the connection: a player who leaves owes it again at the next
+ * login.
  */
 public final class OwedSetups {
 
@@ -39,12 +40,23 @@ public final class OwedSetups {
         });
     }
 
-    /** The app is on: a player held for it is logged in and let in; says whether one was. */
+    /**
+     * The duty is done: a player this hold holds is logged in and let in; says whether one was. A player held by
+     * another hold, or by none, is left as they are.
+     */
     public boolean release(Player player) {
         Objects.requireNonNull(player, "player");
         UUID id = player.getUniqueId();
         Sessions.Held held = sessions.held(id).orElse(null);
         if (held == null) {
+            return false;
+        }
+        AtomicReference<Runnable> proceed = new AtomicReference<>();
+        waiting.compute(id, (key, before) -> {
+            proceed.set(before);
+            return null;
+        });
+        if (proceed.get() == null) {
             return false;
         }
         AtomicReference<AuthState.SettingUp> released = new AtomicReference<>();
@@ -55,11 +67,10 @@ public final class OwedSetups {
             }
             return state;
         });
-        Runnable proceed = waiting.remove(id);
-        if (released.get() == null || proceed == null) {
+        if (released.get() == null) {
             return false;
         }
-        proceed.run();
+        proceed.get().run();
         return true;
     }
 

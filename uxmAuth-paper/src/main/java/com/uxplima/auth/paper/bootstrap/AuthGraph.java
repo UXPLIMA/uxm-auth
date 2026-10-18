@@ -86,6 +86,7 @@ import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
 import com.uxplima.auth.paper.adapter.inbound.listener.HelloAtTheDoor;
 import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
 import com.uxplima.auth.paper.adapter.inbound.listener.NetworkDoor;
+import com.uxplima.auth.paper.adapter.inbound.mail.AddressDuty;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.BedrockForms;
 import com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen;
@@ -146,6 +147,7 @@ final class AuthGraph implements AutoCloseable {
     final FactorGraph factors;
     final TwoFactorCommand twoFactor;
     final EmailCommand email;
+    private final AddressDuty addressDuty;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -352,6 +354,9 @@ final class AuthGraph implements AutoCloseable {
                 captcha,
                 factors.screen);
         this.captchaCommand = new CaptchaCommand(captcha, sessions::state, inWorld, messages);
+        MailGraph.Email email = mail.email(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
+        this.email = email.command();
+        this.addressDuty = email.duty();
         Door door = new Door(
                 sessions,
                 keeper,
@@ -363,7 +368,7 @@ final class AuthGraph implements AutoCloseable {
                 notices,
                 channelReports,
                 remembering,
-                factors.duty);
+                Door.Duty.inTurn(factors.duty, addressDuty));
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -433,7 +438,6 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
-        this.email = mail.command(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         this.recover = mail.recover(
                 sessions,
                 accounts,
@@ -481,6 +485,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         plugin.getServer().getPluginManager().registerEvents(factors.guard, plugin);
+        plugin.getServer().getPluginManager().registerEvents(addressDuty, plugin);
         plugin.getServer().getPluginManager().registerEvents(gate, plugin);
         filters.install();
         for (Player online : plugin.getServer().getOnlinePlayers()) {

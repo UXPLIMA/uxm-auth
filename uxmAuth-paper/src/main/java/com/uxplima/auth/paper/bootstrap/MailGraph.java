@@ -35,7 +35,9 @@ import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.paper.adapter.inbound.command.EmailCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RecoverCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
+import com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
+import com.uxplima.auth.paper.adapter.inbound.mail.AddressDuty;
 import com.uxplima.auth.paper.adapter.inbound.mail.BedrockEmailForms;
 import com.uxplima.auth.paper.adapter.inbound.mail.BedrockRecoveryForm;
 import com.uxplima.auth.paper.adapter.inbound.mail.EmailLink;
@@ -103,19 +105,44 @@ final class MailGraph implements AutoCloseable {
         CompletableFuture<MailCodes.Issued> unused = login.send(account, language);
     }
 
-    /** {@code /email}. */
-    EmailCommand command(Sessions sessions, Predicate<UUID> bedrock, Replies replies, MomentRunner moments) {
-        LinkEmail link =
-                new LinkEmail(emails, codes, () -> settings.current().email().domains(), lane);
-        return new EmailCommand(new EmailLink(
-                link,
+    /** {@code /email}, and the duty that holds a password account without an address where one is required. */
+    record Email(EmailCommand command, AddressDuty duty) {}
+
+    /** {@code /email} and its duty: an address confirmed by the command lets a player held for one in. */
+    Email email(Sessions sessions, Predicate<UUID> bedrock, Replies replies, MomentRunner moments) {
+        OwedSetups owed = new OwedSetups(sessions);
+        EmailLink email = new EmailLink(
+                link(),
                 sessions,
                 new BedrockEmailForms(BedrockScreen.forServer(plugin.getServer()), messages),
                 bedrock,
                 lane,
                 replies,
                 moments,
-                messages));
+                messages,
+                owed::release);
+        AddressDuty duty = new AddressDuty(
+                owed,
+                () -> settings.current().email().required()
+                        && settings.current().mail().enabled(),
+                id -> emails.address(id).isPresent(),
+                player -> {
+                    CompletableFuture<Void> unused = email.usage(player);
+                },
+                lane,
+                replies,
+                messages);
+        return new Email(new EmailCommand(email), duty);
+    }
+
+    /** Linking an address, which may not be removed where the server requires one. */
+    private LinkEmail link() {
+        return new LinkEmail(
+                emails,
+                codes,
+                () -> settings.current().email().domains(),
+                lane,
+                () -> settings.current().email().required());
     }
 
     /** {@code /recover}, for a player at the login. */

@@ -300,6 +300,15 @@ public enum Keys implements MessageKey {
             "email.factor-on",
             "<etag:'ERROR'> <body>Your login code goes to this address. Turn that off first with <value>/2fa email off"
                     + " <code><body>."),
+    EMAIL_REQUIRED(
+            "email.required",
+            "<etag:'ERROR'> <body>This server keeps an address for a forgotten password. Link one with"
+                    + " <value>/email add <address><body>, then <value>/email confirm <code><body> with the code"
+                    + " it gets."),
+    EMAIL_REQUIRED_KEEP(
+            "email.required-keep",
+            "<etag:'ERROR'> <body>This server requires an address, so it cannot be removed. Link another with"
+                    + " <value>/email add <address><body> to replace it."),
     EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     RECOVER_SENT(
             "recover.sent",

@@ -52,7 +52,8 @@ final class LinkEmailTest {
             (address, host) -> Optional.empty(),
             new SplittableRandom(3),
             () -> now);
-    private final LinkEmail link = new LinkEmail(emails, codes, () -> domains, lane);
+    private boolean required;
+    private final LinkEmail link = new LinkEmail(emails, codes, () -> domains, lane, () -> required);
 
     @AfterEach
     void close() {
@@ -151,5 +152,17 @@ final class LinkEmailTest {
         assertThat(sentTo).isEmpty();
         assertThat(link.linked(STEVE)).contains(old);
         assertThat(emails.mailsLoginCode(STEVE)).isTrue();
+    }
+
+    @Test
+    @DisplayName("where an address is required it cannot be removed, but another can still replace it")
+    void aRequiredAddressIsKept() {
+        EmailAddress old = EmailAddress.parse("old@example.com").orElseThrow();
+        emails.setAddress(STEVE, old);
+        required = true;
+
+        assertThat(link.remove(STEVE).join()).isEqualTo(new LinkEmail.Outcome.Required());
+        assertThat(link.linked(STEVE)).contains(old);
+        assertThat(add("new@example.com")).isInstanceOf(LinkEmail.Outcome.Sent.class);
     }
 }
