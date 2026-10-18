@@ -874,7 +874,7 @@ final class AuthSettingsTest {
                 .hasMessageContaining("website-table.table");
         assertThatThrownBy(() -> settingsFrom(folder, "website-table { hash = \"md5\" }\n"))
                 .hasMessageContaining("website-table.hash");
-        for (String own : new String[] {"pbkdf2-hex", "argon2i"}) {
+        for (String own : new String[] {"pbkdf2-hex", "argon2i", "legacy-digest", "pbkdf2-django"}) {
             assertThatThrownBy(() -> settingsFrom(folder, "hashing { algorithm = \"" + own + "\" }\n"))
                     .as("only the website table writes %s", own)
                     .hasMessageContaining("hashing.algorithm");
@@ -885,6 +885,24 @@ final class AuthSettingsTest {
                 .as("a website's bcrypt reads 72 bytes too")
                 .hasMessageContaining("72")
                 .hasMessageContaining("website-table.hash");
+    }
+
+    @Test
+    @DisplayName("an imported digest and a Django hash are read by the shipped hashing, and moved on at once")
+    void importedFormatsAreRead(@TempDir Path folder) throws IOException {
+        com.uxplima.auth.domain.hash.Hashing hashing = settingsFrom(folder, "").hashers();
+        com.uxplima.auth.domain.password.Password right = com.uxplima.auth.domain.password.Password.of("hunter22");
+
+        assertThat(hashing.verify(
+                        right,
+                        new com.uxplima.auth.domain.hash.PasswordHash("$digest$sha256$plain$$"
+                                + "20d2fe5e369db54ec7090639a9dc30ec4d608604936239d39e2de07fda09eb0b")))
+                .isInstanceOf(com.uxplima.auth.domain.hash.Verification.RightButRehash.class);
+        assertThat(hashing.verify(
+                        right,
+                        new com.uxplima.auth.domain.hash.PasswordHash(
+                                "pbkdf2_sha256$10000$Zx81kQp0aB$K7SHSVADi9bJlzX/eRrE4DLCy29TJM2JNsBtTEOcf9E=")))
+                .isInstanceOf(com.uxplima.auth.domain.hash.Verification.RightButRehash.class);
     }
 
     @Test

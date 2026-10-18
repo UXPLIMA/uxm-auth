@@ -335,7 +335,10 @@ final class SettingsReader {
         String name = written.trim().toUpperCase(Locale.ROOT).replace('-', '_');
         try {
             HashAlgorithm chosen = HashAlgorithm.valueOf(name);
-            if (chosen == HashAlgorithm.PBKDF2_HEX || chosen == HashAlgorithm.ARGON2I) {
+            if (chosen == HashAlgorithm.PBKDF2_HEX
+                    || chosen == HashAlgorithm.ARGON2I
+                    || chosen == HashAlgorithm.LEGACY_DIGEST
+                    || chosen == HashAlgorithm.PBKDF2_DJANGO) {
                 throw new IllegalArgumentException("only a website table writes " + written);
             }
             return chosen;

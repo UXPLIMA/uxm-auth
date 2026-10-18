@@ -67,7 +67,8 @@ public final class Pbkdf2HexHasher implements PasswordHasher {
         return parts.matches() && Integer.parseInt(parts.group(1)) == iterations;
     }
 
-    private static byte[] derive(Password password, String salt, int iterations, int length) {
+    /** PBKDF2-HMAC-SHA256 with the salt taken as its ASCII text, as the websites and Django take it. */
+    static byte[] derive(Password password, String salt, int iterations, int length) {
         char[] chars = password.chars();
         PBEKeySpec spec = new PBEKeySpec(chars, salt.getBytes(StandardCharsets.US_ASCII), iterations, length * 8);
         try {

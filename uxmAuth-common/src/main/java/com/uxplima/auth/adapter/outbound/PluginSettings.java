@@ -15,7 +15,9 @@ import com.uxplima.auth.domain.hash.AuthMeSha256Hasher;
 import com.uxplima.auth.domain.hash.BcryptHasher;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.hash.LegacyDigestHasher;
 import com.uxplima.auth.domain.hash.PasswordHasher;
+import com.uxplima.auth.domain.hash.Pbkdf2DjangoHasher;
 import com.uxplima.auth.domain.hash.Pbkdf2Hasher;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.password.CommonPasswords;
@@ -166,7 +168,9 @@ public final class PluginSettings {
                     new Pbkdf2Hasher(hashing.pbkdf2Iterations()),
                     new AuthMeSha256Hasher(),
                     WebsiteTable.Hash.PBKDF2.hasher(),
-                    WebsiteTable.Hash.ARGON2.hasher());
+                    WebsiteTable.Hash.ARGON2.hasher(),
+                    new LegacyDigestHasher(),
+                    new Pbkdf2DjangoHasher());
             if (website.enabled()) {
                 return new Hashing(website.hash().hasher(), all);
             }
