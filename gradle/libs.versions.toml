@@ -23,6 +23,8 @@ gson           = "2.14.0"                  # com.google.code.gson:gson, the copy
 bouncycastle   = "1.86"                    # org.bouncycastle:bcprov-jdk18on (Maven Central, verified 2026-10-17)
 # Redis carries the bulletins of a network. The version uxmlib-redis compiles against.
 lettuce        = "7.6.0.RELEASE"           # io.lettuce:lettuce-core (Maven Central, verified 2026-10-18)
+# Reads the GeoLite2 country file for the country rule. No dependency of its own.
+maxmind-db     = "4.2.0"                   # com.maxmind.db:maxmind-db (Maven Central, verified 2026-10-18)
 
 # soft dependencies, compileOnly, reached only past a plugin-present guard
 placeholderapi = "2.11.6"                  # me.clip:placeholderapi (extendedclip repo, not Maven Central)
@@ -81,6 +83,7 @@ adventure-legacy  = { module = "net.kyori:adventure-text-serializer-legacy",    
 gson              = { module = "com.google.code.gson:gson",                      version.ref = "gson" }
 bouncycastle      = { module = "org.bouncycastle:bcprov-jdk18on",                version.ref = "bouncycastle" }
 lettuce-core      = { module = "io.lettuce:lettuce-core",                        version.ref = "lettuce" }
+maxmind-db        = { module = "com.maxmind.db:maxmind-db",                      version.ref = "maxmind-db" }
 configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
 jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }
 # bstats is here for the plugin that wants metrics. Nothing in the template builds a

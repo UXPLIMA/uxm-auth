@@ -1,6 +1,8 @@
 package com.uxplima.auth.paper.bootstrap;
 
+import java.io.IOException;
 import java.net.http.HttpClient;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -23,6 +25,9 @@ import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.geo.CountryBook;
+import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
+import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LetBedrockIn;
@@ -43,6 +48,7 @@ import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
+import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
@@ -100,9 +106,11 @@ import com.uxplima.auth.paper.adapter.outbound.world.LoginWorld;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.scheduler.Scheduler;
+import com.uxplima.uxmlib.scheduler.TaskHandle;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.uxplima.uxmlib.text.style.Styler;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The way in, built once at enable: the sessions, the lane, the use cases, the hold, the door, the commands
@@ -131,7 +139,14 @@ final class AuthGraph implements AutoCloseable {
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
+    /** How often the country file is checked; it is fetched only once it is as old as the settings allow. */
+    private static final Duration COUNTRY_CHECK = Duration.ofHours(6);
+
     private final HttpClient web = HttpClient.newHttpClient();
+    private final CountryBook countries;
+    private final CountryUpkeep countryUpkeep;
+    private final Scheduler scheduler;
+    private @Nullable TaskHandle countryTask;
     private final NetworkEvents events;
     private final ChannelReports channelReports;
     private final ServerHellos hellos;
@@ -146,6 +161,10 @@ final class AuthGraph implements AutoCloseable {
             Styler styler,
             ConfiguredCommands commands) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        Path folder = plugin.getDataFolder().toPath();
+        this.countries = new CountryBook(folder);
+        this.countryUpkeep = countryUpkeep(plugin, settings, countries, folder);
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         this.lane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
@@ -302,15 +321,7 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        new Admission(
-                                () -> settings.current().protection().sharedAddresses(),
-                                List.of(
-                                        bans.rule(),
-                                        new ConnectionWindow(
-                                                () -> settings.current()
-                                                        .protection()
-                                                        .connections(),
-                                                Instant::now))),
+                        admission(settings, bans, countries, plugin.getLogger()),
                         remember::resumes),
                 notices,
                 door,
@@ -360,6 +371,8 @@ final class AuthGraph implements AutoCloseable {
     /** Listens, filters the log, and sends every player already online to the door. */
     void start() {
         loginWorld.prepare();
+        // The country file is opened and fetched off the server thread, at once and then every few hours.
+        this.countryTask = scheduler.asyncTimer(Duration.ZERO, COUNTRY_CHECK, handle -> countryUpkeep.run());
         bedrock.prefix()
                 .filter(BedrockLink::collides)
                 .ifPresent(prefix -> plugin.getLogger()
@@ -384,11 +397,52 @@ final class AuthGraph implements AutoCloseable {
 
     @Override
     public void close() {
+        if (countryTask != null) {
+            countryTask.cancel();
+        }
+        try {
+            countries.close();
+        } catch (IOException unclosable) {
+            plugin.getLogger().warning("Could not close the country file: " + unclosable.getMessage());
+        }
         events.close();
         filters.uninstall();
         hellos.close();
         web.close();
         lane.close();
+    }
+
+    /** Fetches the country file when it is due and opens the book on it. */
+    private CountryUpkeep countryUpkeep(Plugin plugin, PluginSettings settings, CountryBook book, Path folder) {
+        return new CountryUpkeep(
+                new CountryDownload(
+                        web,
+                        CountryDownload.MAXMIND,
+                        folder,
+                        () -> settings.current().protection().countries().licence(),
+                        () -> settings.current().protection().countries().refresh(),
+                        Clock.systemUTC(),
+                        plugin.getLogger()::warning)::refresh,
+                book,
+                plugin.getLogger()::warning);
+    }
+
+    /** The door's rules, in order: the country, a banned address, then too many connections from one. */
+    private static Admission admission(
+            PluginSettings settings, AddressBans bans, CountryBook countries, java.util.logging.Logger logger) {
+        return new Admission(
+                () -> settings.current().protection().sharedAddresses(),
+                List.of(
+                        new CountryRule(
+                                countries,
+                                () -> settings.current()
+                                        .protection()
+                                        .countries()
+                                        .rule(),
+                                logger::warning),
+                        bans.rule(),
+                        new ConnectionWindow(
+                                () -> settings.current().protection().connections(), Instant::now)));
     }
 
     /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */

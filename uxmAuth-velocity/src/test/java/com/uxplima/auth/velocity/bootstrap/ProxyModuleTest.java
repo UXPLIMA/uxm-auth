@@ -63,12 +63,15 @@ final class ProxyModuleTest {
 
     private final ProxyConfig config = mock(ProxyConfig.class);
     private final ChannelRegistrar channels = mock(ChannelRegistrar.class);
+    private final com.velocitypowered.api.scheduler.Scheduler scheduler =
+            mock(com.velocitypowered.api.scheduler.Scheduler.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
 
     ProxyModuleTest() {
         when(proxy.getEventManager()).thenReturn(events);
         when(proxy.getConfiguration()).thenReturn(config);
         when(proxy.getChannelRegistrar()).thenReturn(channels);
         when(proxy.getCommandManager()).thenReturn(mock(CommandManager.class));
+        when(proxy.getScheduler()).thenReturn(scheduler);
     }
 
     @Test
@@ -86,6 +89,8 @@ final class ProxyModuleTest {
         verify(events).register(eq(plugin), any(RouteListener.class));
         verify(channels).register(ReportListener.CHANNEL);
         verify(logger).info(contains("Premium auto-login is on"));
+        // The country file is looked after off the proxy's threads, from the start and every few hours.
+        verify(scheduler).buildTask(eq(plugin), any(com.uxplima.auth.adapter.outbound.geo.CountryUpkeep.class));
     }
 
     @Test

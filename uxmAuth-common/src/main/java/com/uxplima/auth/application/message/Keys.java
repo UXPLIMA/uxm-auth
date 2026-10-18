@@ -100,6 +100,7 @@ public enum Keys implements MessageKey {
     REGISTER_TOO_MANY_ACCOUNTS(
             "register.too-many-accounts",
             "<etag:'ERROR'> <body>Too many accounts were made from your address lately. Try again later."),
+    KICK_COUNTRY("kick.country", "<body>This server does not take players from where you connect."),
     KICK_TOO_MANY_CONNECTIONS(
             "kick.too-many-connections",
             "<body>Too many connections came from your address. Try again in <value><time><body>."),

@@ -93,6 +93,8 @@ tasks.shadowJar {
     // another version, so ours carry our namespace. The JDBC drivers stay where they are: they are found by name.
     relocate("com.zaxxer.hikari", "com.uxplima.auth.libs.hikari")
     relocate("com.github.benmanes.caffeine", "com.uxplima.auth.libs.caffeine")
+    // The MaxMind reader opens the country file. Another plugin may ship it at another version.
+    relocate("com.maxmind.db", "com.uxplima.auth.libs.maxmind")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC")
 }
 
@@ -115,6 +117,7 @@ val forbiddenJarEntries =
         "org/reactivestreams/" to "Reactive Streams must be relocated.",
         "com/zaxxer/hikari/" to "HikariCP must be relocated, or another plugin's copy is the one that loads.",
         "com/github/benmanes/caffeine/" to "Caffeine must be relocated, or another plugin's copy is the one that loads.",
+        "com/maxmind/" to "The MaxMind reader must be relocated, or another plugin's copy is the one that loads.",
         "net/elytrium/" to "LimboAPI is a plugin of its own. A copy inside this jar is a second, broken LimboAPI.",
     )
 
@@ -122,6 +125,7 @@ val forbiddenJarEntries =
 val requiredJarEntries =
     listOf(
         "com/uxplima/auth/libs/lettuce/" to "Lettuce is missing, and a network's bulletins ride it on Redis.",
+        "com/uxplima/auth/libs/maxmind/" to "The MaxMind reader is missing, and the country rule needs it.",
         "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
         "com/uxplima/auth/velocity/bootstrap/" to "The plugin's own classes are missing.",
         "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",

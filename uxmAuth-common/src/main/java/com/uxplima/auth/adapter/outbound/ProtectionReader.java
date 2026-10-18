@@ -3,9 +3,12 @@ package com.uxplima.auth.adapter.outbound;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
+import com.uxplima.auth.adapter.outbound.geo.GeoSettings;
 import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.ConnectionWindow;
+import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.protection.AddressRanges;
 import com.uxplima.auth.domain.protection.BanSteps;
@@ -25,7 +28,33 @@ final class ProtectionReader {
                 sessions(config),
                 bans(config),
                 connections(config),
-                accounts(config));
+                accounts(config),
+                countries(config));
+    }
+
+    private static GeoSettings countries(HoconConfig config) {
+        String mode =
+                config.getString("protection.countries.mode", "off").strip().toUpperCase(Locale.ROOT);
+        String unknown = config.getString("protection.countries.unknown", "allow")
+                .strip()
+                .toLowerCase(Locale.ROOT);
+        if (!unknown.equals("allow") && !unknown.equals("deny")) {
+            throw new IllegalArgumentException("protection.countries.unknown is " + unknown + "; write allow or deny");
+        }
+        try {
+            CountryRule.Settings rule = new CountryRule.Settings(
+                    CountryRule.Mode.valueOf(mode),
+                    Set.copyOf(list(config, "countries.list")),
+                    new AddressRanges(list(config, "countries.allow-addresses")),
+                    unknown.equals("allow"));
+            GeoSettings.Licence licence = new GeoSettings.Licence(
+                    config.getString("protection.countries.account-id", ""),
+                    config.getString("protection.countries.licence-key", ""));
+            return new GeoSettings(
+                    rule, licence, Duration.ofDays(config.getInt("protection.countries.refresh-days", 7)));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("protection.countries: " + wrong.getMessage(), wrong);
+        }
     }
 
     private static AccountCap.Settings accounts(HoconConfig config) {

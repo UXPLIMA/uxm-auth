@@ -1,5 +1,6 @@
 package com.uxplima.auth.velocity.bootstrap;
 
+import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.random.RandomGenerator;
 
@@ -20,6 +22,9 @@ import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.geo.CountryBook;
+import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
+import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.port.LastServers;
@@ -33,6 +38,7 @@ import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
+import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
@@ -51,6 +57,8 @@ import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.scheduler.ScheduledTask;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
@@ -67,6 +75,8 @@ final class ProxyGraph implements AutoCloseable {
     private final HttpClient web = HttpClient.newHttpClient();
     private final WaitingWorld waiting;
     private NetworkEvents events = new LocalEvents();
+    private @Nullable CountryBook countries;
+    private @Nullable ScheduledTask countryTask;
 
     ProxyGraph(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -99,7 +109,7 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
-        Admission admission = admission(settings, bans, clock);
+        Admission admission = admission(settings, bans, watchCountries(settings, clock), clock);
         ProxySessions sessions = listen(
                 door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
         AccountCap cap = new AccountCap(
@@ -111,14 +121,43 @@ final class ProxyGraph implements AutoCloseable {
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
-    /** The door's rules, in order: a banned address, then too many connections from one. */
-    private static Admission admission(PluginSettings settings, AddressBans bans, Clock clock) {
+    /** The door's rules, in order: the country, a banned address, then too many connections from one. */
+    private Admission admission(PluginSettings settings, AddressBans bans, CountryBook book, Clock clock) {
         return new Admission(
                 () -> settings.current().protection().sharedAddresses(),
                 List.of(
+                        new CountryRule(
+                                book,
+                                () -> settings.current()
+                                        .protection()
+                                        .countries()
+                                        .rule(),
+                                logger::warn),
                         bans.rule(),
                         new ConnectionWindow(
                                 () -> settings.current().protection().connections(), clock::instant)));
+    }
+
+    /** The country file, opened and fetched off the proxy's threads, at once and then every few hours. */
+    private CountryBook watchCountries(PluginSettings settings, Clock clock) {
+        CountryBook book = new CountryBook(folder);
+        CountryUpkeep upkeep = new CountryUpkeep(
+                new CountryDownload(
+                        web,
+                        CountryDownload.MAXMIND,
+                        folder,
+                        () -> settings.current().protection().countries().licence(),
+                        () -> settings.current().protection().countries().refresh(),
+                        clock,
+                        logger::warn)::refresh,
+                book,
+                logger::warn);
+        this.countries = book;
+        this.countryTask = proxy.getScheduler()
+                .buildTask(plugin, upkeep)
+                .repeat(6, TimeUnit.HOURS)
+                .schedule();
+        return book;
     }
 
     private ProxyDoor door(PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
@@ -189,6 +228,16 @@ final class ProxyGraph implements AutoCloseable {
 
     @Override
     public void close() {
+        if (countryTask != null) {
+            countryTask.cancel();
+        }
+        if (countries != null) {
+            try {
+                countries.close();
+            } catch (IOException unclosable) {
+                logger.warn("Could not close the country file: {}", unclosable.getMessage());
+            }
+        }
         events.close();
         waiting.close();
     }

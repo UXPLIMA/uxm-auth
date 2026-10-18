@@ -3,6 +3,7 @@ package com.uxplima.auth.adapter.outbound;
 import java.util.List;
 import java.util.Objects;
 
+import com.uxplima.auth.adapter.outbound.geo.GeoSettings;
 import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.Remember;
@@ -21,6 +22,7 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  * @param bans how wrong passwords ban the address they came from
  * @param connections how often one address may connect
  * @param accounts how many password accounts one address may make
+ * @param countries which countries come in, and how the country file is fetched
  */
 public record ProtectionSettings(
         List<String> sharedAddressHosts,
@@ -28,7 +30,8 @@ public record ProtectionSettings(
         Remember.Settings sessions,
         BanSteps bans,
         ConnectionWindow.Settings connections,
-        AccountCap.Settings accounts) {
+        AccountCap.Settings accounts,
+        GeoSettings countries) {
     public ProtectionSettings {
         sharedAddressHosts = List.copyOf(Objects.requireNonNull(sharedAddressHosts, "sharedAddressHosts"));
         sharedAddressSources = List.copyOf(Objects.requireNonNull(sharedAddressSources, "sharedAddressSources"));
@@ -41,6 +44,7 @@ public record ProtectionSettings(
         Objects.requireNonNull(bans, "bans");
         Objects.requireNonNull(connections, "connections");
         Objects.requireNonNull(accounts, "accounts");
+        Objects.requireNonNull(countries, "countries");
     }
 
     /** What the console should say about these settings at every start and reload. */

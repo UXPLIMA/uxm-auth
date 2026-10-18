@@ -484,6 +484,40 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("countries are off by default, and the operator's mode, list, licence and refresh are read")
+    void countriesAreRead(@TempDir Path folder) throws IOException {
+        com.uxplima.auth.adapter.outbound.geo.GeoSettings shipped =
+                settingsFrom(folder, "").protection().countries();
+        assertThat(shipped.rule().mode()).isEqualTo(com.uxplima.auth.application.protection.CountryRule.Mode.OFF);
+        assertThat(shipped.rule().unknownAllowed()).isTrue();
+        assertThat(shipped.licence().present()).isFalse();
+        assertThat(shipped.refresh()).isEqualTo(java.time.Duration.ofDays(7));
+
+        com.uxplima.auth.adapter.outbound.geo.GeoSettings written = settingsFrom(
+                        folder,
+                        "protection { countries { mode = deny, list = [\"ru\", \"CN\"], unknown = deny,"
+                                + " allow-addresses = [\"10.0.0.0/8\"], account-id = \"123\","
+                                + " licence-key = \"abc\", refresh-days = 3 } }\n")
+                .protection()
+                .countries();
+        assertThat(written.rule())
+                .isEqualTo(new com.uxplima.auth.application.protection.CountryRule.Settings(
+                        com.uxplima.auth.application.protection.CountryRule.Mode.DENY,
+                        java.util.Set.of("RU", "CN"),
+                        new com.uxplima.auth.domain.protection.AddressRanges(java.util.List.of("10.0.0.0/8")),
+                        false));
+        assertThat(written.licence())
+                .isEqualTo(new com.uxplima.auth.adapter.outbound.geo.GeoSettings.Licence("123", "abc"));
+        assertThat(written.refresh()).isEqualTo(java.time.Duration.ofDays(3));
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { countries { mode = sometimes } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.countries");
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { countries { unknown = maybe } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.countries.unknown");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())
