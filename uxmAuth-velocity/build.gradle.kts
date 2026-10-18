@@ -32,6 +32,8 @@ dependencies {
     // uxmlib-common only. uxmlib-command builds a Bukkit command tree, and Velocity has a
     // command manager of its own, so the proxy module registers against that instead.
     implementation(libs.uxmlib.common)
+    // The API another plugin compiles against, carried unrelocated so its classes are where that plugin looks.
+    implementation(project(":uxmAuth-api"))
     implementation(libs.configurate.hocon)
 
     testImplementation(libs.velocity.api)
@@ -132,6 +134,7 @@ val requiredJarEntries =
         "com/uxplima/auth/libs/zxing/" to "ZXing is missing, and the second factor's QR code needs it.",
         "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
         "com/uxplima/auth/velocity/bootstrap/" to "The plugin's own classes are missing.",
+        "com/uxplima/auth/api/AuthApi.class" to "The API is missing, or relocated where no other plugin finds it.",
         "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",
         "org/mariadb/jdbc/Driver.class" to "The MariaDB driver is missing, and it opens MySQL and MariaDB.",
         "org/postgresql/Driver.class" to "The PostgreSQL driver is missing.",

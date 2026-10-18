@@ -31,6 +31,8 @@ dependencies {
     implementation(project(":uxmAuth-common"))
     // The login handshake, compiled against the server and touched only on a server that runs it.
     implementation(project(":uxmAuth-handshake"))
+    // The API another plugin compiles against, carried unrelocated so its classes are where that plugin looks.
+    implementation(project(":uxmAuth-api"))
     implementation(libs.bundles.uxmlib)
     // The native forms a Bedrock player reads every screen in. Floodgate itself is never a dependency: the
     // library names it only past its own plugin-present guard.
@@ -210,6 +212,7 @@ val forbiddenJarEntries =
 // list alone cannot see this: a jar that carries nothing passes it.
 val requiredJarEntries =
     listOf(
+        "com/uxplima/auth/api/AuthApi.class" to "The API is missing, or relocated where no other plugin finds it.",
         "com/uxplima/auth/libs/lettuce/" to "Lettuce is missing, and a network's bulletins ride it on Redis.",
         "com/uxplima/auth/libs/maxmind/" to "The MaxMind reader is missing, and the country rule needs it.",
         "com/uxplima/auth/libs/zxing/" to "ZXing is missing, and the second factor's QR code needs it.",

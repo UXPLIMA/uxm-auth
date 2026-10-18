@@ -17,6 +17,7 @@ rootProject.name = "uxmAuth"
 // server that the Paper API cannot reach, the login handshake, so a Minecraft update touches it alone.
 // See docs/adr/0006.
 include(
+    ":uxmAuth-api",
     ":uxmAuth-common",
     ":uxmAuth-handshake",
     ":uxmAuth-paper",
