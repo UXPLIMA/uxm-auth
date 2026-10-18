@@ -58,7 +58,9 @@ import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.AccountInfo;
+import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
+import com.uxplima.auth.application.staff.ForceRegister;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.hash.Hashing;
@@ -115,6 +117,7 @@ import com.uxplima.auth.paper.adapter.inbound.staff.ForcedLogins;
 import com.uxplima.auth.paper.adapter.inbound.staff.RemovedAccounts;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffDesk;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffView;
+import com.uxplima.auth.paper.adapter.inbound.staff.WaitingAccounts;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.adapter.outbound.captcha.CaptchaMap;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
@@ -499,7 +502,25 @@ final class AuthGraph implements AutoCloseable {
                                 () -> settings.current().passwordPolicy(),
                                 breaches,
                                 remembered,
-                                events)),
+                                events),
+                        new ForceRegister(
+                                accounts,
+                                hashing,
+                                () -> settings.current().namePolicy(),
+                                () -> settings.current().passwordPolicy(),
+                                breaches,
+                                clock),
+                        new FactorOff(accounts, factors.factors, mail.emails)),
+                new StaffDesk.Reach(
+                        name -> Optional.ofNullable(plugin.getServer().getPlayerExact(name))
+                                .map(Player::getUniqueId),
+                        new WaitingAccounts(
+                                plugin.getServer()::getPlayerExact,
+                                sessions,
+                                () -> settings.current().passwords().maxAttempts(),
+                                door,
+                                scheduler,
+                                messages)),
                 action -> settings.current().staff().allowsInGame(action));
         this.recover =
                 mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);

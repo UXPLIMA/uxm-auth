@@ -358,6 +358,17 @@ public enum Keys implements MessageKey {
     STAFF_PASSWORD_RACED(
             "staff.password-raced",
             "<etag:'ERROR'> <body>The password of <value><name><body> changed while this one was set. Try again."),
+    STAFF_REGISTERED("staff.registered", "<tag:'AUTH'> <body>An account is made for <value><name><body>."),
+    STAFF_REGISTERED_YOU(
+            "staff.registered-you",
+            "<tag:'AUTH'> <body>Staff made your account. Log in with the password they gave you."),
+    STAFF_NAME_TAKEN("staff.name-taken", "<etag:'ERROR'> <body>An account holds <value><name><body> already."),
+    STAFF_NAME_REFUSED(
+            "staff.name-refused", "<etag:'ERROR'> <body><value><name><body> breaks the name rules of config.conf."),
+    STAFF_FACTOR_OFF(
+            "staff.factor-off",
+            "<tag:'AUTH'> <body>Every second factor of <value><name><body> is off. The next login asks the password only."),
+    STAFF_FACTOR_NONE("staff.factor-none", "<tag:'AUTH'> <body><value><name><body> has no second factor."),
     INFO_HEADER("info.header", "<tag:'AUTH'> <value><name><body>, <value><kind><body>."),
     INFO_KIND_CRACKED("info.kind.cracked", "a password account"),
     INFO_KIND_PREMIUM("info.kind.premium", "a premium account"),

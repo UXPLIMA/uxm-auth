@@ -1,8 +1,11 @@
 package com.uxplima.auth.paper.adapter.inbound.staff;
 
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.bukkit.command.CommandSender;
 
@@ -12,10 +15,13 @@ import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.protection.AddressBans;
+import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
+import com.uxplima.auth.application.staff.ForceRegister;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.application.staff.Unregister;
+import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -29,17 +35,39 @@ import com.uxplima.uxmlib.text.message.Messages;
 public final class StaffDesk implements StaffActions {
 
     /** The use cases staff reach through the desk. */
-    public record Cases(ForceLogin force, AddressBans bans, Unregister unregister, SetPassword setPassword) {
+    public record Cases(
+            ForceLogin force,
+            AddressBans bans,
+            Unregister unregister,
+            SetPassword setPassword,
+            ForceRegister register,
+            FactorOff factorOff) {
         public Cases {
             Objects.requireNonNull(force, "force");
             Objects.requireNonNull(bans, "bans");
             Objects.requireNonNull(unregister, "unregister");
             Objects.requireNonNull(setPassword, "setPassword");
+            Objects.requireNonNull(register, "register");
+            Objects.requireNonNull(factorOff, "factorOff");
+        }
+    }
+
+    /**
+     * What the desk reaches on this server: the player online under a name, and what a made account means to them.
+     *
+     * @param online the id of the player online here under exactly this name, when there is one
+     * @param registered tells a player waiting under a made account's name to log in
+     */
+    public record Reach(Function<String, Optional<UUID>> online, Consumer<Account> registered) {
+        public Reach {
+            Objects.requireNonNull(online, "online");
+            Objects.requireNonNull(registered, "registered");
         }
     }
 
     private final StaffGate gate;
     private final Cases cases;
+    private final Reach reach;
     private final HashingLane lane;
     private final Replies replies;
     private final Messages messages;
@@ -47,9 +75,16 @@ public final class StaffDesk implements StaffActions {
 
     /** @param log where the line each action leaves goes, which is the console */
     public StaffDesk(
-            StaffGate gate, Cases cases, HashingLane lane, Replies replies, Messages messages, Consumer<String> log) {
+            StaffGate gate,
+            Cases cases,
+            Reach reach,
+            HashingLane lane,
+            Replies replies,
+            Messages messages,
+            Consumer<String> log) {
         this.gate = Objects.requireNonNull(gate, "gate");
         this.cases = Objects.requireNonNull(cases, "cases");
+        this.reach = Objects.requireNonNull(reach, "reach");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.replies = Objects.requireNonNull(replies, "replies");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -129,6 +164,50 @@ public final class StaffDesk implements StaffActions {
                 case SetPassword.Outcome.ChangedMeanwhile raced ->
                     messages.send(sender, Keys.STAFF_PASSWORD_RACED, who);
                 case SetPassword.Outcome.Unknown unknown -> messages.send(sender, Keys.STAFF_UNKNOWN, who);
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<Void> forceRegister(CommandSender sender, String name, String password) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(password, "password");
+        if (!gate.allows(Objects.requireNonNull(sender, "sender"), StaffAction.FORCE_REGISTER)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        Password fresh = Password.of(password);
+        Optional<UUID> online = reach.online().apply(name);
+        return replies.on(sender, lane.submit(() -> cases.register().register(name, fresh, online)), outcome -> {
+            TagResolver who = Text.placeholder("name", name);
+            switch (outcome) {
+                case ForceRegister.Outcome.Made made -> {
+                    messages.send(sender, Keys.STAFF_REGISTERED, who);
+                    log.accept(sender.getName() + " made an account for " + name + ".");
+                    reach.registered().accept(made.account());
+                }
+                case ForceRegister.Outcome.Taken taken -> messages.send(sender, Keys.STAFF_NAME_TAKEN, who);
+                case ForceRegister.Outcome.NameRefused refused -> messages.send(sender, Keys.STAFF_NAME_REFUSED, who);
+                case ForceRegister.Outcome.Rejected rejected ->
+                    PasswordWords.reason(messages, sender, rejected.verdict()).ifPresent(sender::sendMessage);
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<Void> disableFactor(CommandSender sender, String name) {
+        Objects.requireNonNull(name, "name");
+        if (!gate.allows(Objects.requireNonNull(sender, "sender"), StaffAction.DISABLE_2FA)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return replies.on(sender, lane.submit(() -> cases.factorOff().off(new PlayerName(name))), off -> {
+            TagResolver who = Text.placeholder("name", name);
+            switch (off) {
+                case OFF -> {
+                    messages.send(sender, Keys.STAFF_FACTOR_OFF, who);
+                    log.accept(sender.getName() + " turned off every second factor of " + name + ".");
+                }
+                case NONE -> messages.send(sender, Keys.STAFF_FACTOR_NONE, who);
+                case UNKNOWN -> messages.send(sender, Keys.STAFF_UNKNOWN, who);
             }
         });
     }

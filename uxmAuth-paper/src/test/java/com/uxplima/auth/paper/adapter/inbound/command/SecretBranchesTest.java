@@ -18,7 +18,7 @@ final class SecretBranchesTest {
     void theWordsAreRead() {
         assertThat(SecretBranches.labels(shipped)).contains("uxmauth", "auth");
         assertThat(SecretBranches.words(shipped))
-                .contains("setpassword", "sifreata")
+                .contains("setpassword", "sifreata", "forceregister", "zorlakayit")
                 .doesNotContain("info", "unregister");
     }
 }

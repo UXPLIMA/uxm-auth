@@ -88,9 +88,9 @@ final class StaffGraph implements AutoCloseable {
     }
 
     /** What staff do to an account, behind the gate the operator set for staff in game. */
-    StaffDesk desk(StaffDesk.Cases cases, Predicate<StaffAction> openInGame) {
+    StaffDesk desk(StaffDesk.Cases cases, StaffDesk.Reach reach, Predicate<StaffAction> openInGame) {
         return new StaffDesk(
-                new StaffGate(openInGame, messages), cases, lane, replies, messages, plugin.getLogger()::info);
+                new StaffGate(openInGame, messages), cases, reach, lane, replies, messages, plugin.getLogger()::info);
     }
 
     /** Reads another account into the window or the form, for the staff player who picked it. */

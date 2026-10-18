@@ -16,7 +16,9 @@ import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.protection.Admission;
+import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
+import com.uxplima.auth.application.staff.ForceRegister;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.application.staff.Unregister;
@@ -81,8 +83,26 @@ final class StaffDeskTest {
                         () -> world.policy,
                         BreachedPasswords.NONE,
                         world.remembered,
-                        events));
-        desk = new StaffDesk(gate, cases, world.lane, world.replies, world.messages, logged::add);
+                        events),
+                new ForceRegister(
+                        world.accounts,
+                        world.hashing,
+                        AuthWorld::shippedNames,
+                        () -> world.policy,
+                        BreachedPasswords.NONE,
+                        world.clock),
+                new FactorOff(world.accounts, world.factors, world.emails));
+        StaffDesk.Reach reach = new StaffDesk.Reach(
+                name -> java.util.Optional.ofNullable(server.getPlayerExact(name))
+                        .map(org.bukkit.entity.Player::getUniqueId),
+                new WaitingAccounts(
+                        server::getPlayerExact,
+                        world.sessions,
+                        () -> AuthWorld.MAX_ATTEMPTS,
+                        world.door,
+                        world.scheduler,
+                        world.messages));
+        desk = new StaffDesk(gate, cases, reach, world.lane, world.replies, world.messages, logged::add);
     }
 
     @AfterEach
@@ -244,5 +264,74 @@ final class StaffDeskTest {
         assertThat(staff.nextComponentMessage())
                 .isEqualTo(world.messages.render(staff, Keys.STAFF_UNKNOWN, Text.placeholder("name", "Nobody")));
         assertThat(logged).isEmpty();
+    }
+
+    @Test
+    @DisplayName("staff make an account for a waiting player: it takes their id, and they log in with its password")
+    void aForcedRegistrationLetsThePlayerLogIn() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.sessions.open(steve.getUniqueId(), new AuthState.Unregistered(new PlayerName("Steve"), false));
+
+        world.scheduler.settle(desk.forceRegister(staff, "Steve", "hunter22"));
+        until(() -> world.sessions.state(steve.getUniqueId()).orElseThrow() instanceof AuthState.Registered);
+
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_REGISTERED, Text.placeholder("name", "Steve")));
+        assertThat(world.accounts
+                        .findByName(new PlayerName("Steve"))
+                        .orElseThrow()
+                        .id())
+                .isEqualTo(steve.getUniqueId());
+        List<Object> told = new ArrayList<>();
+        Object next;
+        while ((next = steve.nextComponentMessage()) != null) {
+            told.add(next);
+        }
+        assertThat(told).contains(world.messages.render(steve, Keys.STAFF_REGISTERED_YOU));
+        assertThat(world.fired).as("the door greets them to log in now").contains(AuthSettings.Moment.JOIN_REGISTERED);
+        assertThat(world.logIn
+                        .run(steve.getUniqueId(), Password.of("hunter22"), "127.0.0.1")
+                        .join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+        assertThat(logged).singleElement().asString().contains("Steve").doesNotContain("hunter22");
+    }
+
+    @Test
+    @DisplayName("a held name and a name the rules refuse make no account, and say why")
+    void aForcedRegistrationRefuses() {
+        world.registered(server.addPlayer("Steve"), "hunter22");
+
+        world.scheduler.settle(desk.forceRegister(staff, "steve", "hunter22"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_NAME_TAKEN, Text.placeholder("name", "steve")));
+        world.scheduler.settle(desk.forceRegister(staff, "no way", "hunter22"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_NAME_REFUSED, Text.placeholder("name", "no way")));
+        assertThat(logged).isEmpty();
+    }
+
+    @Test
+    @DisplayName("turning a second factor off is refused in game unless opened; from the console the app goes")
+    void aFactorIsTurnedOff() {
+        world.registered(server.addPlayer("Steve"), "hunter22");
+        java.util.UUID steve =
+                world.accounts.findByName(new PlayerName("Steve")).orElseThrow().id();
+        world.factors.setApp(steve, new com.uxplima.auth.domain.factor.TotpSecret(new byte[20]));
+
+        world.scheduler.settle(desk.disableFactor(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        staff, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", "disable2fa")));
+        assertThat(world.factors.app(steve)).isPresent();
+
+        opened.add(StaffAction.DISABLE_2FA);
+        world.scheduler.settle(desk.disableFactor(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_FACTOR_OFF, Text.placeholder("name", "Steve")));
+        assertThat(world.factors.app(steve)).isEmpty();
+        world.scheduler.settle(desk.disableFactor(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_FACTOR_NONE, Text.placeholder("name", "Steve")));
+        assertThat(logged).singleElement().asString().contains("Steve");
     }
 }

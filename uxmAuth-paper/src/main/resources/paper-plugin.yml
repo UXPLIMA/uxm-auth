@@ -109,6 +109,12 @@ permissions:
   uxmauth.admin.setpassword:
     description: Set an account's password; from the console only unless staff.in-game opens it
     default: op
+  uxmauth.admin.forceregister:
+    description: Make a password account under a name
+    default: op
+  uxmauth.admin.disable2fa:
+    description: Turn off an account's second factor; from the console only unless staff.in-game opens it
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

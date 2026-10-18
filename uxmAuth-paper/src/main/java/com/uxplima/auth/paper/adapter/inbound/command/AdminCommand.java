@@ -181,6 +181,23 @@ public final class AdminCommand {
         CompletableFuture<Void> unused = actions.setPassword(sender.bukkit(), player, password);
     }
 
+    /** Makes a password account under a name. The password is kept out of the console. */
+    @FromConfig(value = "forceregister", fallbackName = "forceregister", description = "Make an account")
+    @Permission("uxmauth.admin.forceregister")
+    public void forceRegister(
+            Sender sender,
+            @Arg("player") @SuggestUsing(PlayerNames.KEY) String player,
+            @Arg("password") String password) {
+        CompletableFuture<Void> unused = actions.forceRegister(sender.bukkit(), player, password);
+    }
+
+    /** Turns off every second factor of an account, for a player who lost the phone and the backup codes. */
+    @FromConfig(value = "disable2fa", fallbackName = "disable2fa", description = "Turn off an account's second factor")
+    @Permission("uxmauth.admin.disable2fa")
+    public void disableFactor(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = actions.disableFactor(sender.bukkit(), player);
+    }
+
     /** Everything staff read of one account: its dates, logins, factors, address and the other accounts. */
     @FromConfig(value = "info", fallbackName = "info", description = "Read what is known of an account")
     @Permission("uxmauth.admin.info")

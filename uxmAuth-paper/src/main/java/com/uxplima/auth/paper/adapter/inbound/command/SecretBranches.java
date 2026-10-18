@@ -15,7 +15,7 @@ import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 public final class SecretBranches {
 
     /** The keys of the branches whose arguments hold a password. */
-    static final List<String> BRANCHES = List.of("setpassword");
+    static final List<String> BRANCHES = List.of("setpassword", "forceregister");
 
     private SecretBranches() {}
 

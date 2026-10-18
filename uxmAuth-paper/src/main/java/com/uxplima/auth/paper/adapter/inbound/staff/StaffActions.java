@@ -28,6 +28,16 @@ public interface StaffActions {
         public CompletableFuture<Void> setPassword(CommandSender sender, String name, String password) {
             return CompletableFuture.completedFuture(null);
         }
+
+        @Override
+        public CompletableFuture<Void> forceRegister(CommandSender sender, String name, String password) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Void> disableFactor(CommandSender sender, String name) {
+            return CompletableFuture.completedFuture(null);
+        }
     };
 
     /** Lets the waiting player of the account under this name in, on whichever server they wait. */
@@ -41,4 +51,10 @@ public interface StaffActions {
 
     /** Sets the password of the account under this name, and ends its sessions everywhere. */
     CompletableFuture<Void> setPassword(CommandSender sender, String name, String password);
+
+    /** Makes a password account under this name, under the name and password rules. */
+    CompletableFuture<Void> forceRegister(CommandSender sender, String name, String password);
+
+    /** Turns off every second factor of the account under this name. */
+    CompletableFuture<Void> disableFactor(CommandSender sender, String name);
 }
