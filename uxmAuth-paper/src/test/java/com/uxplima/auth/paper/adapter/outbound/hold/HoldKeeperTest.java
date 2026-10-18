@@ -68,7 +68,7 @@ final class HoldKeeperTest {
         keeper.arrive(steve);
 
         assertThat(steve.isOp()).isFalse();
-        assertThat(steve.getAllowFlight()).isFalse();
+        assertThat(steve.isFlying()).isFalse();
         assertThat(store.load(steve.getUniqueId())).isPresent();
 
         held.remove(steve.getUniqueId());
@@ -77,6 +77,25 @@ final class HoldKeeperTest {
         assertThat(steve.isOp()).isTrue();
         assertThat(steve.getAllowFlight()).isTrue();
         assertThat(store.load(steve.getUniqueId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a held player may not fall, so flight is allowed while held: the server never kicks them for"
+            + " floating, they fly nowhere, and their own flight comes back")
+    void heldInTheAirIsNeverKickedForFloating() {
+        PlayerMock steve = joining("Steve");
+        steve.setAllowFlight(false);
+
+        keeper.arrive(steve);
+
+        assertThat(steve.getAllowFlight()).isTrue();
+        assertThat(steve.isFlying()).isFalse();
+        assertThat(steve.getFlySpeed()).isZero();
+
+        held.remove(steve.getUniqueId());
+        keeper.giveBack(steve);
+
+        assertThat(steve.getAllowFlight()).isFalse();
     }
 
     @Test

@@ -167,14 +167,7 @@ public final class HoldKeeper {
             return;
         }
         AuthSettings.Hold switches = hold.get();
-        if (switches.hideStats()) {
-            player.setOp(false);
-            player.setFlying(false);
-            player.setAllowFlight(false);
-            player.setWalkSpeed(STILL);
-            player.setFlySpeed(STILL);
-            player.setGameMode(GameMode.ADVENTURE);
-        }
+        stripStats(player, switches);
         if (switches.hideInventory()) {
             player.getInventory().clear();
         }
@@ -192,6 +185,26 @@ public final class HoldKeeper {
             }
         }
         room.get().ifPresent(target -> move(player, target));
+    }
+
+    /** The stats a held player may not use, and flight that keeps one held in the air from being kicked. */
+    private static void stripStats(Player player, AuthSettings.Hold switches) {
+        if (switches.hideStats()) {
+            player.setOp(false);
+            player.setFlying(false);
+            player.setAllowFlight(false);
+            player.setWalkSpeed(STILL);
+            player.setFlySpeed(STILL);
+            player.setGameMode(GameMode.ADVENTURE);
+        }
+        if (switches.movement()) {
+            // Every move of a held player is cancelled, falling too, and Paper kicks a player who hangs in the
+            // air without flight. Flight is allowed while they wait; with no fly speed and every move cancelled
+            // it carries them nowhere, and their own comes back with the rest.
+            player.setFlying(false);
+            player.setFlySpeed(STILL);
+            player.setAllowFlight(true);
+        }
     }
 
     /**
