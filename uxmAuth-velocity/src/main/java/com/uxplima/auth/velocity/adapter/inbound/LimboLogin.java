@@ -183,6 +183,8 @@ public final class LimboLogin {
                         reader,
                         Keys.REGISTER_NAME_TAKEN,
                         Text.placeholder("name", taken.stored().value())));
+            case RegisterResult.TooManyAccounts tooMany ->
+                new Outcome.Stay(messages.render(reader, Keys.REGISTER_TOO_MANY_ACCOUNTS));
             case RegisterResult.AlreadyRegistered already ->
                 new Outcome.Stay(messages.render(reader, Keys.REGISTER_ALREADY));
             case RegisterResult.Gone gone -> new Outcome.Stay(reminder(reader, id));

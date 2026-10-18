@@ -63,9 +63,13 @@ public final class InMemoryAccounts implements AccountRepository {
     }
 
     @Override
-    public int countRegisteredFrom(String address) {
+    public int countRegisteredFrom(String address, java.time.Instant since) {
+        String key = com.uxplima.auth.domain.protection.AddressKey.of(address);
         return (int) byKey.values().stream()
-                .filter(account -> account.registrationAddress().equals(address))
+                .filter(account -> com.uxplima.auth.domain.protection.AddressKey.of(account.registrationAddress())
+                        .equals(key))
+                .filter(account -> account.kind() == com.uxplima.auth.domain.account.AccountKind.CRACKED)
+                .filter(account -> !account.registeredAt().isBefore(since))
                 .count();
     }
 

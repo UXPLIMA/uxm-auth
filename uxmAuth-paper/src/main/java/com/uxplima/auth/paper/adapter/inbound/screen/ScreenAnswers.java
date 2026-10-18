@@ -240,26 +240,32 @@ public final class ScreenAnswers {
         choose(guest, answer);
         String typed = orEmpty(answer.text(AuthScreens.PASSWORD));
         String repeated = passwords.get().confirmOnRegister() ? orEmpty(answer.text(AuthScreens.CONFIRM)) : typed;
-        return guest.after(registration(guest, Password.of(typed), Password.of(repeated)), result -> {
-            switch (result) {
-                case RegisterResult.Created created -> letIn(guest, AuthSettings.Moment.REGISTERED);
-                case RegisterResult.Mismatch mismatch -> again(reader, messages.render(reader, Keys.REGISTER_MISMATCH));
-                case RegisterResult.Rejected rejected ->
-                    again(
-                            reader,
-                            PasswordWords.reason(messages, reader, rejected.verdict())
-                                    .orElse(null));
-                case RegisterResult.NameTaken taken ->
-                    again(
-                            reader,
-                            messages.render(
-                                    reader,
-                                    Keys.REGISTER_NAME_TAKEN,
-                                    Text.placeholder("name", taken.stored().value())));
-                case RegisterResult.AlreadyRegistered already -> shower.show(reader, screens.login(reader, null));
-                case RegisterResult.Gone gone -> {}
-            }
-        });
+        return guest.after(
+                registration(guest, Password.of(typed), Password.of(repeated)), result -> registered(guest, result));
+    }
+
+    private void registered(Guest guest, RegisterResult result) {
+        Audience reader = guest.audience();
+        switch (result) {
+            case RegisterResult.Created created -> letIn(guest, AuthSettings.Moment.REGISTERED);
+            case RegisterResult.Mismatch mismatch -> again(reader, messages.render(reader, Keys.REGISTER_MISMATCH));
+            case RegisterResult.Rejected rejected ->
+                again(
+                        reader,
+                        PasswordWords.reason(messages, reader, rejected.verdict())
+                                .orElse(null));
+            case RegisterResult.NameTaken taken ->
+                again(
+                        reader,
+                        messages.render(
+                                reader,
+                                Keys.REGISTER_NAME_TAKEN,
+                                Text.placeholder("name", taken.stored().value())));
+            case RegisterResult.TooManyAccounts tooMany ->
+                again(reader, messages.render(reader, Keys.REGISTER_TOO_MANY_ACCOUNTS));
+            case RegisterResult.AlreadyRegistered already -> shower.show(reader, screens.login(reader, null));
+            case RegisterResult.Gone gone -> {}
+        }
     }
 
     private CompletableFuture<LoginResult> attempt(Guest guest, Password password) {

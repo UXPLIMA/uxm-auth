@@ -63,8 +63,7 @@ final class WaitingWorld implements AutoCloseable {
             SqlAccountRepository accounts,
             Messages words,
             ProxySessions network,
-            Remember remember,
-            LogIn.Failures failures) {
+            Guards guards) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
         }
@@ -75,7 +74,7 @@ final class WaitingWorld implements AutoCloseable {
             return;
         }
         try {
-            hold(limboApi.get(), settings, accounts, words, network, remember, failures);
+            hold(limboApi.get(), settings, accounts, words, network, guards);
         } catch (RuntimeException | LinkageError foreign) {
             // A LimboAPI of another major version names its types elsewhere; the proxy starts without the world.
             close();
@@ -92,16 +91,15 @@ final class WaitingWorld implements AutoCloseable {
             SqlAccountRepository accounts,
             Messages words,
             ProxySessions network,
-            Remember remember,
-            LogIn.Failures failures) {
+            Guards guards) {
         Path commands = folder.resolve(COMMANDS);
         Set<String> login = CommandFile.labels(commands, "login");
         Set<String> register = CommandFile.labels(commands, "register");
-        LimboLogin passwords = passwords(settings, accounts, words, new Labels(login, register), failures);
+        LimboLogin passwords = passwords(settings, accounts, words, new Labels(login, register), guards);
         LimboWait wait = new LimboWait(
                 LimboWorld.open(limboApi, folder, settings.current().network(), metas(login, register), logger),
                 network::waitsAtTheProxy,
-                (player, exit) -> visit(passwords, network, remember, player, exit),
+                (player, exit) -> visit(passwords, network, guards.remember(), player, exit),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
@@ -109,15 +107,17 @@ final class WaitingWorld implements AutoCloseable {
         logger.info("Players who must log in wait in the proxy's own world, built with LimboAPI.");
     }
 
+    /**
+     * What guards the waiting world's door: the remembered sessions, where a wrong password counts, and the
+     * limit on the accounts one address makes.
+     */
+    record Guards(Remember remember, LogIn.Failures failures, RegisterAccount.Cap cap) {}
+
     /** The labels of /login and /register, as commands.conf names them. */
     private record Labels(Set<String> login, Set<String> register) {}
 
     private LimboLogin passwords(
-            PluginSettings settings,
-            SqlAccountRepository accounts,
-            Messages words,
-            Labels labels,
-            LogIn.Failures failures) {
+            PluginSettings settings, SqlAccountRepository accounts, Messages words, Labels labels, Guards guards) {
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         HashingLane hashingLane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
@@ -130,14 +130,15 @@ final class WaitingWorld implements AutoCloseable {
                         accounts,
                         () -> settings.current().namePolicy(),
                         () -> settings.current().passwords().maxAttempts()),
-                new LogIn(accounts, hashing, hashingLane, sessions, clock, failures),
+                new LogIn(accounts, hashing, hashingLane, sessions, clock, guards.failures()),
                 new RegisterAccount(
                         accounts,
                         hashing,
                         hashingLane,
                         sessions,
                         () -> settings.current().passwordPolicy(),
-                        clock),
+                        clock,
+                        guards.cap()),
                 sessions,
                 words,
                 labels::login,

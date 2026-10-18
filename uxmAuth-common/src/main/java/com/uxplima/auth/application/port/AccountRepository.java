@@ -41,8 +41,11 @@ public interface AccountRepository {
      */
     boolean replacePassword(UUID id, @Nullable PasswordHash expected, PasswordHash fresh);
 
-    /** How many accounts were registered from this address, for the accounts-per-address limit. */
-    int countRegisteredFrom(String address);
+    /**
+     * How many password accounts were registered from this address since this moment, for the accounts-per-address
+     * limit. An IPv6 address counts with its /64; premium and Bedrock accounts are not counted.
+     */
+    int countRegisteredFrom(String address, Instant since);
 
     /** The premium account that proved this Mojang id, under whatever name it holds now. */
     Optional<Account> findByPremiumId(UUID premiumId);

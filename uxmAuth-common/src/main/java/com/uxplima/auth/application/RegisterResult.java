@@ -33,6 +33,9 @@ public sealed interface RegisterResult {
         }
     }
 
+    /** The address made all the password accounts it may for now. */
+    record TooManyAccounts() implements RegisterResult {}
+
     /** This connection already has an account. */
     record AlreadyRegistered() implements RegisterResult {}
 

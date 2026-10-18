@@ -164,4 +164,15 @@ final class LimboLoginTest {
                         out -> assertThat(plain(out.reason())).contains("5m"));
         assertThat(hosts).containsExactly("127.0.0.1@mc.tcpshield.com");
     }
+
+    @Test
+    @DisplayName("an address past the accounts limit stays and reads why")
+    void aFullAddressStays() throws Exception {
+        LimboLogin login =
+                world.limboLogin(true, (address, host) -> java.util.Optional.empty(), (address, host) -> true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/register hunter22 hunter22"))).contains("Too many accounts");
+        assertThat(world.accounts.findByName(NAME)).isEmpty();
+    }
 }

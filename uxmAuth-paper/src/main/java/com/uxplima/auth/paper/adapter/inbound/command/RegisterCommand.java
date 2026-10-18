@@ -98,6 +98,7 @@ public final class RegisterCommand {
                         player,
                         Keys.REGISTER_NAME_TAKEN,
                         Text.placeholder("name", taken.stored().value()));
+            case RegisterResult.TooManyAccounts tooMany -> messages.send(player, Keys.REGISTER_TOO_MANY_ACCOUNTS);
             case RegisterResult.AlreadyRegistered already -> messages.send(player, Keys.REGISTER_ALREADY);
             case RegisterResult.Gone gone -> {}
         }

@@ -139,11 +139,16 @@ public final class ProxyWorld implements AutoCloseable {
 
     /** The same, with wrong passwords counted against their address here. */
     public LimboLogin limboLogin(boolean asksTwice, LogIn.Failures failures) {
+        return limboLogin(asksTwice, failures, (address, host) -> false);
+    }
+
+    /** The same, with a limit on the accounts one address may make. */
+    public LimboLogin limboLogin(boolean asksTwice, LogIn.Failures failures, RegisterAccount.Cap cap) {
         NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
         return new LimboLogin(
                 new ReadTheName(accounts, () -> names, () -> 3),
                 new LogIn(accounts, hashing, lane, sessions, clock, failures),
-                new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock),
+                new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock, cap),
                 sessions,
                 messages,
                 () -> Set.of("login", "l", "giris"),

@@ -39,6 +39,7 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
@@ -218,8 +219,13 @@ final class AuthGraph implements AutoCloseable {
         Notices notices = new Notices(messages);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);
+        AccountCap cap = new AccountCap(
+                accounts,
+                () -> settings.current().protection().accounts(),
+                () -> settings.current().protection().sharedAddresses(),
+                Instant::now);
         RegisterAccount registering = new RegisterAccount(
-                accounts, hashing, lane, sessions, () -> settings.current().passwordPolicy(), clock);
+                accounts, hashing, lane, sessions, () -> settings.current().passwordPolicy(), clock, cap::full);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
                 registering,

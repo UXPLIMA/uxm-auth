@@ -71,7 +71,7 @@ final class SqlAccountRepositoryTest {
         AccountRepository.Insert second = repository.insert(cracked("notch", "10.0.0.2"));
 
         assertThat(second).isEqualTo(new AccountRepository.NameTaken(new PlayerName("Notch")));
-        assertThat(repository.countRegisteredFrom("10.0.0.2")).isZero();
+        assertThat(repository.countRegisteredFrom("10.0.0.2", Instant.EPOCH)).isZero();
     }
 
     @Test
@@ -100,7 +100,7 @@ final class SqlAccountRepositoryTest {
                     .filteredOn(AccountRepository.NameTaken.class::isInstance)
                     .hasSize(7);
         }
-        assertThat(repository.countRegisteredFrom("10.0.0.9")).isEqualTo(1);
+        assertThat(repository.countRegisteredFrom("10.0.0.9", Instant.EPOCH)).isEqualTo(1);
     }
 
     @Test
@@ -110,9 +110,40 @@ final class SqlAccountRepositoryTest {
         repository.insert(cracked("Steve", "10.0.0.1"));
         repository.insert(cracked("Notch", "10.0.0.2"));
 
-        assertThat(repository.countRegisteredFrom("10.0.0.1")).isEqualTo(2);
-        assertThat(repository.countRegisteredFrom("10.0.0.2")).isEqualTo(1);
-        assertThat(repository.countRegisteredFrom("10.0.0.3")).isZero();
+        assertThat(repository.countRegisteredFrom("10.0.0.1", Instant.EPOCH)).isEqualTo(2);
+        assertThat(repository.countRegisteredFrom("10.0.0.2", Instant.EPOCH)).isEqualTo(1);
+        assertThat(repository.countRegisteredFrom("10.0.0.3", Instant.EPOCH)).isZero();
+    }
+
+    @Test
+    @DisplayName("only password accounts made inside the window count, and an IPv6 home counts by its /64")
+    void countsInsideTheWindowByKindAndPrefix() {
+        repository.insert(cracked("Alex", "10.0.0.1"));
+        repository.insert(withKind(cracked("Notch", "10.0.0.1"), AccountKind.PREMIUM));
+        repository.insert(withKind(cracked("Bedrock", "10.0.0.1"), AccountKind.BEDROCK));
+        repository.insert(cracked("Herobrine", "2001:db8:1:2::1"));
+        repository.insert(cracked("Jeb", "2001:db8:1:2::99"));
+
+        assertThat(repository.countRegisteredFrom("10.0.0.1", REGISTERED)).isEqualTo(1);
+        assertThat(repository.countRegisteredFrom("10.0.0.1", REGISTERED.plusMillis(1)))
+                .isZero();
+        assertThat(repository.countRegisteredFrom("2001:db8:1:2::5", REGISTERED))
+                .isEqualTo(2);
+        assertThat(repository.countRegisteredFrom("2001:db8:1:3::5", REGISTERED))
+                .isZero();
+    }
+
+    private static Account withKind(Account account, AccountKind kind) {
+        return new Account(
+                account.id(),
+                account.name(),
+                kind,
+                kind == AccountKind.PREMIUM ? UUID.randomUUID() : null,
+                account.password(),
+                account.registeredAt(),
+                account.registrationAddress(),
+                null,
+                null);
     }
 
     @Test

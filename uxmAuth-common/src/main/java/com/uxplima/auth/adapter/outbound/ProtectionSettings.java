@@ -3,6 +3,7 @@ package com.uxplima.auth.adapter.outbound;
 import java.util.List;
 import java.util.Objects;
 
+import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.premium.HostPatterns;
@@ -19,13 +20,15 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  * @param sessions for whom remembered sessions are on, and how long one lasts
  * @param bans how wrong passwords ban the address they came from
  * @param connections how often one address may connect
+ * @param accounts how many password accounts one address may make
  */
 public record ProtectionSettings(
         List<String> sharedAddressHosts,
         List<String> sharedAddressSources,
         Remember.Settings sessions,
         BanSteps bans,
-        ConnectionWindow.Settings connections) {
+        ConnectionWindow.Settings connections,
+        AccountCap.Settings accounts) {
     public ProtectionSettings {
         sharedAddressHosts = List.copyOf(Objects.requireNonNull(sharedAddressHosts, "sharedAddressHosts"));
         sharedAddressSources = List.copyOf(Objects.requireNonNull(sharedAddressSources, "sharedAddressSources"));
@@ -37,6 +40,7 @@ public record ProtectionSettings(
         Objects.requireNonNull(sessions, "sessions");
         Objects.requireNonNull(bans, "bans");
         Objects.requireNonNull(connections, "connections");
+        Objects.requireNonNull(accounts, "accounts");
     }
 
     /** What the console should say about these settings at every start and reload. */

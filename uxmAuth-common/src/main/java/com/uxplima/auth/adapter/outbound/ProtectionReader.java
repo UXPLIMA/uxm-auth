@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 
+import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.protection.AddressRanges;
@@ -23,7 +24,19 @@ final class ProtectionReader {
                 list(config, "shared-address-sources"),
                 sessions(config),
                 bans(config),
-                connections(config));
+                connections(config),
+                accounts(config));
+    }
+
+    private static AccountCap.Settings accounts(HoconConfig config) {
+        int perAddress = config.getInt("protection.accounts.per-address", 3);
+        int hours = config.getInt("protection.accounts.window-hours", 24);
+        try {
+            return new AccountCap.Settings(
+                    perAddress, Duration.ofHours(hours), new AddressRanges(list(config, "accounts.exempt-addresses")));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("protection.accounts: " + wrong.getMessage(), wrong);
+        }
     }
 
     private static ConnectionWindow.Settings connections(HoconConfig config) {

@@ -170,6 +170,39 @@ final class RegisterAccountTest {
         assertThat(fixture.accounts.findByName(new PlayerName("Steve"))).isEmpty();
     }
 
+    @Test
+    @DisplayName("an address past the accounts limit is refused before anything is hashed or written")
+    void aFullAddressIsRefused() {
+        UUID connection = fixture.unregistered("Steve");
+        fixture.sessions.open(
+                connection, fixture.sessions.state(connection).orElseThrow(), "visit", "play.example.org");
+        java.util.List<String> asked = new java.util.ArrayList<>();
+        RegisterAccount capped = new RegisterAccount(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                fixture.clock,
+                (address, host) -> {
+                    asked.add(address + "@" + host);
+                    return true;
+                });
+
+        RegisterResult result = capped.run(
+                        connection,
+                        new PlayerName("Steve"),
+                        Password.of("hunter22"),
+                        Password.of("hunter22"),
+                        "10.0.0.7")
+                .join();
+
+        assertThat(result).isInstanceOf(RegisterResult.TooManyAccounts.class);
+        assertThat(asked).containsExactly("10.0.0.7@play.example.org");
+        assertThat(fixture.accounts.writes()).isZero();
+        assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.Unregistered.class);
+    }
+
     private RegisterResult register(UUID connection, String name, String password, String confirm) {
         return useCase()
                 .run(connection, new PlayerName(name), Password.of(password), Password.of(confirm), "10.0.0.7")

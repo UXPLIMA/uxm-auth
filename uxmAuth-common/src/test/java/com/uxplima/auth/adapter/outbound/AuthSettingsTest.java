@@ -484,6 +484,29 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("three password accounts a day per address by default, with exempt addresses")
+    void accountsAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").protection().accounts())
+                .isEqualTo(new com.uxplima.auth.application.protection.AccountCap.Settings(
+                        3,
+                        java.time.Duration.ofHours(24),
+                        new com.uxplima.auth.domain.protection.AddressRanges(java.util.List.of())));
+        assertThat(settingsFrom(
+                                folder,
+                                "protection { accounts { per-address = 1, window-hours = 2,"
+                                        + " exempt-addresses = [\"10.0.0.1\"] } }\n")
+                        .protection()
+                        .accounts())
+                .isEqualTo(new com.uxplima.auth.application.protection.AccountCap.Settings(
+                        1,
+                        java.time.Duration.ofHours(2),
+                        new com.uxplima.auth.domain.protection.AddressRanges(java.util.List.of("10.0.0.1"))));
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { accounts { window-hours = 0 } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.accounts");
+    }
+
+    @Test
     @DisplayName("five connections a minute per address by default, with the exempt addresses read as ranges")
     void connectionsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().connections())

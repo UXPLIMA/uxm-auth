@@ -14,6 +14,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.protection.AddressKey;
 import com.uxplima.uxmlib.storage.StorageException;
 import com.uxplima.uxmlib.storage.sql.Database;
 import org.jspecify.annotations.Nullable;
@@ -22,21 +23,21 @@ import org.jspecify.annotations.Nullable;
 public final class SqlAccountRepository implements AccountRepository {
 
     private static final String COLUMNS = "id, name, name_key, kind, premium_id, password, registered_at,"
-            + " registration_address, last_login_at, last_address, unverified";
+            + " registration_address, last_login_at, last_address, unverified, registration_key";
     private static final String SELECT = "SELECT " + COLUMNS + " FROM uxmauth_account WHERE ";
     private static final String INSERT =
-            "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
             + " premium_id = ?, password = ?, registered_at = ?, registration_address = ?, last_login_at = ?,"
-            + " last_address = ?, unverified = ? WHERE id = ?";
+            + " last_address = ?, unverified = ?, registration_key = ? WHERE id = ?";
     private static final String RECORD_LOGIN =
             "UPDATE uxmauth_account SET last_login_at = ?, last_address = ? WHERE id = ?";
     private static final String REPLACE_PASSWORD =
             "UPDATE uxmauth_account SET password = ? WHERE id = ? AND password = ?";
     private static final String SET_FIRST_PASSWORD =
             "UPDATE uxmauth_account SET password = ? WHERE id = ? AND password IS NULL";
-    private static final String COUNT_FROM =
-            "SELECT COUNT(*) AS registered FROM uxmauth_account WHERE registration_address = ?";
+    private static final String COUNT_FROM = "SELECT COUNT(*) AS registered FROM uxmauth_account"
+            + " WHERE registration_key = ? AND kind = 'CRACKED' AND registered_at >= ?";
 
     private static final String RENAME = "UPDATE uxmauth_account SET name = ?, name_key = ? WHERE id = ?";
     private static final String REMEMBER_RENAME = "INSERT INTO uxmauth_rename (account_id, old_key, old_name,"
@@ -101,7 +102,7 @@ public final class SqlAccountRepository implements AccountRepository {
         Objects.requireNonNull(account, "account");
         database.inTransaction(sql -> sql.update(UPDATE, statement -> {
             bindFields(statement, 1, account);
-            statement.setString(11, account.id().toString());
+            statement.setString(12, account.id().toString());
         }));
     }
 
@@ -133,10 +134,16 @@ public final class SqlAccountRepository implements AccountRepository {
     }
 
     @Override
-    public int countRegisteredFrom(String address) {
-        Objects.requireNonNull(address, "address");
+    public int countRegisteredFrom(String address, Instant since) {
+        String key = AddressKey.of(Objects.requireNonNull(address, "address"));
+        long from = Objects.requireNonNull(since, "since").toEpochMilli();
         return database.transaction(sql -> sql.queryFirst(
-                        COUNT_FROM, statement -> statement.setString(1, address), row -> row.getInt("registered")))
+                        COUNT_FROM,
+                        statement -> {
+                            statement.setString(1, key);
+                            statement.setLong(2, from);
+                        },
+                        row -> row.getInt("registered")))
                 .orElse(0);
     }
 
@@ -258,7 +265,8 @@ public final class SqlAccountRepository implements AccountRepository {
         statement.setString(column++, account.registrationAddress());
         setMillis(statement, column++, account.lastLoginAt());
         setText(statement, column++, account.lastAddress());
-        statement.setInt(column, account.unverified() ? 1 : 0);
+        statement.setInt(column++, account.unverified() ? 1 : 0);
+        statement.setString(column, AddressKey.of(account.registrationAddress()));
     }
 
     private static Account read(ResultSet row) throws SQLException {

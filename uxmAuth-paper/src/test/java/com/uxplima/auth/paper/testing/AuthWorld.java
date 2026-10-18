@@ -34,6 +34,7 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.account.Account;
@@ -122,6 +123,10 @@ public final class AuthWorld implements AutoCloseable {
             10,
             Duration.ofHours(24));
 
+    /** How many password accounts one address may make in this world; a test lowers it. */
+    public AccountCap.Settings accountSettings =
+            new AccountCap.Settings(100, Duration.ofHours(24), new AddressRanges(List.of()));
+
     /** The shared-address hosts of this world; a test sets them. */
     public List<String> sharedHosts = List.of();
 
@@ -183,7 +188,8 @@ public final class AuthWorld implements AutoCloseable {
                     }
                 },
                 remembering);
-        this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
+        AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
+        this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock, cap::full);
         this.bans =
                 new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);

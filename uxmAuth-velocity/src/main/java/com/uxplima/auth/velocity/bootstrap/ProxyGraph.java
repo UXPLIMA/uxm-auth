@@ -29,6 +29,7 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.AccountCap;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
@@ -98,16 +99,26 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
-        Admission admission = new Admission(
+        Admission admission = admission(settings, bans, clock);
+        ProxySessions sessions = listen(
+                door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
+        AccountCap cap = new AccountCap(
+                accounts,
+                () -> settings.current().protection().accounts(),
+                () -> settings.current().protection().sharedAddresses(),
+                clock::instant);
+        waiting.open(settings, accounts, words, sessions, new WaitingWorld.Guards(remember, bans::failed, cap::full));
+        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+    }
+
+    /** The door's rules, in order: a banned address, then too many connections from one. */
+    private static Admission admission(PluginSettings settings, AddressBans bans, Clock clock) {
+        return new Admission(
                 () -> settings.current().protection().sharedAddresses(),
                 List.of(
                         bans.rule(),
                         new ConnectionWindow(
                                 () -> settings.current().protection().connections(), clock::instant)));
-        ProxySessions sessions = listen(
-                door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
-        waiting.open(settings, accounts, words, sessions, remember, bans::failed);
-        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
     private ProxyDoor door(PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {

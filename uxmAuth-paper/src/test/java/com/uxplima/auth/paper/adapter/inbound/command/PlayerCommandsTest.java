@@ -150,6 +150,34 @@ final class PlayerCommandsTest {
     }
 
     @Test
+    @DisplayName("an address past the accounts limit is told so, and no account is made")
+    void aFullAddressCannotRegister() {
+        world.accountSettings = new com.uxplima.auth.application.protection.AccountCap.Settings(
+                1,
+                java.time.Duration.ofHours(24),
+                new com.uxplima.auth.domain.protection.AddressRanges(java.util.List.of()));
+        world.accounts.insert(new com.uxplima.auth.domain.account.Account(
+                java.util.UUID.randomUUID(),
+                new PlayerName("Alex"),
+                com.uxplima.auth.domain.account.AccountKind.CRACKED,
+                null,
+                world.hashing.hash(com.uxplima.auth.domain.password.Password.of("secret99")),
+                world.clock.instant(),
+                steve.getAddress().getAddress().getHostAddress(),
+                null,
+                null));
+        world.unregistered(steve);
+        drain();
+
+        world.scheduler.settle(register(AuthWorld.shippedPasswords()).attempt(steve, "hunter22", "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(world.accounts.findByName(new PlayerName("Steve"))).isEmpty();
+        assertThat(steve.nextComponentMessage())
+                .isEqualTo(world.messages.render(steve, Keys.REGISTER_TOO_MANY_ACCOUNTS));
+    }
+
+    @Test
     @DisplayName("while the confirmation is asked for, one password is not enough")
     void registerAsksForTheConfirmation() {
         world.unregistered(steve);

@@ -975,7 +975,7 @@ final class ConnectionListenerTest {
         }
 
         @Override
-        public int countRegisteredFrom(String address) {
+        public int countRegisteredFrom(String address, java.time.Instant since) {
             throw down();
         }
 

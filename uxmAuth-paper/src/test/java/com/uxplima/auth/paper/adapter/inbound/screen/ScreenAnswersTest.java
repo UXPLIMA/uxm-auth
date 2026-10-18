@@ -114,6 +114,31 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("an address past the accounts limit sees the register screen again with the reason on top")
+    void aFullAddressSeesTheReason() {
+        world.accountSettings = new com.uxplima.auth.application.protection.AccountCap.Settings(
+                1, java.time.Duration.ofHours(24), new com.uxplima.auth.domain.protection.AddressRanges(List.of()));
+        world.accounts.insert(new com.uxplima.auth.domain.account.Account(
+                java.util.UUID.randomUUID(),
+                new com.uxplima.auth.domain.name.PlayerName("Alex"),
+                com.uxplima.auth.domain.account.AccountKind.CRACKED,
+                null,
+                world.hashing.hash(com.uxplima.auth.domain.password.Password.of("secret99")),
+                world.clock.instant(),
+                steve.getAddress().getAddress().getHostAddress(),
+                null,
+                null));
+        world.unregistered(steve);
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(plain(shown.get(0).body().get(0)))
+                .isEqualTo(plain(world.messages.render(steve, Keys.REGISTER_TOO_MANY_ACCOUNTS)));
+    }
+
+    @Test
     @DisplayName("with the rules on, an unticked box is refused before anything is hashed")
     void rulesNeedTheBox() {
         world.unregistered(steve);

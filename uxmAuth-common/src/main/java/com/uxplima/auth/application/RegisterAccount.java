@@ -30,12 +30,19 @@ public final class RegisterAccount {
 
     private static final long NO_OPENING = -1;
 
+    /** Whether an address, through the host the player typed, made all the password accounts it may for now. */
+    @FunctionalInterface
+    public interface Cap {
+        boolean full(String address, String host);
+    }
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
     private final Sessions sessions;
     private final Supplier<PasswordPolicy> policy;
     private final Clock clock;
+    private final Cap cap;
 
     public RegisterAccount(
             AccountRepository accounts,
@@ -44,12 +51,25 @@ public final class RegisterAccount {
             Sessions sessions,
             Supplier<PasswordPolicy> policy,
             Clock clock) {
+        this(accounts, hashing, lane, sessions, policy, clock, (address, host) -> false);
+    }
+
+    /** @param cap whether an address made all the accounts it may, asked on the lane before the hash */
+    public RegisterAccount(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Supplier<PasswordPolicy> policy,
+            Clock clock,
+            Cap cap) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.policy = Objects.requireNonNull(policy, "policy");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.cap = Objects.requireNonNull(cap, "cap");
     }
 
     /** Both passwords are wiped once the answer is known, whatever it is. */
@@ -97,7 +117,10 @@ public final class RegisterAccount {
         }
         long generation = held.generation();
         boolean unverified = unregistered.unverified();
-        return lane.submit(() -> store(connection, generation, name, hashing.hash(password), address, unverified));
+        String host = held.host();
+        return lane.submit(() -> cap.full(address, host)
+                ? new RegisterResult.TooManyAccounts()
+                : store(connection, generation, name, hashing.hash(password), address, unverified));
     }
 
     private RegisterResult store(
