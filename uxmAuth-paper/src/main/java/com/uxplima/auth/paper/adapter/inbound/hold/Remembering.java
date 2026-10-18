@@ -47,6 +47,9 @@ public final class Remembering {
         }
         UUID connection = player.getUniqueId();
         scheduler.async(() -> {
+            if (held.chose()) {
+                remember.choose(in.account().id(), true);
+            }
             remember.loggedIn(in.account().id(), address, held.host());
             // A logout or a password change may have come between the login and this write, and ended the
             // sessions before this one was written: then it goes again.

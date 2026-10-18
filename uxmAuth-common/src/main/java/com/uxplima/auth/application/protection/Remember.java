@@ -63,6 +63,10 @@ public final class Remember {
                 };
         if (wanted && !shared(Objects.requireNonNull(host, "host"))) {
             store.remember(account, address, clock.get().plus(now.lasts()));
+            // A choice of no sessions may have landed between the read above and the write: then it goes again.
+            if (now.mode() == Mode.CHOSEN && !chose(account)) {
+                store.forget(account);
+            }
         }
     }
 

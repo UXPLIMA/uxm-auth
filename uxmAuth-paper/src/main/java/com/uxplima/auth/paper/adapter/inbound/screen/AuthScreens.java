@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -43,6 +44,9 @@ public final class AuthScreens {
     public static final String CONFIRM = "confirm";
     public static final String ACCEPT = "accept";
 
+    /** The "remember me" box, shown while sessions are by the player's choice. */
+    public static final String REMEMBER = "remember";
+
     /** The pad's digits sit three to a row, as on a telephone. */
     static final int PAD_COLUMNS = 3;
 
@@ -53,6 +57,7 @@ public final class AuthScreens {
     private final Messages messages;
     private final Styler styler;
     private final BooleanSupplier claimable;
+    private final BooleanSupplier remembering;
 
     public AuthScreens(
             Supplier<ScreenSettings> screens,
@@ -69,11 +74,23 @@ public final class AuthScreens {
             Messages messages,
             Styler styler,
             BooleanSupplier claimable) {
+        this(screens, passwords, messages, styler, claimable, () -> false);
+    }
+
+    /** @param remembering whether sessions are by the player's choice, which puts "remember me" on the screens */
+    public AuthScreens(
+            Supplier<ScreenSettings> screens,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            Styler styler,
+            BooleanSupplier claimable,
+            BooleanSupplier remembering) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.styler = Objects.requireNonNull(styler, "styler");
         this.claimable = Objects.requireNonNull(claimable, "claimable");
+        this.remembering = Objects.requireNonNull(remembering, "remembering");
     }
 
     /** The register screen, with the reason the last answer was refused as its first line. */
@@ -97,6 +114,7 @@ public final class AuthScreens {
         if (settings.rules().enabled()) {
             inputs.add(new DialogSpec.Toggle(ACCEPT, text(reader, screen.label(ACCEPT))));
         }
+        remember(reader, screen).ifPresent(inputs::add);
         return new DialogSpec(
                 text(reader, screen.title()), body, inputs, buttons(reader, screen, REGISTER), settings.canClose());
     }
@@ -111,12 +129,11 @@ public final class AuthScreens {
         ScreenSettings.Screen screen = settings.login();
         List<Component> body = start(reason);
         screen.body().forEach(line -> body.add(text(reader, line)));
+        List<DialogSpec.Input> inputs = new ArrayList<>();
+        inputs.add(password(reader, screen, PASSWORD));
+        remember(reader, screen).ifPresent(inputs::add);
         return new DialogSpec(
-                text(reader, screen.title()),
-                body,
-                List.of(password(reader, screen, PASSWORD)),
-                loginButtons(reader, screen),
-                settings.canClose());
+                text(reader, screen.title()), body, inputs, loginButtons(reader, screen), settings.canClose());
     }
 
     /**
@@ -139,10 +156,12 @@ public final class AuthScreens {
         Component mask = text(reader, pin.label("mask"));
         Component code = Component.join(JoinConfiguration.noSeparators(), Collections.nCopies(entered, mask));
         body.add(text(reader, pin.label("entered"), Placeholder.component("code", code)));
-        List<DialogSpec.Input> inputs = registering && settings.rules().enabled()
-                ? List.of(new DialogSpec.Toggle(
-                        ACCEPT, text(reader, settings.register().label(ACCEPT))))
-                : List.of();
+        List<DialogSpec.Input> inputs = new ArrayList<>();
+        if (registering && settings.rules().enabled()) {
+            inputs.add(new DialogSpec.Toggle(
+                    ACCEPT, text(reader, settings.register().label(ACCEPT))));
+        }
+        remember(reader, pin).ifPresent(inputs::add);
         return new DialogSpec(
                 text(reader, pin.title()), body, inputs, padButtons(reader, pin), settings.canClose(), PAD_COLUMNS);
     }
@@ -198,6 +217,20 @@ public final class AuthScreens {
         return claimable.getAsBoolean()
                 && !settings.pinPad()
                 && !settings.login().label(CLAIM).isEmpty();
+    }
+
+    /** Whether the screens ask "remember me" now; a tick is honoured only while this holds. */
+    public boolean asksToRemember() {
+        return remembering.getAsBoolean();
+    }
+
+    /** The "remember me" box, while the screens ask it and the operator labels it on this screen. */
+    private Optional<DialogSpec.Input> remember(Audience reader, ScreenSettings.Screen screen) {
+        String label = screen.label(REMEMBER);
+        if (!asksToRemember() || label.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new DialogSpec.Toggle(REMEMBER, text(reader, label)));
     }
 
     /** Log in, "this name is mine" while the screen offers it, and leave. */

@@ -27,6 +27,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.listener.LanguageListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConnectingLocales;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
@@ -233,14 +234,17 @@ final class PluginModule {
                 commands);
         this.auth = graph;
         graph.start();
-        registerIfEnabled(commands, LoginCommand.KEY, "login", graph.login, resolvers, scheduler);
-        registerIfEnabled(commands, RegisterCommand.KEY, "register", graph.register, resolvers, scheduler);
-        registerIfEnabled(
-                commands, ChangePasswordCommand.KEY, "changepassword", graph.changePassword, resolvers, scheduler);
-        registerIfEnabled(commands, LogoutCommand.KEY, "logout", graph.logout, resolvers, scheduler);
-        registerIfEnabled(commands, ClaimCommand.KEY, "claim", graph.claim, resolvers, scheduler);
-        registerIfEnabled(commands, PremiumCommand.KEY, "premium", graph.premium, resolvers, scheduler);
+        registerPlayerCommands(graph, commands, resolvers, scheduler);
 
+        registerAdminCommand(commands, resolvers, scheduler, messages, choices);
+    }
+
+    private void registerAdminCommand(
+            ConfiguredCommands commands,
+            ParamResolvers resolvers,
+            Scheduler scheduler,
+            Messages messages,
+            LanguageChoices choices) {
         if (commands.isEnabled(AdminCommand.KEY, "uxmauth")) {
             AnnotatedCommands.register(
                     plugin,
@@ -254,6 +258,18 @@ final class PluginModule {
                     resolvers,
                     scheduler);
         }
+    }
+
+    private void registerPlayerCommands(
+            AuthGraph graph, ConfiguredCommands commands, ParamResolvers resolvers, Scheduler scheduler) {
+        registerIfEnabled(commands, LoginCommand.KEY, "login", graph.login, resolvers, scheduler);
+        registerIfEnabled(commands, RegisterCommand.KEY, "register", graph.register, resolvers, scheduler);
+        registerIfEnabled(
+                commands, ChangePasswordCommand.KEY, "changepassword", graph.changePassword, resolvers, scheduler);
+        registerIfEnabled(commands, LogoutCommand.KEY, "logout", graph.logout, resolvers, scheduler);
+        registerIfEnabled(commands, ClaimCommand.KEY, "claim", graph.claim, resolvers, scheduler);
+        registerIfEnabled(commands, PremiumCommand.KEY, "premium", graph.premium, resolvers, scheduler);
+        registerIfEnabled(commands, SessionCommand.KEY, "session", graph.session, resolvers, scheduler);
     }
 
     private void registerIfEnabled(

@@ -9,6 +9,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.testing.KeptSessions;
 import org.junit.jupiter.api.DisplayName;
@@ -123,5 +124,49 @@ final class RememberTest {
         plain.loggedIn(STEVE, HOME, "");
 
         assertThat(plain.resumes(STEVE, HOME, "")).isTrue();
+    }
+
+    @Test
+    @DisplayName("a choice of no sessions that lands while a login is written leaves no session behind")
+    void aChoiceMadeDuringTheWriteWins() {
+        kept.choose(STEVE, true);
+        RememberedSessions turnedOffMidway = new RememberedSessions() {
+            @Override
+            public void remember(UUID account, String address, Instant until) {
+                // "/session off" chose no sessions after the choice was read and before this write, and its
+                // forget already ran.
+                kept.choose(account, false);
+                kept.remember(account, address, until);
+            }
+
+            @Override
+            public boolean holds(UUID account, String address, Instant now) {
+                return kept.holds(account, address, now);
+            }
+
+            @Override
+            public void forget(UUID account) {
+                kept.forget(account);
+            }
+
+            @Override
+            public java.util.Optional<Boolean> choice(UUID account) {
+                return kept.choice(account);
+            }
+
+            @Override
+            public void choose(UUID account, boolean remember) {
+                kept.choose(account, remember);
+            }
+        };
+        Remember remember = new Remember(
+                turnedOffMidway,
+                () -> new Remember.Settings(mode, Duration.ofMinutes(60)),
+                () -> new HostPatterns(List.of()),
+                () -> clock.instant());
+
+        remember.loggedIn(STEVE, HOME, PLAY);
+
+        assertThat(remember.resumes(STEVE, HOME, PLAY)).isFalse();
     }
 }

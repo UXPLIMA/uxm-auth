@@ -108,6 +108,7 @@ public final class AuthWorld implements AutoCloseable {
     public final LogOut logOut;
     public final SqlRememberedSessions remembered;
     public final Remember remember;
+    public final Remembering remembering;
     /** The shared-address hosts of this world; a test sets them. */
     public List<String> sharedHosts = List.of();
 
@@ -140,6 +141,7 @@ public final class AuthWorld implements AutoCloseable {
         this.remembered = new SqlRememberedSessions(database, clock);
         this.remember =
                 new Remember(remembered, () -> sessionSettings, () -> new HostPatterns(sharedHosts), clock::instant);
+        this.remembering = new Remembering(remember, sessions, scheduler);
         this.door = new Door(
                 sessions,
                 keeper,
@@ -165,7 +167,7 @@ public final class AuthWorld implements AutoCloseable {
                         reported.add("waiting");
                     }
                 },
-                new Remembering(remember, sessions, scheduler));
+                remembering);
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
         this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
         this.change =

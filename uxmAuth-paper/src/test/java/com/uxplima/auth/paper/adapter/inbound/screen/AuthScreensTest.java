@@ -152,6 +152,77 @@ final class AuthScreensTest {
         assertThat(unlabelled.buttons()).extracting(DialogSpec.Button::action).containsExactly("login", "cancel");
     }
 
+    @Test
+    @DisplayName("while sessions are by choice, login, register and the pad carry a \"remember me\" box")
+    void theScreensAskToRemember() {
+        AuthScreens screens = new AuthScreens(
+                AuthScreensTest::withRemember,
+                () -> passwords(false),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> true);
+
+        assertThat(screens.asksToRemember()).isTrue();
+        assertThat(screens.login(steve, null).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("password", "remember");
+        assertThat(screens.register(steve, null).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("password", "remember");
+        assertThat(screens.pad(steve, null, 0, false, false).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("remember");
+        assertThat(screens.login(steve, null).inputs().get(1)).isInstanceOf(DialogSpec.Toggle.class);
+    }
+
+    @Test
+    @DisplayName("while sessions are not by choice, or the operator left the label empty, there is no box")
+    void noBoxWhileSessionsAreNotChosen() {
+        AuthScreens notChosen = new AuthScreens(
+                AuthScreensTest::withRemember,
+                () -> passwords(false),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> false);
+        AuthScreens unlabelled = new AuthScreens(
+                () -> shipped(false),
+                () -> passwords(false),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> true);
+
+        assertThat(notChosen.asksToRemember()).isFalse();
+        assertThat(notChosen.login(steve, null).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("password");
+        assertThat(notChosen.register(steve, null).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("password");
+        assertThat(notChosen.pad(steve, null, 0, false, false).inputs()).isEmpty();
+        assertThat(unlabelled.login(steve, null).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("password");
+        assertThat(unlabelled.register(steve, null).inputs())
+                .extracting(DialogSpec.Input::key)
+                .containsExactly("password");
+    }
+
+    private static ScreenSettings withRemember() {
+        ScreenSettings settings = shipped(false);
+        return new ScreenSettings(
+                settings.waitingRoom(),
+                settings.cancel(),
+                settings.canClose(),
+                settings.pinPad(),
+                settings.rules(),
+                screen("register", "password", "confirm", "accept", "remember", "submit", "cancel"),
+                screen("login", "password", "remember", "submit", "cancel"),
+                screen("pin", "erase", "enter", "remember", "cancel"));
+    }
+
     private static ScreenSettings withClaim(ScreenSettings settings) {
         return new ScreenSettings(
                 settings.waitingRoom(),

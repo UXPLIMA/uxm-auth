@@ -209,6 +209,61 @@ final class ScreenAnswersTest {
         assertThat(world.isAuthenticated(steve)).isFalse();
     }
 
+    @Test
+    @DisplayName("a ticked \"remember me\" box stores the choice and remembers the login from this address")
+    void aTickedBoxRemembers() {
+        world.registered(steve, "hunter22");
+        asksToRemember = true;
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"), AuthScreens.REMEMBER)));
+        world.scheduler.drain();
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+        assertThat(world.remember.chose(steve.getUniqueId())).isTrue();
+        assertThat(world.remembered.holds(steve.getUniqueId(), address(), world.clock.instant()))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("an unticked box, a wrong password, or a box the screen never offered, remember nobody")
+    void onlyAnOfferedTickedBoxOnARightPasswordRemembers() {
+        world.registered(steve, "hunter22");
+        asksToRemember = true;
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "nope1234"), AuthScreens.REMEMBER)));
+        world.scheduler.drain();
+        assertThat(world.remember.chose(steve.getUniqueId())).isFalse();
+
+        asksToRemember = false;
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"), AuthScreens.REMEMBER)));
+        world.scheduler.drain();
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+        assertThat(world.remember.chose(steve.getUniqueId())).isFalse();
+        assertThat(world.remembered.holds(steve.getUniqueId(), address(), world.clock.instant()))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("an unticked box on a registration stores no choice")
+    void anUntickedRegistrationRemembersNobody() {
+        world.unregistered(steve);
+        asksToRemember = true;
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+        world.scheduler.drain();
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+        assertThat(world.remember.chose(steve.getUniqueId())).isFalse();
+    }
+
+    private String address() {
+        return steve.getAddress().getAddress().getHostAddress();
+    }
+
     private ScreenSettings withCancel(ScreenSettings.Cancel cancel) {
         return new ScreenSettings(
                 settings.waitingRoom(),
@@ -224,10 +279,16 @@ final class ScreenAnswersTest {
     private final List<String> claimed = new java.util.ArrayList<>();
     private ClaimName.Result claimResult = ClaimName.Result.ASKED;
     private boolean claimable = true;
+    private boolean asksToRemember;
 
     private ScreenAnswers answers() {
         AuthScreens screens = new AuthScreens(
-                () -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()), () -> claimable);
+                () -> settings,
+                () -> world.passwords,
+                world.messages,
+                new Styler(Theme.defaults()),
+                () -> claimable,
+                () -> asksToRemember);
         ScreenShower shower = new ScreenShower() {
             @Override
             public void show(Audience who, DialogSpec spec) {
@@ -251,14 +312,16 @@ final class ScreenAnswersTest {
                 (id, address) -> {
                     claimed.add(id + "@" + address);
                     return claimResult;
-                });
+                },
+                world.sessions::chose);
     }
 
     private Guest guest() {
         return new PlayerGuest(steve, world.openingOf(steve), world.door, world.moments, world.replies);
     }
 
-    private static ScreenAnswers.Answer answer(Map<String, String> texts) {
+    private static ScreenAnswers.Answer answer(Map<String, String> texts, String... ticked) {
+        List<String> boxes = List.of(ticked);
         return new ScreenAnswers.Answer() {
             @Override
             public @Nullable String text(String key) {
@@ -267,7 +330,7 @@ final class ScreenAnswersTest {
 
             @Override
             public boolean ticked(String key) {
-                return false;
+                return boxes.contains(key);
             }
         };
     }

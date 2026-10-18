@@ -16,6 +16,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.annotations.Command;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
@@ -75,7 +76,8 @@ final class LocalizedCommandWordsTest {
                 ChangePasswordCommand.class,
                 LogoutCommand.class,
                 ClaimCommand.class,
-                PremiumCommand.class
+                PremiumCommand.class,
+                SessionCommand.class
             })
     @DisplayName("a word for one language reaches every player command too")
     void everyPlayerCommandTakesAWordForOneLanguage(Class<?> handler, @TempDir Path folder) throws IOException {

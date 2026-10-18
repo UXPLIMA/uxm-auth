@@ -50,7 +50,14 @@ public final class ScreenAnswers {
     private final ScreenShower shower;
     private final Predicate<UUID> registering;
     private final Claims claims;
+    private final Choices choices;
     private final PinPad pad = new PinPad();
+
+    /** What the player ticked in the "remember me" box, kept with the session of this connection. */
+    @FunctionalInterface
+    public interface Choices {
+        void chose(UUID connection, boolean remember);
+    }
 
     /** "This name is mine" for the connection with this id, made from this address. */
     @FunctionalInterface
@@ -91,6 +98,21 @@ public final class ScreenAnswers {
             ScreenShower shower,
             Predicate<UUID> registering,
             Claims claims) {
+        this(screens, register, logIn, settings, passwords, messages, shower, registering, claims, (id, chose) -> {});
+    }
+
+    /** @param choices where a tick of "remember me" is kept until the login it came with is written */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -100,6 +122,7 @@ public final class ScreenAnswers {
         this.shower = Objects.requireNonNull(shower, "shower");
         this.registering = Objects.requireNonNull(registering, "registering");
         this.claims = Objects.requireNonNull(claims, "claims");
+        this.choices = Objects.requireNonNull(choices, "choices");
     }
 
     /** The pad's digits, for whoever ends a connection to drop them. */
@@ -171,13 +194,10 @@ public final class ScreenAnswers {
     }
 
     private CompletableFuture<Void> login(Guest guest, Answer answer) {
+        choose(guest, answer);
         String typed = orEmpty(answer.text(AuthScreens.PASSWORD));
         Audience reader = guest.audience();
-        Password password = Password.of(typed);
-        CompletableFuture<LoginResult> work = guest.opening().isPresent()
-                ? logIn.run(guest.id(), guest.opening().getAsLong(), password, guest.address())
-                : logIn.run(guest.id(), password, guest.address());
-        return guest.after(work, result -> {
+        return guest.after(attempt(guest, Password.of(typed)), result -> {
             switch (result) {
                 case LoginResult.LoggedIn loggedIn -> letIn(guest, AuthSettings.Moment.LOGGED_IN);
                 case LoginResult.Wrong wrong -> {
@@ -208,6 +228,7 @@ public final class ScreenAnswers {
             again(reader, messages.render(reader, Keys.REGISTER_RULES_NEEDED));
             return CompletableFuture.completedFuture(null);
         }
+        choose(guest, answer);
         String typed = orEmpty(answer.text(AuthScreens.PASSWORD));
         String repeated = passwords.get().confirmOnRegister() ? orEmpty(answer.text(AuthScreens.CONFIRM)) : typed;
         return guest.after(registration(guest, Password.of(typed), Password.of(repeated)), result -> {
@@ -230,6 +251,12 @@ public final class ScreenAnswers {
                 case RegisterResult.Gone gone -> {}
             }
         });
+    }
+
+    private CompletableFuture<LoginResult> attempt(Guest guest, Password password) {
+        return guest.opening().isPresent()
+                ? logIn.run(guest.id(), guest.opening().getAsLong(), password, guest.address())
+                : logIn.run(guest.id(), password, guest.address());
     }
 
     private CompletableFuture<RegisterResult> registration(Guest guest, Password typed, Password repeated) {
@@ -267,6 +294,14 @@ public final class ScreenAnswers {
             }
         }
         return CompletableFuture.completedFuture(null);
+    }
+
+    /**
+     * Every press says again what the box holds, so a tick on an earlier press does not outlive it. A tick counts
+     * only while the screens ask it; a client cannot choose through a box it was not shown.
+     */
+    private void choose(Guest guest, Answer answer) {
+        choices.chose(guest.id(), screens.asksToRemember() && answer.ticked(AuthScreens.REMEMBER));
     }
 
     private void again(Audience reader, @Nullable Component reason) {

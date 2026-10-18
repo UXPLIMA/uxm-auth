@@ -53,6 +53,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.PlayerCommandLabels;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
+import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
@@ -118,6 +119,7 @@ final class AuthGraph implements AutoCloseable {
     final LogoutCommand logout;
     final ClaimCommand claim;
     final PremiumCommand premium;
+    final SessionCommand session;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
     private final LoginWorld loginWorld;
@@ -192,7 +194,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwords(),
                 messages,
                 styler,
-                () -> hellos.installed() && claims.takesClaims());
+                () -> hellos.installed() && claims.takesClaims(),
+                () -> settings.current().protection().sessions().mode() == Remember.Mode.CHOSEN);
         this.bedrock = BedrockLink.on(plugin.getServer(), plugin.getLogger());
         // A form's answer goes where a dialog's does; the listener that takes them is built further down.
         AtomicReference<FormAnswers> formAnswers = new AtomicReference<>((player, action, answer) -> {});
@@ -218,7 +221,8 @@ final class AuthGraph implements AutoCloseable {
                 messages,
                 shower,
                 id -> sessions.state(id).orElse(null) instanceof AuthState.Unregistered,
-                claims::claim);
+                claims::claim,
+                sessions::chose);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
@@ -232,6 +236,7 @@ final class AuthGraph implements AutoCloseable {
                 new PermissionDefaults(plugin.getServer().getPluginManager()),
                 welcomes,
                 plugin.getLogger());
+        Remembering remembering = new Remembering(remember, sessions, scheduler);
         Door door = new Door(
                 sessions,
                 keeper,
@@ -248,7 +253,7 @@ final class AuthGraph implements AutoCloseable {
                 welcomes,
                 notices,
                 channelReports,
-                new Remembering(remember, sessions, scheduler));
+                remembering);
 
         this.connections = new ConnectionListener(
                 scheduler,
@@ -317,6 +322,13 @@ final class AuthGraph implements AutoCloseable {
                 new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
+        this.session = new SessionCommand(
+                remember,
+                remembering,
+                sessions,
+                () -> settings.current().protection().sessions(),
+                scheduler,
+                messages);
         this.screenClicks = new ScreenClickListener(
                 answers, player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies), scheduler);
         formAnswers.set(screenClicks);

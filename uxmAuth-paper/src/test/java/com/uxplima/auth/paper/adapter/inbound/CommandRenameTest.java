@@ -22,6 +22,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.auth.paper.testing.DirectScheduler;
 import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
@@ -101,6 +102,7 @@ final class CommandRenameTest {
                   logout         { name = "leave" }
                   claim          { name = "mine" }
                   premium        { name = "paid" }
+                  session        { name = "stay" }
                 }
                 """, StandardCharsets.UTF_8);
         ParamResolvers resolvers = ParamResolvers.withDefaults()
@@ -139,6 +141,16 @@ final class CommandRenameTest {
                     .isEqualTo("mine");
             assertThat(label(new PremiumCommand(claim, () -> true, world.sessions, world.messages), resolvers))
                     .isEqualTo("paid");
+            assertThat(label(
+                            new SessionCommand(
+                                    world.remember,
+                                    world.remembering,
+                                    world.sessions,
+                                    () -> world.sessionSettings,
+                                    world.scheduler,
+                                    world.messages),
+                            resolvers))
+                    .isEqualTo("stay");
         } finally {
             MockBukkit.unmock();
         }

@@ -15,9 +15,9 @@ public final class ScreenFile {
 
     /** The fields and buttons each screen labels, in the order a screen draws them. */
     private static final Map<String, List<String>> LABELS = Map.of(
-            "register", List.of("password", "confirm", "accept", "submit", "cancel"),
-            "login", List.of("password", "submit", "claim", "cancel"),
-            "pin", List.of("erase", "enter", "cancel", "entered", "repeat", "mask"));
+            "register", List.of("password", "confirm", "accept", "remember", "submit", "cancel"),
+            "login", List.of("password", "remember", "submit", "claim", "cancel"),
+            "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"));
 
     private final Path file;
     private volatile ScreenSettings current;

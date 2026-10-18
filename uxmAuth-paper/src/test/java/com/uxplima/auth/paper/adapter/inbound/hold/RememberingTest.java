@@ -134,6 +134,28 @@ final class RememberingTest {
                 .isFalse();
     }
 
+    @Test
+    @DisplayName(
+            "while sessions are by choice, a login whose screen ticked the box stores the choice and is remembered")
+    void aLoginThatChoseIsRemembered() {
+        world.sessionSettings = new Remember.Settings(Remember.Mode.CHOSEN, java.time.Duration.ofMinutes(60));
+        world.registered(steve, "hunter22");
+        world.logIn.run(steve.getUniqueId(), Password.of("hunter22"), address()).join();
+
+        world.door.open(steve, AuthSettings.Moment.LOGGED_IN);
+        world.scheduler.drain();
+        assertThat(world.remember.chose(account())).isFalse();
+        assertThat(world.remembered.holds(account(), address(), world.clock.instant()))
+                .isFalse();
+
+        world.sessions.chose(steve.getUniqueId(), true);
+        world.door.open(steve, AuthSettings.Moment.LOGGED_IN);
+        world.scheduler.drain();
+        assertThat(world.remember.chose(account())).isTrue();
+        assertThat(world.remembered.holds(account(), address(), world.clock.instant()))
+                .isTrue();
+    }
+
     private com.uxplima.auth.domain.state.AuthState.Authenticated authenticated() {
         return (com.uxplima.auth.domain.state.AuthState.Authenticated)
                 world.sessions.state(steve.getUniqueId()).orElseThrow();

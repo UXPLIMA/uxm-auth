@@ -44,6 +44,7 @@ final class BedrockFormsTest {
     private final Forms forms = new Forms();
     private final List<String> answered = new ArrayList<>();
     private final List<@Nullable String> passwords = new ArrayList<>();
+    private final List<Boolean> ticked = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -73,6 +74,29 @@ final class BedrockFormsTest {
 
         assertThat(answered).containsExactly(AuthScreens.LOGIN);
         assertThat(passwords).containsExactly("hunter22");
+    }
+
+    @Test
+    @DisplayName("while sessions are by choice, the login form has a \"remember me\" toggle and its tick comes back")
+    void theLoginFormCarriesTheRememberToggle() {
+        AuthScreens asking = new AuthScreens(
+                () -> settings,
+                () -> world.passwords,
+                world.messages,
+                new Styler(Theme.defaults()),
+                () -> false,
+                () -> true);
+        bedrockForms().show(steve, asking.login(steve, null));
+
+        assertThat(forms.widgets).hasSize(2);
+        assertThat(forms.widgets.get(1))
+                .isInstanceOfSatisfying(
+                        BedrockWidget.Toggle.class,
+                        toggle -> assertThat(toggle.name()).isEqualTo(AuthScreens.REMEMBER));
+        forms.submit.accept(Map.of(AuthScreens.PASSWORD, "hunter22", AuthScreens.REMEMBER, "true"));
+
+        assertThat(answered).containsExactly(AuthScreens.LOGIN);
+        assertThat(ticked).containsExactly(true);
     }
 
     @Test
@@ -133,6 +157,7 @@ final class BedrockFormsTest {
         return new BedrockForms(forms, (player, action, answer) -> {
             answered.add(action);
             passwords.add(answer.text(AuthScreens.PASSWORD));
+            ticked.add(answer.ticked(AuthScreens.REMEMBER));
         });
     }
 

@@ -26,13 +26,18 @@ public final class Sessions {
     /**
      * A connection's state, which opening of that connection it belongs to, the visit it came as (the nonce of
      * the proxy's claim on a network, or a random id a server gave it, so a bulletin can name this session), and
-     * the host the player typed, empty when nobody knows it.
+     * the host the player typed, empty when nobody knows it, and whether the player ticked "remember me" on a
+     * screen of this opening.
      */
-    public record Held(long generation, AuthState state, String visit, String host) {
+    public record Held(long generation, AuthState state, String visit, String host, boolean chose) {
         public Held {
             Objects.requireNonNull(state, "state");
             Objects.requireNonNull(visit, "visit");
             Objects.requireNonNull(host, "host");
+        }
+
+        private Held changed(AuthState next) {
+            return new Held(generation, next, visit, host, chose);
         }
     }
 
@@ -55,7 +60,8 @@ public final class Sessions {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(visit, "visit");
         Objects.requireNonNull(host, "host");
-        states.compute(connection, (key, previous) -> new Held(generations.incrementAndGet(), state, visit, host));
+        states.compute(
+                connection, (key, previous) -> new Held(generations.incrementAndGet(), state, visit, host, false));
     }
 
     public Optional<AuthState> state(UUID connection) {
@@ -92,10 +98,8 @@ public final class Sessions {
     public Optional<AuthState> update(UUID connection, UnaryOperator<AuthState> change) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(change, "change");
-        Held after = states.computeIfPresent(
-                connection,
-                (key, current) ->
-                        new Held(current.generation(), change.apply(current.state()), current.visit(), current.host()));
+        Held after =
+                states.computeIfPresent(connection, (key, current) -> current.changed(change.apply(current.state())));
         return Optional.ofNullable(after).map(Held::state);
     }
 
@@ -112,8 +116,17 @@ public final class Sessions {
                 return current;
             }
             same.set(true);
-            return new Held(generation, change.apply(current.state()), current.visit(), current.host());
+            return current.changed(change.apply(current.state()));
         });
         return same.get() && after != null ? Optional.of(after.state()) : Optional.empty();
+    }
+
+    /** The player ticked "remember me", or left it empty, on a screen of the opening held now. */
+    public void chose(UUID connection, boolean remember) {
+        Objects.requireNonNull(connection, "connection");
+        states.computeIfPresent(
+                connection,
+                (key, current) ->
+                        new Held(current.generation(), current.state(), current.visit(), current.host(), remember));
     }
 }

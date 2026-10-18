@@ -45,4 +45,29 @@ final class SessionsTest {
         sessions.update(id, state -> state);
         assertThat(sessions.held(id).orElseThrow().visit()).isEqualTo("from-the-proxy");
     }
+
+    @Test
+    @DisplayName("a choice to be remembered is kept through a change of state and not by the next opening")
+    void aChoiceToBeRememberedBelongsToTheOpening() {
+        Sessions sessions = new Sessions();
+        UUID id = UUID.randomUUID();
+        sessions.open(id, new AuthState.Unregistered(new PlayerName("Steve")));
+        assertThat(sessions.held(id).orElseThrow().chose()).isFalse();
+
+        sessions.chose(id, true);
+        sessions.update(id, state -> state);
+        long generation = sessions.held(id).orElseThrow().generation();
+        sessions.update(id, generation, state -> state);
+        assertThat(sessions.held(id).orElseThrow().chose()).isTrue();
+
+        sessions.chose(id, false);
+        assertThat(sessions.held(id).orElseThrow().chose()).isFalse();
+
+        sessions.chose(id, true);
+        sessions.open(id, new AuthState.Unregistered(new PlayerName("Steve")));
+        assertThat(sessions.held(id).orElseThrow().chose()).isFalse();
+
+        sessions.chose(UUID.randomUUID(), true);
+        assertThat(sessions.held(UUID.randomUUID())).isEmpty();
+    }
 }

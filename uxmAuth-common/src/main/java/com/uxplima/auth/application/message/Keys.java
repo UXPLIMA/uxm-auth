@@ -182,6 +182,18 @@ public enum Keys implements MessageKey {
     CHANGE_NOT_LOGGED_IN("change.not-logged-in", "<etag:'ERROR'> <body>Log in first."),
     CHANGE_NEEDS_BOTH("change.needs-both", "<etag:'ERROR'> <body>Write the old password, then the new one."),
 
+    SESSION_USAGE(
+            "session.usage",
+            "<body>Use <value>/session on<body> to skip the password from this address next time, or"
+                    + " <value>/session off<body> to be asked at every join."),
+    SESSION_ON(
+            "session.on",
+            "<good>From this address you skip the password for <value><minutes><good> minutes after each login."),
+    SESSION_OFF("session.off", "<good>You will be asked your password at every join."),
+    SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
+    SESSION_NOT_CHOSEN(
+            "session.not-chosen",
+            "<etag:'ERROR'> <body>This server decides sessions for everyone, so there is nothing to choose."),
     LOGOUT_NOT_LOGGED_IN("logout.not-logged-in", "<etag:'ERROR'> <body>You are not logged in."),
     LOGOUT_SESSIONS_ENDED(
             "logout.sessions-ended",
@@ -212,11 +224,13 @@ public enum Keys implements MessageKey {
     SCREEN_REGISTER_PASSWORD("screen.register.password", "Password"),
     SCREEN_REGISTER_CONFIRM("screen.register.confirm", "The same password again"),
     SCREEN_REGISTER_ACCEPT("screen.register.accept", "I have read the rules and accept them"),
+    SCREEN_REGISTER_REMEMBER("screen.register.remember", "Remember me on this address"),
     SCREEN_REGISTER_SUBMIT("screen.register.submit", "Register"),
     SCREEN_REGISTER_CANCEL("screen.register.cancel", "Leave"),
     SCREEN_LOGIN_TITLE("screen.login.title", "<value>Welcome back"),
     SCREEN_LOGIN_BODY("screen.login.body", "<body>Type your password to come in."),
     SCREEN_LOGIN_PASSWORD("screen.login.password", "Password"),
+    SCREEN_LOGIN_REMEMBER("screen.login.remember", "Remember me on this address"),
     SCREEN_LOGIN_SUBMIT("screen.login.submit", "Log in"),
     SCREEN_LOGIN_CLAIM("screen.login.claim", "This name is mine"),
     SCREEN_LOGIN_CANCEL("screen.login.cancel", "Leave"),
@@ -224,6 +238,7 @@ public enum Keys implements MessageKey {
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),
     SCREEN_PIN_ENTER("screen.pin.enter", "Enter"),
+    SCREEN_PIN_REMEMBER("screen.pin.remember", "Remember me on this address"),
     SCREEN_PIN_CANCEL("screen.pin.cancel", "Leave"),
     SCREEN_PIN_ENTERED("screen.pin.entered", "<body>Code: <value><code>"),
     SCREEN_PIN_REPEAT("screen.pin.repeat", "<body>Press the same code once more to confirm it."),
