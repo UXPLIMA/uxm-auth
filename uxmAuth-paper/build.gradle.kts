@@ -72,8 +72,40 @@ tasks.processResources {
     }
 }
 
+// Lettuce carries the bulletins on Redis, and brings Netty and Reactor. The server ships a Netty of its own, at a
+// version it chose, so ours must carry our namespace. The handshake, though, reaches into the server's own Netty
+// pipeline and must keep naming io.netty. One relocation of io.netty in the plugin jar would rewrite both, so Lettuce
+// and what it brings are relocated here first, in a jar of their own, and the plugin jar takes that jar whole.
+val redisRuntime: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    redisRuntime(libs.lettuce.core)
+}
+
+val redisLibraries =
+    tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("redisLibraries") {
+        description = "Lettuce, Netty and Reactor, relocated into the plugin's namespace before the plugin jar takes them."
+        archiveClassifier.set("redis")
+        configurations = listOf(redisRuntime)
+        mergeServiceFiles()
+        relocate("io.lettuce", "com.uxplima.auth.libs.lettuce")
+        relocate("io.netty", "com.uxplima.auth.libs.netty")
+        relocate("reactor", "com.uxplima.auth.libs.reactor")
+        relocate("org.reactivestreams", "com.uxplima.auth.libs.reactivestreams")
+        relocate("redis.clients.authentication", "com.uxplima.auth.libs.redisauth")
+        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC")
+        dependencies {
+            exclude(dependency("org.slf4j:.*:.*"))
+        }
+    }
+
 tasks.shadowJar {
     archiveClassifier.set("")
+    dependsOn(redisLibraries)
+    from(redisLibraries.flatMap { libraries -> libraries.archiveFile }.map { file -> zipTree(file) })
 
     // The handshake module is compiled against the server in Mojang's names, which is what Paper runs, so the
     // jar asks Paper not to remap it.
@@ -101,13 +133,10 @@ tasks.shadowJar {
     // BouncyCastle hashes the passwords. It ships as a signed jar, and a signature that names classes we
     // relocated no longer verifies, so the JVM would refuse the jar: the signature files stay out.
     relocate("org.bouncycastle", "com.uxplima.auth.libs.bouncycastle")
-    // Lettuce carries the bulletins on Redis, and brings Netty and Reactor. The server ships a Netty of its own, at a
-    // version it chose; relocating ours keeps the two from ever meeting.
+    // Lettuce arrives relocated already, from redisLibraries above. Our own classes and uxmLib's still name it
+    // as io.lettuce, so that name moves to where it now lives. io.netty is not relocated here: the handshake
+    // means the server's.
     relocate("io.lettuce", "com.uxplima.auth.libs.lettuce")
-    relocate("io.netty", "com.uxplima.auth.libs.netty")
-    relocate("reactor", "com.uxplima.auth.libs.reactor")
-    relocate("org.reactivestreams", "com.uxplima.auth.libs.reactivestreams")
-    relocate("redis.clients.authentication", "com.uxplima.auth.libs.redisauth")
     // uxmlib-storage pools connections with HikariCP and caches with Caffeine. Another plugin may ship either, at
     // another version, so ours carry our namespace. The JDBC drivers stay where they are: they are found by name.
     relocate("com.zaxxer.hikari", "com.uxplima.auth.libs.hikari")
@@ -125,6 +154,12 @@ tasks.shadowJar {
         exclude(dependency("com.google.errorprone:.*:.*"))
         exclude(dependency("org.checkerframework:.*:.*"))
         exclude(dependency("org.jspecify:.*:.*"))
+        // These come in relocated from redisLibraries; the copies under their own names stay out.
+        exclude(dependency("io.lettuce:.*:.*"))
+        exclude(dependency("io.netty:.*:.*"))
+        exclude(dependency("io.projectreactor:.*:.*"))
+        exclude(dependency("org.reactivestreams:.*:.*"))
+        exclude(dependency("redis.clients.authentication:.*:.*"))
     }
 
     // minimize() is deliberately not enabled. uxmLib reaches Brigadier, the registries
@@ -225,8 +260,39 @@ val verifyJar =
             if (missing.isNotEmpty()) {
                 throw GradleException("The jar is missing packages it must carry:\n" + missing.joinToString("\n"))
             }
+            serverNetty(jar.get().asFile)
         }
     }
+
+// The handshake reaches into the server's own Netty pipeline, so its classes must name the server's io.netty. The
+// relocation that keeps Lettuce's Netty apart once rewrote them too, and the server then refused the handshake's
+// channel listener at every connection with an AbstractMethodError.
+fun serverNetty(jar: java.io.File) {
+    val relocated = mutableListOf<String>()
+    var server = 0
+    ZipFile(jar).use { archive ->
+        val entries = archive.entries()
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            if (!entry.name.startsWith("com/uxplima/auth/handshake/") || !entry.name.endsWith(".class")) {
+                continue
+            }
+            val bytes = archive.getInputStream(entry).use { it.readBytes() }.toString(Charsets.ISO_8859_1)
+            if (bytes.contains("com/uxplima/auth/libs/netty/")) {
+                relocated.add("  " + entry.name)
+            }
+            if (bytes.contains("io/netty/channel/")) {
+                server++
+            }
+        }
+    }
+    if (relocated.isNotEmpty() || server == 0) {
+        throw GradleException(
+            "The handshake must speak the server's Netty, io.netty, but these classes name the relocated copy:\n" +
+                relocated.joinToString("\n"),
+        )
+    }
+}
 
 tasks.check { dependsOn(verifyJar) }
 
