@@ -127,6 +127,9 @@ permissions:
   uxmauth.admin.alerts:
     description: Hear failed logins, bans, addresses many accounts use and what staff did, as they happen
     default: op
+  uxmauth.admin.perf:
+    description: Read the time spent hashing, querying the database and asking Mojang
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

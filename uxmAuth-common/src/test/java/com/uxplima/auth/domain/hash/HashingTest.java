@@ -63,4 +63,26 @@ final class HashingTest {
                     .isEqualTo(new Verification.Wrong());
         }
     }
+
+    @Test
+    @DisplayName("an observed hashing tells the time of every hash and every check, and answers as before")
+    void observedHashingIsTimed() {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        java.util.List<Long> spent = new java.util.ArrayList<>();
+        Hashing observed = argon2Current().observed(() -> clock.addAndGet(5), spent::add);
+
+        try (Password password = Password.of("pantof")) {
+            PasswordHash hash = observed.hash(password);
+            assertThat(observed.verify(password, hash)).isInstanceOf(Verification.Right.class);
+            assertThat(observed.verify(password, new PasswordHash("nothing it reads")))
+                    .isInstanceOf(Verification.Wrong.class);
+            assertThat(spent)
+                    .as("a hash, a check, and no check of a format nobody reads")
+                    .containsExactly(5L, 5L);
+            assertThat(observed.currentAlgorithm()).isEqualTo(HashAlgorithm.ARGON2ID);
+            assertThat(observed.verify(password, new PasswordHash(AUTHME)))
+                    .isInstanceOf(Verification.RightButRehash.class);
+            assertThat(spent).as("a legacy check and its fresh hash").hasSize(4);
+        }
+    }
 }

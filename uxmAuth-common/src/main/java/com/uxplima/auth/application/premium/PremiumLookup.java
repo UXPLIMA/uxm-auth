@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
+import com.uxplima.auth.application.perf.Timings;
 import com.uxplima.auth.application.port.NameSource;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
@@ -30,12 +31,19 @@ public final class PremiumLookup {
     private final Supplier<List<NameSource>> sources;
     private final Supplier<Duration> keepFor;
     private final Clock clock;
+    private final Timings timings;
     private final Map<String, Kept> kept = new ConcurrentHashMap<>();
 
     public PremiumLookup(Supplier<List<NameSource>> sources, Supplier<Duration> keepFor, Clock clock) {
+        this(sources, keepFor, clock, new Timings(System::nanoTime));
+    }
+
+    /** @param timings where the time each source takes to answer goes, as Mojang work */
+    public PremiumLookup(Supplier<List<NameSource>> sources, Supplier<Duration> keepFor, Clock clock, Timings timings) {
         this.sources = Objects.requireNonNull(sources, "sources");
         this.keepFor = Objects.requireNonNull(keepFor, "keepFor");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.timings = Objects.requireNonNull(timings, "timings");
     }
 
     /** What the web says about this name. It may wait on the network. */
@@ -55,7 +63,13 @@ public final class PremiumLookup {
 
     private PremiumAnswer ask(PlayerName name) {
         for (NameSource source : sources.get()) {
-            PremiumAnswer answer = source.ask(name);
+            long start = timings.start();
+            PremiumAnswer answer;
+            try {
+                answer = source.ask(name);
+            } finally {
+                timings.stop(Timings.Kind.MOJANG, start);
+            }
             if (!(answer instanceof PremiumAnswer.Unknown)) {
                 return answer;
             }

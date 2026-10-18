@@ -400,6 +400,13 @@ public enum Keys implements MessageKey {
             "alert.staff-acted",
             "<tag:'AUTH'> <value><actor><body> ran <value><action><body> on <value><target><body>."),
     ALERT_CONSOLE("alert.console", "the console"),
+    PERF_HEADER("perf.header", "<tag:'AUTH'> <body>Time spent, over the last minute and since the start:"),
+    PERF_LINE(
+            "perf.line",
+            "<value><kind><body>: <value><minute-count><body> times in the minute, <value><minute-average><body> ms on average, <value><minute-worst><body> ms at worst. Since the start <value><count><body> times, <value><average><body> ms on average, <value><worst><body> ms at worst."),
+    PERF_HASHING("perf.hashing", "Hashing passwords"),
+    PERF_DATABASE("perf.database", "The database"),
+    PERF_MOJANG("perf.mojang", "Asking Mojang"),
     STAFF_RESOLVED_PREMIUM(
             "staff.resolved-premium",
             "<tag:'AUTH'> <body><value><name><body> goes to its paid owner. The cracked account moved to a marked name with everything it had."),

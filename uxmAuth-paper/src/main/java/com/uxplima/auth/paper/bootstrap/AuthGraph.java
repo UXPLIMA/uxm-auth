@@ -43,6 +43,9 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.perf.TimedAccounts;
+import com.uxplima.auth.application.perf.Timings;
+import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
@@ -155,6 +158,9 @@ import org.jspecify.annotations.Nullable;
 final class AuthGraph implements AutoCloseable {
 
     final Sessions sessions = new Sessions();
+    /** The time spent hashing, querying the accounts table and asking Mojang, for /uxmauth perf. */
+    final Timings timings = new Timings(System::nanoTime);
+
     final HashingLane lane;
     final ConnectionListener connections;
     final HoldListener hold;
@@ -217,8 +223,8 @@ final class AuthGraph implements AutoCloseable {
         AuthSettings.Lane sizes = boot.lane();
         this.lane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
         this.channelReports = new ChannelReports(plugin, () -> claims(settings), Clock.systemUTC());
-        Hashing hashing = boot.hashers();
-        SqlAccountRepository accounts = new SqlAccountRepository(database);
+        Hashing hashing = boot.hashers().observed(timings::start, spent -> timings.record(Timings.Kind.HASHING, spent));
+        AccountRepository accounts = new TimedAccounts(new SqlAccountRepository(database), timings);
         SqlRememberedSessions remembered = new SqlRememberedSessions(database);
         this.history = new SqlLoginHistory(database);
         Remember remember = new Remember(
@@ -273,7 +279,8 @@ final class AuthGraph implements AutoCloseable {
         this.lookup = new PremiumLookup(
                 new PremiumSources(web, () -> settings.current().premium(), clock)::ordered,
                 () -> settings.current().premium().keepAnswers(),
-                clock);
+                clock,
+                timings);
         AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
         this.hellos = ServerHellos.startOn(new PremiumHelloDoor(atTheDoor, scheduler), plugin.getLogger());
         ClaimName claims = new ClaimName(
@@ -673,7 +680,7 @@ final class AuthGraph implements AutoCloseable {
 
     /** The decision at the hello: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(
-            PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
+            PluginSettings settings, AccountRepository accounts, SqlDisputes disputes, Clock clock) {
         return new AtTheDoor(
                 accounts,
                 () -> settings.current().namePolicy(),

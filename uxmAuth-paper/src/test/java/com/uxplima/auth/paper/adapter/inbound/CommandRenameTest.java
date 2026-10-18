@@ -77,7 +77,11 @@ final class CommandRenameTest {
         resolvers = resolvers.suggestions(LanguageSuggestions.KEY, new LanguageSuggestions(choices));
         AdminCommand handler = new AdminCommand(settings, messages(), "test", new DirectScheduler(), List::of, choices);
 
-        assertThat(AnnotatedCommands.buildNode(handler, resolvers).getLiteral()).isEqualTo("renamed");
+        var node = AnnotatedCommands.buildNode(handler, resolvers);
+        assertThat(node.getLiteral()).isEqualTo("renamed");
+        assertThat(node.getChild("perf"))
+                .as("staff read the time spent with /uxmauth perf")
+                .isNotNull();
     }
 
     private static PluginSettings settingsIn(Path folder) throws IOException {

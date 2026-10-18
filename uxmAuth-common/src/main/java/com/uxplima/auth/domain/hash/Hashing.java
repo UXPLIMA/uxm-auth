@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.LongConsumer;
+import java.util.function.LongSupplier;
 
 import com.uxplima.auth.domain.password.Password;
 
@@ -27,6 +29,56 @@ public final class Hashing {
             readers.put(hasher.algorithm(), hasher);
         }
         readers.put(current.algorithm(), current);
+    }
+
+    /**
+     * This hashing, telling the time of every hash and every check it makes.
+     *
+     * @param ticks a monotonic clock in nanoseconds
+     * @param spent hears the nanoseconds each took
+     */
+    public Hashing observed(LongSupplier ticks, LongConsumer spent) {
+        Objects.requireNonNull(ticks, "ticks");
+        Objects.requireNonNull(spent, "spent");
+        return new Hashing(
+                new Timed(current, ticks, spent),
+                readers.values().stream()
+                        .filter(reader -> reader != current)
+                        .<PasswordHasher>map(reader -> new Timed(reader, ticks, spent))
+                        .toList());
+    }
+
+    /** A hasher whose every hash and check is timed. */
+    private record Timed(PasswordHasher hasher, LongSupplier ticks, LongConsumer spent) implements PasswordHasher {
+        @Override
+        public HashAlgorithm algorithm() {
+            return hasher.algorithm();
+        }
+
+        @Override
+        public PasswordHash hash(Password password) {
+            long start = ticks.getAsLong();
+            try {
+                return hasher.hash(password);
+            } finally {
+                spent.accept(ticks.getAsLong() - start);
+            }
+        }
+
+        @Override
+        public boolean verify(Password password, PasswordHash hash) {
+            long start = ticks.getAsLong();
+            try {
+                return hasher.verify(password, hash);
+            } finally {
+                spent.accept(ticks.getAsLong() - start);
+            }
+        }
+
+        @Override
+        public boolean isCurrent(PasswordHash hash) {
+            return hasher.isCurrent(hash);
+        }
     }
 
     /** The algorithm new hashes are written in. */

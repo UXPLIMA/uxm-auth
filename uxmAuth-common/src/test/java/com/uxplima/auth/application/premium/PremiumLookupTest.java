@@ -106,4 +106,26 @@ final class PremiumLookupTest {
 
         assertThat(lookup.kept()).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("every source asked is timed as Mojang work, and a kept answer asks nobody and times nothing")
+    void askingIsTimed() {
+        java.util.concurrent.atomic.AtomicLong ticks = new java.util.concurrent.atomic.AtomicLong();
+        com.uxplima.auth.application.perf.Timings timings =
+                new com.uxplima.auth.application.perf.Timings(() -> ticks.addAndGet(7));
+        PremiumLookup lookup = new PremiumLookup(
+                () -> List.of(source("mojang", new PremiumAnswer.Unknown()), source("playerdb", PREMIUM)),
+                () -> Duration.ofMinutes(30),
+                clock,
+                timings);
+
+        assertThat(lookup.lookup(new PlayerName("Notch"))).isEqualTo(PREMIUM);
+        assertThat(lookup.lookup(new PlayerName("Notch"))).isEqualTo(PREMIUM);
+
+        assertThat(asked).hasSize(2);
+        assertThat(timings.report(com.uxplima.auth.application.perf.Timings.Kind.MOJANG)
+                        .sinceStart())
+                .isEqualTo(new com.uxplima.auth.application.perf.Timings.Summary(
+                        2, Duration.ofNanos(7), Duration.ofNanos(7)));
+    }
 }

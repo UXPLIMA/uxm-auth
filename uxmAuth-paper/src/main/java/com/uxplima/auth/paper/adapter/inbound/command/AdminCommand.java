@@ -14,7 +14,9 @@ import net.kyori.adventure.text.JoinConfiguration;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.perf.Timings;
 import com.uxplima.auth.application.staff.ResolveConflict;
+import com.uxplima.auth.paper.adapter.inbound.staff.PerfView;
 import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffActions;
 import com.uxplima.uxmlib.command.Sender;
@@ -53,6 +55,7 @@ public final class AdminCommand {
     private final LanguageOfAnotherPlayer another;
     private final Staff staff;
     private final StaffActions actions;
+    private final PerfView perf;
 
     public AdminCommand(
             PluginSettings settings,
@@ -89,6 +92,34 @@ public final class AdminCommand {
             LanguageChoices choices,
             Staff staff,
             StaffActions actions) {
+        this(
+                settings,
+                messages,
+                version,
+                scheduler,
+                health,
+                choices,
+                staff,
+                actions,
+                new PerfView(new Timings(System::nanoTime), messages));
+    }
+
+    /**
+     * @param staff what staff read of an account
+     * @param actions what staff do to an account
+     * @param perf the time spent on each kind of work
+     */
+    public AdminCommand(
+            PluginSettings settings,
+            Messages messages,
+            String version,
+            Scheduler scheduler,
+            Supplier<List<HealthCheck>> health,
+            LanguageChoices choices,
+            Staff staff,
+            StaffActions actions,
+            PerfView perf) {
+        this.perf = Objects.requireNonNull(perf, "perf");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.version = Objects.requireNonNull(version, "version");
@@ -235,6 +266,13 @@ public final class AdminCommand {
     @Permission("uxmauth.admin.history")
     public void history(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
         CompletableFuture<Void> unused = staff.history(sender.bukkit(), player);
+    }
+
+    /** The time spent hashing, querying the database and asking Mojang, over the last minute and since start. */
+    @FromConfig(value = "perf", fallbackName = "perf", description = "Read the time spent on each kind of work")
+    @Permission("uxmauth.admin.perf")
+    public void perf(Sender sender) {
+        perf.show(sender.bukkit());
     }
 
     /** One line per check, and a closing line that says whether anything needs an operator. */
