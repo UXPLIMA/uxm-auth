@@ -69,7 +69,7 @@ final class SqlEmailsTest {
     }
 
     @Test
-    @DisplayName("a login code by mail is off at first, stays on across a new address, and goes with the address")
+    @DisplayName("a login code by mail is off at first, goes off when the address changes, and goes with the address")
     void theLoginCodeFollowsTheAddress() {
         UUID account = UUID.randomUUID();
         emails.setMailsLoginCode(account, true);
@@ -78,10 +78,11 @@ final class SqlEmailsTest {
         emails.setAddress(account, STEVE);
         assertThat(emails.mailsLoginCode(account)).isFalse();
         emails.setMailsLoginCode(account, true);
-        emails.setAddress(account, EmailAddress.parse("other@example.org").orElseThrow());
         assertThat(emails.mailsLoginCode(account)).isTrue();
-        emails.setMailsLoginCode(account, false);
-        assertThat(emails.mailsLoginCode(account)).isFalse();
+        emails.setAddress(account, EmailAddress.parse("other@example.org").orElseThrow());
+        assertThat(emails.mailsLoginCode(account))
+                .as("a code never follows an address it was not set for")
+                .isFalse();
         emails.setMailsLoginCode(account, true);
         emails.removeAddress(account);
         emails.setAddress(account, STEVE);

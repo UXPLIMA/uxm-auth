@@ -138,4 +138,18 @@ final class LinkEmailTest {
         assertThat(link.remove(STEVE).join()).isEqualTo(new LinkEmail.Outcome.Removed("b***@e***.com"));
         assertThat(link.linked(STEVE)).isEmpty();
     }
+
+    @Test
+    @DisplayName("while the login code goes by mail, the address can be neither replaced nor removed")
+    void theFactorAddressIsKept() {
+        EmailAddress old = EmailAddress.parse("old@example.com").orElseThrow();
+        emails.setAddress(STEVE, old);
+        emails.setMailsLoginCode(STEVE, true);
+
+        assertThat(add("new@example.com")).isEqualTo(new LinkEmail.Outcome.FactorOn());
+        assertThat(link.remove(STEVE).join()).isEqualTo(new LinkEmail.Outcome.FactorOn());
+        assertThat(sentTo).isEmpty();
+        assertThat(link.linked(STEVE)).contains(old);
+        assertThat(emails.mailsLoginCode(STEVE)).isTrue();
+    }
 }

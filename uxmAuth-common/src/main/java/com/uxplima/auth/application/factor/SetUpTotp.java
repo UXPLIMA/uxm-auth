@@ -200,7 +200,7 @@ public final class SetUpTotp {
         if (!active(account)) {
             return Optional.of(new Outcome.NotOn());
         }
-        if (check.passes(account, typed, clock.get())) {
+        if (check.appOrBackup(account, typed, clock.get())) {
             return Optional.empty();
         }
         return Optional.of(

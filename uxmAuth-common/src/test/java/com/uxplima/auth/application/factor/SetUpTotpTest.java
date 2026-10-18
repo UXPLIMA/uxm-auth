@@ -46,7 +46,7 @@ final class SetUpTotpTest {
             new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4))),
             () -> settings.totp(),
             () -> settings.backup(),
-            FactorCheck.MailedCode.NONE);
+            (account, typed) -> "424242".equals(typed));
     private final SetUpTotp setUp =
             new SetUpTotp(factors, check, () -> settings, failures, new SplittableRandom(3), () -> now);
 
@@ -261,5 +261,21 @@ final class SetUpTotpTest {
                 .isInstanceOf(SetUpTotp.Outcome.Off.class);
         assertThat(setUp.active(STEVE)).isFalse();
         assertThat(factors.backupCodes(STEVE)).isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "the app is turned off or its backup codes renewed only with the app or a backup code, never a mailed code")
+    void aMailedCodeManagesNoApp() {
+        turnedOn();
+        assertThat(check.passes(STEVE, "424242", now))
+                .as("the mailed code passes a login")
+                .isTrue();
+
+        assertThat(setUp.off(STEVE, "424242", "203.0.113.7", "play.example.net"))
+                .isInstanceOf(SetUpTotp.Outcome.Wrong.class);
+        assertThat(setUp.backup(STEVE, "424242", "203.0.113.7", "play.example.net"))
+                .isInstanceOf(SetUpTotp.Outcome.Wrong.class);
+        assertThat(setUp.active(STEVE)).isTrue();
     }
 }

@@ -175,6 +175,21 @@ final class EmailLinkTest {
     }
 
     @Test
+    @DisplayName("while the login code goes by mail, add and remove say to turn that off first")
+    void theFactorAddressIsKept() {
+        loggedIn();
+        world.emails.setAddress(
+                account(), EmailAddress.parse("berke@example.com").orElseThrow());
+        world.emails.setMailsLoginCode(account(), true);
+
+        world.scheduler.settle(email.add(steve, "new@example.com"));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.EMAIL_FACTOR_ON));
+        world.scheduler.settle(email.remove(steve));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.EMAIL_FACTOR_ON));
+        assertThat(world.mailed).isEmpty();
+    }
+
+    @Test
     @DisplayName("a player not logged in is told to log in first, and nothing is mailed")
     void notLoggedIn() {
         world.registered(steve, "hunter22");

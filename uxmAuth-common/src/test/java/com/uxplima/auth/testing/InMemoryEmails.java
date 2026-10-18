@@ -28,6 +28,7 @@ public final class InMemoryEmails implements Emails {
     @Override
     public void setAddress(UUID account, EmailAddress address) {
         addresses.compute(account, (id, before) -> address);
+        loginCodes.compute(account, (id, before) -> null);
     }
 
     @Override

@@ -61,6 +61,18 @@ public final class FactorCheck {
         return appTakes(account, typed, now) || mailed.takes(account, typed.strip());
     }
 
+    /**
+     * Whether the code is the app's or a backup code, spending it when it is: the proof that manages the app. A
+     * mailed code never turns the app off or renews its backup codes.
+     */
+    public boolean appOrBackup(UUID account, String typed, Instant now) {
+        Objects.requireNonNull(account, "account");
+        Objects.requireNonNull(typed, "typed");
+        Objects.requireNonNull(now, "now");
+        Optional<String> code = backup.get().read(typed);
+        return code.isPresent() ? spendsBackup(account, code.get()) : appTakes(account, typed, now);
+    }
+
     /** Hashes a new set for the account in place of every code before it, and gives it back to be shown once. */
     public List<String> newBackupCodes(UUID account, RandomGenerator random) {
         Objects.requireNonNull(account, "account");

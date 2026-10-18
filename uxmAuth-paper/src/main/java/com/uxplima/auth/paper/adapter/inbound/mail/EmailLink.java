@@ -166,6 +166,7 @@ public final class EmailLink {
             case LinkEmail.Outcome.NothingPending nothing -> Keys.EMAIL_NOTHING_PENDING;
             case LinkEmail.Outcome.TooManyAttempts tooMany -> Keys.EMAIL_TOO_MANY_ATTEMPTS;
             case LinkEmail.Outcome.NoneLinked none -> Keys.EMAIL_NONE_LINKED;
+            case LinkEmail.Outcome.FactorOn on -> Keys.EMAIL_FACTOR_ON;
             default -> throw new IllegalStateException("an answer with words of its own: " + outcome);
         };
     }

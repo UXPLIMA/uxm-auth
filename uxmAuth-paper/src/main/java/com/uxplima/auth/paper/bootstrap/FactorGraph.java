@@ -24,8 +24,8 @@ import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.MailFactor;
+import com.uxplima.auth.application.mail.MailedLoginCode;
 import com.uxplima.auth.application.port.AccountRepository;
-import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -96,7 +96,7 @@ final class FactorGraph {
                 hashing,
                 () -> settings.current().secondFactor().setup().totp(),
                 () -> settings.current().secondFactor().setup().backup(),
-                (account, typed) -> mail.codes.takes(account, Emails.Purpose.LOGIN, typed));
+                new MailedLoginCode(mail.emails, mail.codes));
         ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, failures, Instant::now);
         this.screen = new FactorScreen(confirm, screens, shower, messages, lane);
         SetUpTotp setUp = new SetUpTotp(

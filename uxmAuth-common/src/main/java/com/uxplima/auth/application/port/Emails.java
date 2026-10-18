@@ -41,7 +41,7 @@ public interface Emails {
     /** The account's confirmed address, when it has one. */
     Optional<EmailAddress> address(UUID account);
 
-    /** Keeps this confirmed address for the account, in place of any before it, and its choice of login code. */
+    /** Keeps this confirmed address for the account, in place of any before it; a login code by mail goes off. */
     void setAddress(UUID account, EmailAddress address);
 
     /** The account no longer has an address, nor the login code mailed to it. */
@@ -50,7 +50,7 @@ public interface Emails {
     /** Whether the account takes its login code by mail: it chose so, and an address is linked. */
     boolean mailsLoginCode(UUID account);
 
-    /** Whether the account takes its login code by mail; kept with the linked address, and gone with it. */
+    /** Whether the account takes its login code by mail at the linked address; gone with the address. */
     void setMailsLoginCode(UUID account, boolean on);
 
     /** The account's code of this purpose, when one is out. */

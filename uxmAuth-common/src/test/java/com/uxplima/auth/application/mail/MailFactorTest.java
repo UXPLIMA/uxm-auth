@@ -3,11 +3,14 @@ package com.uxplima.auth.application.mail;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.uxplima.auth.application.port.Emails;
+import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.mail.EmailAddress;
 import com.uxplima.auth.testing.InMemoryEmails;
 import org.junit.jupiter.api.DisplayName;
@@ -50,7 +53,19 @@ final class MailFactorTest {
         ban = Optional.of(Duration.ofMinutes(5));
         assertThat(factor.off(STEVE, "000000", "203.0.113.7", "h"))
                 .isEqualTo(new MailFactor.Outcome.Banned(Duration.ofMinutes(5)));
+        emails.changeCode(
+                STEVE,
+                Emails.Purpose.LOGIN,
+                before -> Optional.of(new Emails.Code(
+                        EmailAddress.parse("steve@example.net").orElseThrow(),
+                        new PasswordHash("$live$"),
+                        Instant.parse("2030-01-01T00:00:00Z"),
+                        5,
+                        Instant.parse("2026-01-01T00:00:00Z"))));
         assertThat(factor.off(STEVE, "424242", "203.0.113.7", "h")).isEqualTo(new MailFactor.Outcome.Off());
         assertThat(emails.mailsLoginCode(STEVE)).isFalse();
+        assertThat(emails.code(STEVE, Emails.Purpose.LOGIN))
+                .as("a code out when it went off answers nothing later")
+                .isEmpty();
     }
 }

@@ -30,8 +30,9 @@ import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
 import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
+import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
-import com.uxplima.auth.application.mail.MailCodes;
+import com.uxplima.auth.application.mail.MailedLoginCode;
 import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
@@ -146,7 +147,7 @@ final class ProxyGraph implements AutoCloseable {
                         bans,
                         clock,
                         remembered,
-                        new Codes(factors, secondStep, mail.codes)));
+                        new Codes(factors, secondStep, new MailedLoginCode(mail.emails, mail.codes))));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
@@ -353,7 +354,7 @@ final class ProxyGraph implements AutoCloseable {
     private record Steps(NetworkSecret secret, SecondStep secondStep) {}
 
     /** The factor table and the step after the password, which the waiting world reads. */
-    private record Codes(SqlFactors factors, SecondStep step, MailCodes mail) {}
+    private record Codes(SqlFactors factors, SecondStep step, FactorCheck.MailedCode mail) {}
 
     /** The decision at the pre-login: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(

@@ -169,8 +169,7 @@ public final class ProxyWorld implements AutoCloseable {
                 hashing,
                 () -> TOTP,
                 () -> new com.uxplima.auth.domain.factor.BackupCodes(8, 10),
-                (account, typed) ->
-                        mailCodes.takes(account, com.uxplima.auth.application.port.Emails.Purpose.LOGIN, typed));
+                new com.uxplima.auth.application.mail.MailedLoginCode(emails, mailCodes));
     }
 
     /** Turns the app on for the account under this name, and answers its secret. */

@@ -296,6 +296,10 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>The tries for that code are spent. Ask a new one with <value>/email"
                     + " add <address><body>."),
     EMAIL_NONE_LINKED("email.none-linked", "<etag:'ERROR'> <body>No address is linked."),
+    EMAIL_FACTOR_ON(
+            "email.factor-on",
+            "<etag:'ERROR'> <body>Your login code goes to this address. Turn that off first with <value>/2fa email off"
+                    + " <code><body>."),
     EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(

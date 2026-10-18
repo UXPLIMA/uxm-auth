@@ -28,7 +28,7 @@ public final class SqlEmails implements Emails {
     private static final String READ_ADDRESS = "SELECT address FROM uxmauth_email WHERE account_id = ?";
     private static final String DROP_ADDRESS = "DELETE FROM uxmauth_email WHERE account_id = ?";
     private static final String MOVE_ADDRESS =
-            "UPDATE uxmauth_email SET address = ?, confirmed_at = ? WHERE account_id = ?";
+            "UPDATE uxmauth_email SET address = ?, confirmed_at = ?, login_code = ? WHERE account_id = ?";
     private static final String WRITE_ADDRESS =
             "INSERT INTO uxmauth_email (account_id, address, confirmed_at, login_code) VALUES (?, ?, ?, ?)";
     private static final String READ_LOGIN_CODE = "SELECT login_code FROM uxmauth_email WHERE account_id = ?";
@@ -64,10 +64,12 @@ public final class SqlEmails implements Emails {
         String value = Objects.requireNonNull(address, "address").value();
         long now = clock.millis();
         database.inTransaction(sql -> {
+            // A login code chosen for one address never follows the account to another.
             int moved = sql.update(MOVE_ADDRESS, statement -> {
                 statement.setString(1, value);
                 statement.setLong(2, now);
-                statement.setString(3, id);
+                statement.setBoolean(3, false);
+                statement.setString(4, id);
             });
             if (moved == 0) {
                 sql.update(WRITE_ADDRESS, statement -> {

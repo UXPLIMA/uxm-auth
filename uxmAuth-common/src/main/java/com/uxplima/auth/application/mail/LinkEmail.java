@@ -18,7 +18,8 @@ import com.uxplima.auth.domain.name.PlayerName;
 
 /**
  * A player links an address. A code goes to it, and only that code saves it, in place of any address before; an
- * address is only ever shown back masked. The table is read on the hashing lane, never the caller's thread.
+ * address is only ever shown back masked. While the login code goes by mail the linked address is a factor, and it
+ * is neither replaced nor removed until that is turned off with a code that passes. The table is read on the hashing lane, never the caller's thread.
  */
 public final class LinkEmail {
 
@@ -68,6 +69,9 @@ public final class LinkEmail {
 
         /** No address is linked. */
         record NoneLinked() implements Outcome {}
+
+        /** The login code goes to the linked address, so it stays until that is turned off with a code. */
+        record FactorOn() implements Outcome {}
     }
 
     private final Emails emails;
@@ -100,9 +104,9 @@ public final class LinkEmail {
         if (!domains.get().takes(to)) {
             return done(new Outcome.DomainRefused());
         }
-        return lane.submit(() -> linked(account).filter(to::equals)).thenCompose(same -> {
-            if (same.isPresent()) {
-                return done(new Outcome.AlreadyLinked(to.masked()));
+        return lane.submit(() -> blocked(account, to)).thenCompose(blocked -> {
+            if (blocked.isPresent()) {
+                return done(blocked.get());
             }
             return codes.issue(
                             account,
@@ -113,6 +117,17 @@ public final class LinkEmail {
                             Map.of("player", name.value()))
                     .thenApply(LinkEmail::issued);
         });
+    }
+
+    /**
+     * Why no code goes out for this address: it is linked already, or the login code goes to the linked one, which
+     * only a code that passes may change. Reads the table.
+     */
+    private Optional<Outcome> blocked(UUID account, EmailAddress to) {
+        if (emails.mailsLoginCode(account)) {
+            return Optional.of(new Outcome.FactorOn());
+        }
+        return linked(account).filter(to::equals).map(same -> new Outcome.AlreadyLinked(same.masked()));
     }
 
     private static Outcome issued(MailCodes.Issued issued) {
@@ -153,6 +168,9 @@ public final class LinkEmail {
             Optional<EmailAddress> linked = linked(account);
             if (linked.isEmpty()) {
                 return new Outcome.NoneLinked();
+            }
+            if (emails.mailsLoginCode(account)) {
+                return new Outcome.FactorOn();
             }
             emails.removeAddress(account);
             return new Outcome.Removed(linked.get().masked());

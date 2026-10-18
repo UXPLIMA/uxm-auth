@@ -24,10 +24,8 @@ import com.uxplima.auth.application.factor.ConfirmFactor;
 import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
-import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.BreachedPasswords;
-import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.Factors;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
@@ -144,7 +142,7 @@ final class WaitingWorld implements AutoCloseable {
             RememberedSessions remembered,
             Factors factors,
             SecondStep secondStep,
-            MailCodes mailCodes) {}
+            FactorCheck.MailedCode mailedCode) {}
 
     private LimboLogin passwords(
             PluginSettings settings,
@@ -204,7 +202,7 @@ final class WaitingWorld implements AutoCloseable {
                 hashers.hashing(),
                 () -> settings.current().secondFactor().setup().totp(),
                 () -> settings.current().secondFactor().setup().backup(),
-                (account, typed) -> guards.mailCodes().takes(account, Emails.Purpose.LOGIN, typed));
+                guards.mailedCode());
         ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, guards.failures(), Instant::now);
         return (id, code, address) -> hashers.lane().submit(() -> confirm.confirm(id, code, address));
     }

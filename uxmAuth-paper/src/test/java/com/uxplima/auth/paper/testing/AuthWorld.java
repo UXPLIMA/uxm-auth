@@ -267,8 +267,7 @@ public final class AuthWorld implements AutoCloseable {
                 hashing,
                 () -> TOTP,
                 () -> BACKUP,
-                (account, typed) ->
-                        codes.takes(account, com.uxplima.auth.application.port.Emails.Purpose.LOGIN, typed));
+                new com.uxplima.auth.application.mail.MailedLoginCode(emails, codes));
         this.confirmFactor = new com.uxplima.auth.application.factor.ConfirmFactor(
                 accounts, sessions, factorCheck, bans::failed, clock::instant);
         this.logIn =
