@@ -97,6 +97,9 @@ public enum Keys implements MessageKey {
     TIME_MINUTES("time.minutes", "<n>m"),
     TIME_SECONDS("time.seconds", "<n>s"),
     TIME_SEPARATOR("time.separator", " "),
+    KICK_TOO_MANY_CONNECTIONS(
+            "kick.too-many-connections",
+            "<body>Too many connections came from your address. Try again in <value><time><body>."),
     KICK_BANNED(
             "kick.banned", "<body>Too many wrong passwords came from your address. Try again in <value><time><body>."),
     KICK_LOGGED_OUT("kick.logged-out", "<body>You have logged out. Join again to come back in."),

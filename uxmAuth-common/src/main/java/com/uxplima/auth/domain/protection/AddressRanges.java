@@ -52,6 +52,21 @@ public final class AddressRanges {
         return ranges.stream().anyMatch(range -> within(bytes, range));
     }
 
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof AddressRanges ranges && ranges.written.equals(written);
+    }
+
+    @Override
+    public int hashCode() {
+        return written.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "AddressRanges" + written;
+    }
+
     private static boolean within(byte[] address, Range range) {
         if (address.length != range.start().length) {
             return false;

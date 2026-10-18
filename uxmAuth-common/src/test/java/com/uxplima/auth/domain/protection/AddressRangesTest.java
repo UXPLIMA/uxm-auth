@@ -55,4 +55,13 @@ final class AddressRangesTest {
                 .isFalse();
         assertThat(new AddressRanges(List.of("0.0.0.0/0")).contains("10.1.1.1")).isTrue();
     }
+
+    @Test
+    @DisplayName("two lists written alike are equal, so a reload can tell a change from none")
+    void equalWhenWrittenAlike() {
+        assertThat(new AddressRanges(List.of("10.0.0.0/8"))).isEqualTo(new AddressRanges(List.of("10.0.0.0/8")));
+        assertThat(new AddressRanges(List.of("10.0.0.0/8")))
+                .hasSameHashCodeAs(new AddressRanges(List.of("10.0.0.0/8")));
+        assertThat(new AddressRanges(List.of("10.0.0.0/8"))).isNotEqualTo(new AddressRanges(List.of("10.0.0.0/9")));
+    }
 }

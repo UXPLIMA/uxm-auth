@@ -41,6 +41,7 @@ import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
+import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
@@ -295,7 +296,15 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        new Admission(() -> settings.current().protection().sharedAddresses(), List.of(bans.rule())),
+                        new Admission(
+                                () -> settings.current().protection().sharedAddresses(),
+                                List.of(
+                                        bans.rule(),
+                                        new ConnectionWindow(
+                                                () -> settings.current()
+                                                        .protection()
+                                                        .connections(),
+                                                Instant::now))),
                         remember::resumes),
                 notices,
                 door,

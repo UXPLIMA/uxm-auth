@@ -4,7 +4,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 
+import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.Remember;
+import com.uxplima.auth.domain.protection.AddressRanges;
 import com.uxplima.auth.domain.protection.BanSteps;
 import com.uxplima.uxmlib.config.HoconConfig;
 
@@ -20,7 +22,21 @@ final class ProtectionReader {
                 list(config, "shared-address-hosts"),
                 list(config, "shared-address-sources"),
                 sessions(config),
-                bans(config));
+                bans(config),
+                connections(config));
+    }
+
+    private static ConnectionWindow.Settings connections(HoconConfig config) {
+        int perAddress = config.getInt("protection.connections.per-address", 5);
+        int seconds = config.getInt("protection.connections.window-seconds", 60);
+        try {
+            return new ConnectionWindow.Settings(
+                    perAddress,
+                    Duration.ofSeconds(seconds),
+                    new AddressRanges(list(config, "connections.exempt-addresses")));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("protection.connections: " + wrong.getMessage(), wrong);
+        }
     }
 
     private static BanSteps bans(HoconConfig config) {

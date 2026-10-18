@@ -484,6 +484,31 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("five connections a minute per address by default, with the exempt addresses read as ranges")
+    void connectionsAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").protection().connections())
+                .isEqualTo(new com.uxplima.auth.application.protection.ConnectionWindow.Settings(
+                        5,
+                        java.time.Duration.ofSeconds(60),
+                        new com.uxplima.auth.domain.protection.AddressRanges(java.util.List.of())));
+        com.uxplima.auth.application.protection.ConnectionWindow.Settings written = settingsFrom(
+                        folder,
+                        "protection { connections { per-address = 2, window-seconds = 10,"
+                                + " exempt-addresses = [\"10.0.0.0/8\"] } }\n")
+                .protection()
+                .connections();
+        assertThat(written.perAddress()).isEqualTo(2);
+        assertThat(written.window()).isEqualTo(java.time.Duration.ofSeconds(10));
+        assertThat(written.exempt().contains("10.9.9.9")).isTrue();
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { connections { per-address = 0 } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.connections");
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { connections { exempt-addresses = [\"x\"] } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.connections");
+    }
+
+    @Test
     @DisplayName("no connection is through a shared-address filter until the operator lists its addresses")
     void sharedHostsAreListed(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().sharedAddresses().through("198.51.100.1", "mc.tcpshield.com"))
