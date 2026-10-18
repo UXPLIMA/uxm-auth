@@ -15,7 +15,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
-import com.uxplima.auth.adapter.outbound.SqlEmails;
 import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.adapter.outbound.mail.SmtpClient;
 import com.uxplima.auth.adapter.outbound.mail.SmtpMailer;
@@ -28,6 +27,7 @@ import com.uxplima.auth.application.mail.MailLogin;
 import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.BreachedPasswords;
+import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.domain.account.Account;
@@ -53,7 +53,7 @@ import com.uxplima.uxmlib.text.message.Messages;
 final class MailGraph implements AutoCloseable {
 
     final MailCodes codes;
-    final SqlEmails emails;
+    final Emails emails;
     private final MailLogin login;
     private final SmtpMailer mailer;
     private final Plugin plugin;
@@ -68,7 +68,8 @@ final class MailGraph implements AutoCloseable {
             LogIn.Failures failures,
             Hashing hashing,
             HashingLane lane,
-            Messages messages) {
+            Messages messages,
+            Emails emails) {
         this.plugin = plugin;
         this.settings = settings;
         this.lane = lane;
@@ -82,7 +83,7 @@ final class MailGraph implements AutoCloseable {
                 plugin.getLogger()::warning,
                 Clock.systemUTC(),
                 settings.current().mail().threads());
-        this.emails = new SqlEmails(database, Clock.systemUTC());
+        this.emails = emails;
         this.codes = new MailCodes(
                 emails,
                 mailer,

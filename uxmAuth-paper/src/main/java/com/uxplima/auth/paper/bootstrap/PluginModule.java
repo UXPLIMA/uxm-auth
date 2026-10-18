@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +35,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.listener.LanguageListener;
+import com.uxplima.auth.paper.adapter.inbound.placeholder.AuthPlaceholders;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConnectingLocales;
 import com.uxplima.auth.paper.adapter.inbound.staff.PerfView;
 import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
@@ -43,6 +45,8 @@ import com.uxplima.uxmlib.command.annotation.CommandMessages;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.ParamResolvers;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
+import com.uxplima.uxmlib.hook.placeholder.PlaceholderExpansions;
+import com.uxplima.uxmlib.hook.placeholder.PlaceholderRegistry;
 import com.uxplima.uxmlib.scheduler.PaperScheduler;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.scheduler.TaskHandle;
@@ -101,6 +105,8 @@ final class PluginModule {
     private @Nullable Database database;
 
     private @Nullable AuthGraph auth;
+    /** Takes the placeholders down again; null while none are published. */
+    private @Nullable Runnable unpublish;
 
     PluginModule(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -162,7 +168,8 @@ final class PluginModule {
                 PluginHealth.windows(() -> {
                     AuthGraph graph = auth;
                     return graph == null ? 0 : graph.staffing.windowsRead();
-                }));
+                }),
+                PluginHealth.placeholders(() -> unpublish != null));
     }
 
     /**
@@ -179,6 +186,10 @@ final class PluginModule {
         }
         saveChoices();
         store = null;
+        if (unpublish != null) {
+            unpublish.run();
+            unpublish = null;
+        }
         if (auth != null) {
             auth.close();
             auth = null;
@@ -187,6 +198,28 @@ final class PluginModule {
             database.close();
             database = null;
         }
+    }
+
+    /**
+     * Publish the placeholders, when PlaceholderAPI is on the server. uxmLib touches it only past its own presence
+     * check, so on a server without it this does nothing and says nothing.
+     */
+    private void publishPlaceholders(AuthGraph graph) {
+        // registered, not register: PlaceholderAPI keeps an expansion until somebody takes it down, and a reload
+        // would leave it answering out of the graph this enable replaced.
+        this.unpublish = PlaceholderExpansions.registered(
+                        AuthPlaceholders.IDENTIFIER,
+                        new PlaceholderRegistry()
+                                .fallback(new AuthPlaceholders(
+                                        graph.sessions::state,
+                                        graph.factorStates,
+                                        () -> settings.current()
+                                                .placeholders()
+                                                .dates()
+                                                .withZone(ZoneId.systemDefault()))),
+                        "UXPLIMA",
+                        plugin.getPluginMeta().getVersion())
+                .orElse(null);
     }
 
     /**
@@ -248,6 +281,7 @@ final class PluginModule {
                 commands);
         this.auth = graph;
         graph.start();
+        publishPlaceholders(graph);
         registerPlayerCommands(graph, commands, resolvers, scheduler);
 
         registerAdminCommand(

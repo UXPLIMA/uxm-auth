@@ -2,7 +2,6 @@ package com.uxplima.auth.paper.bootstrap;
 
 import java.nio.file.Path;
 import java.security.SecureRandom;
-import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,10 +11,8 @@ import java.util.function.Predicate;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SecretSeal;
-import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.ConfirmFactor;
@@ -26,6 +23,7 @@ import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.MailFactor;
 import com.uxplima.auth.application.mail.MailedLoginCode;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.Factors;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -62,7 +60,7 @@ final class FactorGraph {
     /** Holds a player whose node requires the app until it is on. */
     final SetupDuty duty;
 
-    final SqlFactors factors;
+    final Factors factors;
 
     private final FactorSetup setup;
     private final MailToggle mailToggle;
@@ -84,12 +82,12 @@ final class FactorGraph {
             Messages messages,
             AuthScreens screens,
             ScreenShower shower,
-            MailGraph mail) {
+            MailGraph mail,
+            Factors factors) {
         this.sessions = sessions;
         this.messages = messages;
         Path folder = plugin.getDataFolder().toPath();
-        AuthSettings.Network network = settings.current().network();
-        this.factors = new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
+        this.factors = factors;
         this.secondStep = new SecondStep(
                 factors, mail.emails, () -> settings.current().secondFactor().step(), mail::loginMailed);
         FactorCheck check = new FactorCheck(

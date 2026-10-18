@@ -71,6 +71,7 @@ public final class PluginSettings {
             MailSettings mail,
             EmailSettings email,
             StaffSettings staff,
+            PlaceholderSettings placeholders,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -88,6 +89,7 @@ public final class PluginSettings {
             Objects.requireNonNull(mail, "mail");
             Objects.requireNonNull(email, "email");
             Objects.requireNonNull(staff, "staff");
+            Objects.requireNonNull(placeholders, "placeholders");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -243,6 +245,7 @@ public final class PluginSettings {
                 MailSettings.read(config),
                 EmailSettings.read(config),
                 StaffSettings.read(config),
+                PlaceholderSettings.read(config),
                 lists,
                 common(lists));
     }

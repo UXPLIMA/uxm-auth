@@ -798,6 +798,24 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("placeholder dates read year-month-day hour:minute by default, the operator's pattern otherwise,"
+            + " and a pattern that is no date is refused by name")
+    void placeholderDatesAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "")
+                        .placeholders()
+                        .dates()
+                        .format(java.time.LocalDateTime.of(2026, 10, 18, 9, 5)))
+                .isEqualTo("2026-10-18 09:05");
+        assertThat(settingsFrom(folder, "placeholders { date-format = \"dd.MM.yyyy\" }\n")
+                        .placeholders()
+                        .dates()
+                        .format(java.time.LocalDate.of(2026, 10, 18)))
+                .isEqualTo("18.10.2026");
+        assertThatThrownBy(() -> settingsFrom(folder, "placeholders { date-format = \"{{nope\" }\n"))
+                .hasMessageContaining("placeholders.date-format");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

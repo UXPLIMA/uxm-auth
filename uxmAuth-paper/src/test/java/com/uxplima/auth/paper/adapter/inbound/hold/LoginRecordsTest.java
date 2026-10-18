@@ -104,6 +104,29 @@ final class LoginRecordsTest {
     }
 
     @Test
+    @DisplayName("every login here, the network's too, has its second factor read off the thread, and a player who"
+            + " leaves has it forgotten")
+    void theFactorIsKnownWhileThePlayerIsHere() {
+        com.uxplima.auth.application.factor.FactorStates states =
+                new com.uxplima.auth.application.factor.FactorStates(world.factors, world.emails);
+        LoginRecords records = new LoginRecords(
+                world.history,
+                later::add,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                warned::add,
+                (account, name, address) -> {},
+                states);
+
+        records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));
+        assertThat(states.on(account().id())).isEmpty();
+        later.forEach(Runnable::run);
+        assertThat(states.on(account().id())).contains(false);
+
+        records.left(new AuthState.Authenticated(account(), AuthMethod.NETWORK));
+        assertThat(states.on(account().id())).isEmpty();
+    }
+
+    @Test
     @DisplayName("a login the network vouched for was written where it first landed, so nothing is written here")
     void aNetworkLoginIsNotWrittenTwice() {
         records(world.history).loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));
@@ -173,5 +196,19 @@ final class LoginRecordsTest {
         assertThat(world.history.recent(account().id(), 10))
                 .extracting(LoginHistory.Entry::method)
                 .containsExactly(AuthMethod.PASSWORD);
+    }
+
+    @Test
+    @DisplayName("the door has the second factor of the login it lets in read, and forgets it when the player leaves")
+    void theDoorKeepsTheFactorWhileThePlayerStays() {
+        assertThat(world.logIn
+                        .run(steve.getUniqueId(), Password.of("hunter22"), "127.0.0.1")
+                        .join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+        world.door.open(steve, AuthSettings.Moment.LOGGED_IN);
+
+        assertThat(world.factorStates.on(account().id())).contains(false);
+        world.door.leave(steve);
+        assertThat(world.factorStates.on(account().id())).isEmpty();
     }
 }

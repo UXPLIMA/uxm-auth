@@ -50,4 +50,14 @@ final class PluginHealthTest {
         assertThat(none.status()).isEqualTo(HealthStatus.WARN);
         assertThat(none.message()).contains("menus/info.conf");
     }
+
+    @Test
+    @DisplayName("published placeholders are reported, and none published is a warning, since the rest works")
+    void placeholdersAreReported() {
+        assertThat(PluginHealth.placeholders(() -> true).check().status()).isEqualTo(HealthStatus.OK);
+        HealthResult absent = PluginHealth.placeholders(() -> false).check();
+        assertThat(absent.status()).isEqualTo(HealthStatus.WARN);
+        assertThat(absent.message()).contains("PlaceholderAPI");
+        assertThat(PluginHealth.placeholders(() -> true).name()).isEqualTo("placeholders");
+    }
 }

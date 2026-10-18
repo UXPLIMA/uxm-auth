@@ -161,6 +161,9 @@ public final class AuthWorld implements AutoCloseable {
                     "Minecraft", "{player}", TOTP, Duration.ofMinutes(10), BACKUP);
 
     public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
+    /** What is known of each account's second factor while its player is here, for the placeholders. */
+    public final com.uxplima.auth.application.factor.FactorStates factorStates;
+
     public final com.uxplima.auth.application.factor.SecondStep secondStep;
     public final com.uxplima.auth.application.factor.FactorCheck factorCheck;
     public final com.uxplima.auth.application.factor.ConfirmFactor confirmFactor;
@@ -199,6 +202,10 @@ public final class AuthWorld implements AutoCloseable {
         this.remember = new Remember(remembered, () -> sessionSettings, this::sharedAddresses, clock::instant);
         this.remembering = new Remembering(remember, sessions, scheduler);
         this.history = new com.uxplima.auth.adapter.outbound.SqlLoginHistory(database);
+        this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
+                database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
+        this.emails = new com.uxplima.auth.adapter.outbound.SqlEmails(database, clock);
+        this.factorStates = new com.uxplima.auth.application.factor.FactorStates(factors, emails);
         this.door = new Door(
                 sessions,
                 keeper,
@@ -226,7 +233,7 @@ public final class AuthWorld implements AutoCloseable {
                 },
                 remembering,
                 new com.uxplima.auth.paper.adapter.inbound.hold.LoginRecords(
-                        history, scheduler::async, clock, message -> {}),
+                        history, scheduler::async, clock, message -> {}, (account, name, address) -> {}, factorStates),
                 Door.Duty.inTurn(lazy(this::setupDuty), lazy(this::addressDuty)));
         AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
         this.captchas = new com.uxplima.auth.application.protection.Captchas(
@@ -243,9 +250,6 @@ public final class AuthWorld implements AutoCloseable {
                 captchas::blocksRegistration);
         this.bans =
                 new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
-        this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
-                database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
-        this.emails = new com.uxplima.auth.adapter.outbound.SqlEmails(database, clock);
         com.uxplima.auth.application.mail.MailLogin mailLogin =
                 new com.uxplima.auth.application.mail.MailLogin(emails, mailCodes());
         this.secondStep =

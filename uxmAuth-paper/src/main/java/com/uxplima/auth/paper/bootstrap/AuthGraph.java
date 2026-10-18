@@ -28,6 +28,8 @@ import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.SqlEmails;
+import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
@@ -41,6 +43,7 @@ import com.uxplima.auth.application.LogOut;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.perf.TimedAccounts;
@@ -160,6 +163,8 @@ final class AuthGraph implements AutoCloseable {
     final Sessions sessions = new Sessions();
     /** The time spent hashing, querying the accounts table and asking Mojang, for /uxmauth perf. */
     final Timings timings = new Timings(System::nanoTime);
+    /** What is known of each account's second factor while its player is here, for the placeholders. */
+    final FactorStates factorStates;
 
     final HashingLane lane;
     final ConnectionListener connections;
@@ -309,7 +314,18 @@ final class AuthGraph implements AutoCloseable {
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
         CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
-        this.mail = new MailGraph(plugin, settings, database, failures, hashing, lane, messages);
+        AuthSettings.Network network = settings.current().network();
+        SqlFactors factorTable = new SqlFactors(
+                database,
+                FactorGraph.seal(
+                        network.enabled(),
+                        network.secret(),
+                        plugin.getDataFolder().toPath()),
+                Clock.systemUTC());
+        SqlEmails emailTable = new SqlEmails(database, Clock.systemUTC());
+        this.factorStates = new FactorStates(factorTable, emailTable);
+        this.mail = new MailGraph(
+                plugin, settings, database, failures, hashing, lane, messages, factorStates.watching(emailTable));
         this.factors = new FactorGraph(
                 plugin,
                 settings,
@@ -325,7 +341,8 @@ final class AuthGraph implements AutoCloseable {
                 messages,
                 screens,
                 shower,
-                mail);
+                mail,
+                factorStates.watching(factorTable));
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,

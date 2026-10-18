@@ -155,10 +155,17 @@ public final class Door {
         notices.deliver(player, true);
     }
 
-    /** The player left: a greeting and the notices that waited for them are dropped. */
+    /**
+     * The player left: a greeting and the notices that waited for them are dropped, and what was kept of their
+     * account for the placeholders.
+     */
     public void leave(Player player) {
         greeter.forget(player);
         notices.forget(player.getUniqueId());
+        sessions.state(player.getUniqueId())
+                .filter(AuthState.Authenticated.class::isInstance)
+                .map(AuthState.Authenticated.class::cast)
+                .ifPresent(records::left);
     }
 
     /** The client said what language it reads, so a greeting that waited for it can run. */

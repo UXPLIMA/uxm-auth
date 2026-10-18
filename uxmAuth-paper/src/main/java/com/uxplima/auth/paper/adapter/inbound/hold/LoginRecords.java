@@ -9,15 +9,19 @@ import java.util.function.Consumer;
 
 import org.bukkit.entity.Player;
 
+import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.port.LoginHistory;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Every login that lands on this server, written to the history off the player's thread. On a network the proxy
  * hands the first server the way the player came in and every later server {@link AuthMethod#NETWORK}, so a login
  * is written once, where it first landed. A write that fails is told in the console and never reaches the login.
+ * Every login here, the network's too, also has its second factor read, so a placeholder answers it from memory
+ * while the player stays.
  */
 public final class LoginRecords {
 
@@ -32,6 +36,7 @@ public final class LoginRecords {
     private final Clock clock;
     private final Consumer<String> warn;
     private final Landed landed;
+    private final @Nullable FactorStates factors;
 
     /** @param async runs a task off every server and region thread */
     public LoginRecords(LoginHistory history, Consumer<Runnable> async, Clock clock, Consumer<String> warn) {
@@ -41,6 +46,18 @@ public final class LoginRecords {
     /** @param landed hears of each login first, which is the alerts */
     public LoginRecords(
             LoginHistory history, Consumer<Runnable> async, Clock clock, Consumer<String> warn, Landed landed) {
+        this(history, async, clock, warn, landed, null);
+    }
+
+    /** @param factors what is known of each account's second factor while its player is here */
+    public LoginRecords(
+            LoginHistory history,
+            Consumer<Runnable> async,
+            Clock clock,
+            Consumer<String> warn,
+            Landed landed,
+            @Nullable FactorStates factors) {
+        this.factors = factors;
         this.history = Objects.requireNonNull(history, "history");
         this.async = Objects.requireNonNull(async, "async");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -51,6 +68,11 @@ public final class LoginRecords {
     /** The player is in by this login. */
     public void loggedIn(Player player, AuthState.Authenticated in) {
         Objects.requireNonNull(player, "player");
+        FactorStates known = factors;
+        if (known != null) {
+            UUID id = Objects.requireNonNull(in, "in").account().id();
+            async.accept(() -> readFactors(known, id));
+        }
         if (Objects.requireNonNull(in, "in").method() == AuthMethod.NETWORK) {
             return;
         }
@@ -73,6 +95,22 @@ public final class LoginRecords {
                 warn.accept("A login could not be written to the history: " + failed.getMessage());
             }
         });
+    }
+
+    private void readFactors(FactorStates known, UUID account) {
+        try {
+            known.refresh(account);
+        } catch (RuntimeException failed) {
+            warn.accept("A second factor could not be read for a placeholder: " + failed.getMessage());
+        }
+    }
+
+    /** The player of this login left: what was kept of their account for the placeholders goes. */
+    public void left(AuthState.Authenticated in) {
+        FactorStates known = factors;
+        if (known != null) {
+            known.forget(Objects.requireNonNull(in, "in").account().id());
+        }
     }
 
     /** Drops every login older than the window the operator keeps. Runs on the caller's thread. */

@@ -70,6 +70,22 @@ public final class PluginHealth {
         });
     }
 
+    /**
+     * Whether the placeholders were published.
+     *
+     * <p>A warning rather than a failure: logins work without PlaceholderAPI, and what does not is
+     * {@code %uxmauth_authenticated%} in somebody else's scoreboard, which reads as nothing.
+     */
+    public static HealthCheck placeholders(BooleanSupplier published) {
+        Objects.requireNonNull(published, "published");
+        return check(
+                "placeholders",
+                () -> published.getAsBoolean()
+                        ? HealthResult.ok("published")
+                        : HealthResult.warn("PlaceholderAPI is not on this server, so the placeholders publish"
+                                + " nothing: every other part of the plugin works"));
+    }
+
     private static HealthCheck check(String name, Supplier<HealthResult> answer) {
         return new HealthCheck() {
 
