@@ -348,6 +348,16 @@ public enum Keys implements MessageKey {
             "staff.not-banned",
             "<tag:'AUTH'> <body><value><address><body> was not banned. Its count of wrong passwords starts again."),
     STAFF_NOT_AN_ADDRESS("staff.not-an-address", "<etag:'ERROR'> <body><value><address><body> is no address."),
+    STAFF_REMOVED(
+            "staff.removed",
+            "<tag:'AUTH'> <body>The account of <value><name><body> is removed, with everything kept under it."),
+    STAFF_REMOVED_KICK("staff.removed-kick", "<body>Staff removed your account. Join again to register."),
+    STAFF_PASSWORD_SET(
+            "staff.password-set",
+            "<tag:'AUTH'> <body>The password of <value><name><body> is set. Every session of the account ended."),
+    STAFF_PASSWORD_RACED(
+            "staff.password-raced",
+            "<etag:'ERROR'> <body>The password of <value><name><body> changed while this one was set. Try again."),
     INFO_HEADER("info.header", "<tag:'AUTH'> <value><name><body>, <value><kind><body>."),
     INFO_KIND_CRACKED("info.kind.cracked", "a password account"),
     INFO_KIND_PREMIUM("info.kind.premium", "a premium account"),

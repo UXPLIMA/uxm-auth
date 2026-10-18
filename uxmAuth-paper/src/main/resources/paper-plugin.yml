@@ -103,6 +103,12 @@ permissions:
   uxmauth.admin.unban:
     description: Lift the ban on an address
     default: op
+  uxmauth.admin.unregister:
+    description: Remove an account; from the console only unless staff.in-game opens it
+    default: op
+  uxmauth.admin.setpassword:
+    description: Set an account's password; from the console only unless staff.in-game opens it
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

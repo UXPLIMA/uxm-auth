@@ -33,6 +33,7 @@ public final class Bulletins {
     private static final String SEPARATOR = "|";
     private static final String SESSIONS_ENDED = "S";
     private static final String LET_IN = "L";
+    private static final String UNREGISTERED = "U";
     private static final int PARTS = 6;
 
     private final Claims claims;
@@ -49,6 +50,7 @@ public final class Bulletins {
                     case Bulletin.SessionsEnded ended ->
                         text(sent, SESSIONS_ENDED, ended.account(), ended.keep().orElse(""));
                     case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), letIn.nonce());
+                    case Bulletin.Unregistered removed -> text(sent, UNREGISTERED, removed.account(), "");
                 });
     }
 
@@ -107,6 +109,8 @@ public final class Bulletins {
                                     account, more.isEmpty() ? Optional.empty() : Optional.of(more)));
                         case LET_IN ->
                             more.isEmpty() ? Optional.empty() : Optional.of(new Bulletin.LetIn(account, more));
+                        case UNREGISTERED ->
+                            more.isEmpty() ? Optional.of(new Bulletin.Unregistered(account)) : Optional.empty();
                         default -> Optional.empty();
                     };
             return bulletin.map(read ->

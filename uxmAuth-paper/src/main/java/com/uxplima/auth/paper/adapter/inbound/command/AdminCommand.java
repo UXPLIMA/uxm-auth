@@ -164,6 +164,23 @@ public final class AdminCommand {
         CompletableFuture<Void> unused = actions.unban(sender.bukkit(), address);
     }
 
+    /** Removes an account and everything kept under it; its player is sent away wherever they are. */
+    @FromConfig(value = "unregister", fallbackName = "unregister", description = "Remove an account")
+    @Permission("uxmauth.admin.unregister")
+    public void unregister(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = actions.unregister(sender.bukkit(), player);
+    }
+
+    /** Sets an account's password and ends its sessions. The password is kept out of the console. */
+    @FromConfig(value = "setpassword", fallbackName = "setpassword", description = "Set an account's password")
+    @Permission("uxmauth.admin.setpassword")
+    public void setPassword(
+            Sender sender,
+            @Arg("player") @SuggestUsing(PlayerNames.KEY) String player,
+            @Arg("password") String password) {
+        CompletableFuture<Void> unused = actions.setPassword(sender.bukkit(), player, password);
+    }
+
     /** Everything staff read of one account: its dates, logins, factors, address and the other accounts. */
     @FromConfig(value = "info", fallbackName = "info", description = "Read what is known of an account")
     @Permission("uxmauth.admin.info")

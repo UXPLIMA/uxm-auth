@@ -45,6 +45,16 @@ final class BulletinsTest {
     }
 
     @Test
+    @DisplayName("an account staff removed travels whole too, and carries nothing after the account")
+    void anUnregisteredOpens() {
+        Bulletins.Sent removed = new Bulletins.Sent(new Bulletin.Unregistered(STEVE), ORIGIN, NOW);
+
+        assertThat(bulletins.open(bulletins.seal(removed), NOW)).contains(removed);
+        assertThat(bulletins.open(claims.seal("b1|U|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + STEVE + "|x"), NOW))
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("a let-in opens once: the same sealed text again inside the fresh time lets nobody in twice")
     void aLetInIsNotReplayed() {
         Bulletins.Sent letIn = new Bulletins.Sent(new Bulletin.LetIn(STEVE, "n0nce-2"), ORIGIN, NOW);

@@ -11,9 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.application.lane.HashingLane;
-import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.staff.AccountInfo;
-import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.staff.InfoForm;
@@ -90,9 +88,9 @@ final class StaffGraph implements AutoCloseable {
     }
 
     /** What staff do to an account, behind the gate the operator set for staff in game. */
-    StaffDesk desk(ForceLogin force, AddressBans bans, Predicate<StaffAction> openInGame) {
+    StaffDesk desk(StaffDesk.Cases cases, Predicate<StaffAction> openInGame) {
         return new StaffDesk(
-                new StaffGate(openInGame, messages), force, bans, lane, replies, messages, plugin.getLogger()::info);
+                new StaffGate(openInGame, messages), cases, lane, replies, messages, plugin.getLogger()::info);
     }
 
     /** Reads another account into the window or the form, for the staff player who picked it. */

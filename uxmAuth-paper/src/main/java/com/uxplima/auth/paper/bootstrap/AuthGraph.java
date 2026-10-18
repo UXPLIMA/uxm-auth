@@ -59,6 +59,8 @@ import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.AccountInfo;
 import com.uxplima.auth.application.staff.ForceLogin;
+import com.uxplima.auth.application.staff.SetPassword;
+import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
@@ -75,6 +77,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RecoverCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
+import com.uxplima.auth.paper.adapter.inbound.command.SecretBranches;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
@@ -109,6 +112,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.inbound.staff.ForcedLogins;
+import com.uxplima.auth.paper.adapter.inbound.staff.RemovedAccounts;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffDesk;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffView;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
@@ -483,12 +487,27 @@ final class AuthGraph implements AutoCloseable {
         this.staff = staffing.view;
         ForceLogin force = new ForceLogin(accounts, sessions, events, clock);
         events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
-        this.desk =
-                staffing.desk(force, bans, action -> settings.current().staff().allowsInGame(action));
+        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
+        this.desk = staffing.desk(
+                new StaffDesk.Cases(
+                        force,
+                        bans,
+                        new Unregister(accounts, events),
+                        new SetPassword(
+                                accounts,
+                                hashing,
+                                () -> settings.current().passwordPolicy(),
+                                breaches,
+                                remembered,
+                                events)),
+                action -> settings.current().staff().allowsInGame(action));
         this.recover =
                 mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);
-        this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
+        PasswordMask.Branches staffSecrets =
+                new PasswordMask.Branches(SecretBranches.labels(commands), SecretBranches.words(commands));
+        this.filters =
+                new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels, () -> staffSecrets)));
     }
 
     /** The map the captcha is drawn on, or none when the server has no world to keep one in. */

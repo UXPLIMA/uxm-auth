@@ -11,12 +11,20 @@ import java.util.concurrent.TimeUnit;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
+import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.staff.ForceLogin;
+import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
+import com.uxplima.auth.application.staff.Unregister;
+import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.text.Text;
 import org.junit.jupiter.api.AfterEach;
@@ -54,7 +62,27 @@ final class StaffDeskTest {
         events.listen(
                 new ForcedLogins(server::getPlayer, force, world.lane, world.replies, world.door, world.messages));
         gate = new StaffGate(action -> !action.destructive() || opened.contains(action), world.messages);
-        desk = new StaffDesk(gate, force, world.bans, world.lane, world.replies, world.messages, logged::add);
+        events.listen(new RemovedAccounts(server::getPlayer, world.scheduler, world.messages));
+        events.listen(new EndedSessions(
+                server::getPlayer,
+                world.sessions,
+                world.scheduler,
+                world.logOut,
+                world.door,
+                world.moments,
+                world.messages));
+        StaffDesk.Cases cases = new StaffDesk.Cases(
+                force,
+                world.bans,
+                new Unregister(world.accounts, events),
+                new SetPassword(
+                        world.accounts,
+                        world.hashing,
+                        () -> world.policy,
+                        BreachedPasswords.NONE,
+                        world.remembered,
+                        events));
+        desk = new StaffDesk(gate, cases, world.lane, world.replies, world.messages, logged::add);
     }
 
     @AfterEach
@@ -147,5 +175,74 @@ final class StaffDeskTest {
         assertThat(staff.nextComponentMessage())
                 .isEqualTo(world.messages.render(
                         staff, Keys.STAFF_NOT_AN_ADDRESS, Text.placeholder("address", "nowhere")));
+    }
+
+    private void until(java.util.function.BooleanSupplier done) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline && !done.getAsBoolean()) {
+            world.scheduler.drain();
+            Thread.onSpinWait();
+        }
+        world.scheduler.drain();
+    }
+
+    @Test
+    @DisplayName("in game an unregistration is refused unless opened; from the console the account goes and its"
+            + " player is sent away")
+    void anUnregistrationRemovesTheAccount() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+
+        world.scheduler.settle(desk.unregister(staff, "Steve"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        staff, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", "unregister")));
+        assertThat(world.accounts.findByName(new PlayerName("Steve"))).isPresent();
+
+        world.scheduler.settle(desk.unregister(server.getConsoleSender(), "Steve"));
+        until(() -> !steve.isOnline());
+
+        assertThat(world.accounts.findByName(new PlayerName("Steve"))).isEmpty();
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(logged).singleElement().asString().contains("Steve");
+    }
+
+    @Test
+    @DisplayName("a set password works at the next login, ends the account's sessions, and stays out of the console")
+    void aSetPasswordEndsTheSessions() {
+        opened.add(StaffAction.SET_PASSWORD);
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        world.logIn
+                .run(steve.getUniqueId(), Password.of("hunter22"), "127.0.0.1")
+                .join();
+
+        world.scheduler.settle(desk.setPassword(staff, "Steve", "fresh7777"));
+        until(() -> !(world.sessions.state(steve.getUniqueId()).orElseThrow() instanceof AuthState.Authenticated));
+
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_PASSWORD_SET, Text.placeholder("name", "Steve")));
+        assertThat(world.sessions.state(steve.getUniqueId()).orElseThrow()).isInstanceOf(AuthState.Registered.class);
+        assertThat(world.logIn
+                        .run(steve.getUniqueId(), Password.of("fresh7777"), "127.0.0.1")
+                        .join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+        assertThat(logged).singleElement().asString().contains("Steve").doesNotContain("fresh7777");
+    }
+
+    @Test
+    @DisplayName("a password the rules refuse is answered with the reason, and an unknown name says so")
+    void aRefusedPasswordSaysWhy() {
+        opened.add(StaffAction.SET_PASSWORD);
+        world.registered(server.addPlayer("Steve"), "hunter22");
+
+        world.scheduler.settle(desk.setPassword(staff, "Steve", "abc"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(PasswordWords.reason(world.messages, staff, world.policy.check(Password.of("abc")))
+                        .orElseThrow());
+        world.scheduler.settle(desk.setPassword(staff, "Nobody", "fresh7777"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_UNKNOWN, Text.placeholder("name", "Nobody")));
+        assertThat(logged).isEmpty();
     }
 }

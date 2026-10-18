@@ -31,6 +31,27 @@ final class PasswordLogFilterTest {
     }
 
     @Test
+    @DisplayName("a staff branch that carries a password hides what follows the branch, and every other branch stays")
+    void aStaffPasswordIsHidden() {
+        PasswordMask staff = new PasswordMask(
+                () -> Set.of("login"),
+                () -> new PasswordMask.Branches(Set.of("uxmauth", "auth"), Set.of("setpassword", "sifreata")));
+
+        assertThat(staff.mask("Notch issued server command: /uxmauth setpassword Steve hunter2"))
+                .isEqualTo("Notch issued server command: /uxmauth setpassword ***");
+        assertThat(staff.mask("Notch issued server command: /auth SIFREATA Steve hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /uxmauth:uxmauth setpassword Steve hunter2"))
+                .doesNotContain("hunter2");
+        assertThat(staff.mask("Notch issued server command: /uxmauth info Steve"))
+                .isEqualTo("Notch issued server command: /uxmauth info Steve");
+        assertThat(staff.mask("Notch issued server command: /uxmauth setpassword"))
+                .isEqualTo("Notch issued server command: /uxmauth setpassword");
+        assertThat(staff.mask("Notch issued server command: /login hunter2"))
+                .isEqualTo("Notch issued server command: /login ***");
+    }
+
+    @Test
     @DisplayName("a line that is not one of these commands is left as it was")
     void anUnrelatedLineIsUntouched() {
         assertThat(mask.mask("Notch issued server command: /spawn")).isEqualTo("Notch issued server command: /spawn");

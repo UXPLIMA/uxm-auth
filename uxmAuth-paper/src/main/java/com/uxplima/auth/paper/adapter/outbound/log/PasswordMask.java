@@ -20,11 +20,35 @@ public final class PasswordMask {
     /** What stands in for the arguments. */
     static final String HIDDEN = "***";
 
+    /**
+     * The branches of a command that carry a password after their word, as staff setting one: every label of the
+     * command and every word of those branches, in lower case.
+     */
+    public record Branches(Set<String> labels, Set<String> words) {
+        /** No command has such a branch. */
+        public static final Branches NONE = new Branches(Set.of(), Set.of());
+
+        public Branches {
+            labels = Set.copyOf(labels);
+            words = Set.copyOf(words);
+        }
+    }
+
     private final Supplier<Set<String>> labels;
+    private final Supplier<Branches> branches;
 
     /** @param labels every name and alias of the password commands, in lower case */
     public PasswordMask(Supplier<Set<String>> labels) {
+        this(labels, () -> Branches.NONE);
+    }
+
+    /**
+     * @param labels every name and alias of the password commands, in lower case
+     * @param branches the branches of other commands that carry a password
+     */
+    public PasswordMask(Supplier<Set<String>> labels, Supplier<Branches> branches) {
         this.labels = Objects.requireNonNull(labels, "labels");
+        this.branches = Objects.requireNonNull(branches, "branches");
     }
 
     /** The line with a password command's arguments hidden, or the line itself. */
@@ -41,9 +65,20 @@ public final class PasswordMask {
         }
         String label = line.substring(start, space).toLowerCase(Locale.ROOT);
         String bare = label.substring(label.indexOf(':') + 1);
-        if (!labels.get().contains(bare)) {
+        if (labels.get().contains(bare)) {
+            return line.substring(0, space) + " " + HIDDEN;
+        }
+        Branches carrying = branches.get();
+        return carrying.labels().contains(bare) ? branch(line, space, carrying.words()) : line;
+    }
+
+    /** The line with what follows a password-carrying branch hidden, or the line itself for any other branch. */
+    private static String branch(String line, int space, Set<String> words) {
+        int next = line.indexOf(' ', space + 1);
+        if (next < 0) {
             return line;
         }
-        return line.substring(0, space) + " " + HIDDEN;
+        String word = line.substring(space + 1, next).toLowerCase(Locale.ROOT);
+        return words.contains(word) ? line.substring(0, next) + " " + HIDDEN : line;
     }
 }

@@ -58,6 +58,7 @@ import com.uxplima.auth.velocity.adapter.inbound.EndedSessions;
 import com.uxplima.auth.velocity.adapter.inbound.HoldListener;
 import com.uxplima.auth.velocity.adapter.inbound.ProxyDoor;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
+import com.uxplima.auth.velocity.adapter.inbound.RemovedAccounts;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
@@ -283,6 +284,7 @@ final class ProxyGraph implements AutoCloseable {
         NetworkEvents bulletins = NetworkBulletins.open(
                 settings.current().network().redis(), new Bulletins(claims.get().orElseThrow()), logger::warn);
         bulletins.listen(new EndedSessions(sessions));
+        bulletins.listen(new RemovedAccounts(proxy::getPlayer, sessions, words));
         this.events = bulletins;
         return sessions;
     }

@@ -18,6 +18,16 @@ public interface StaffActions {
         public CompletableFuture<Void> unban(CommandSender sender, String address) {
             return CompletableFuture.completedFuture(null);
         }
+
+        @Override
+        public CompletableFuture<Void> unregister(CommandSender sender, String name) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Void> setPassword(CommandSender sender, String name, String password) {
+            return CompletableFuture.completedFuture(null);
+        }
     };
 
     /** Lets the waiting player of the account under this name in, on whichever server they wait. */
@@ -25,4 +35,10 @@ public interface StaffActions {
 
     /** Lifts the ban on an address and forgets its wrong passwords. */
     CompletableFuture<Void> unban(CommandSender sender, String address);
+
+    /** Removes the account under this name, and sends its player away wherever they are. */
+    CompletableFuture<Void> unregister(CommandSender sender, String name);
+
+    /** Sets the password of the account under this name, and ends its sessions everywhere. */
+    CompletableFuture<Void> setPassword(CommandSender sender, String name, String password);
 }
