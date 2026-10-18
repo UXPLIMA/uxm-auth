@@ -1,4 +1,4 @@
-package com.uxplima.auth.application.factor;
+package com.uxplima.auth.testing;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,13 +13,13 @@ import com.uxplima.auth.domain.factor.TotpSecret;
 import com.uxplima.auth.domain.hash.PasswordHash;
 
 /** The factor table in memory, for the use cases' tests. */
-final class MemoryFactors implements Factors {
+public final class InMemoryFactors implements Factors {
 
     private final Map<UUID, App> apps = new ConcurrentHashMap<>();
     private final Map<UUID, List<PasswordHash>> codes = new ConcurrentHashMap<>();
 
     /** Whether a read answers the app as it was before any step, as another server's read does mid-race. */
-    boolean readsStale;
+    public boolean readsStale;
 
     @Override
     public Optional<App> app(UUID account) {
