@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import org.bukkit.entity.Player;
@@ -37,6 +38,7 @@ public final class LoginRecords {
     private final Consumer<String> warn;
     private final Landed landed;
     private final @Nullable FactorStates factors;
+    private final BiConsumer<Player, AuthMethod> here;
 
     /** @param async runs a task off every server and region thread */
     public LoginRecords(LoginHistory history, Consumer<Runnable> async, Clock clock, Consumer<String> warn) {
@@ -57,6 +59,19 @@ public final class LoginRecords {
             Consumer<String> warn,
             Landed landed,
             @Nullable FactorStates factors) {
+        this(history, async, clock, warn, landed, factors, (player, method) -> {});
+    }
+
+    /** @param here told of every login here at once, on the player's own thread, which fires the login event */
+    public LoginRecords(
+            LoginHistory history,
+            Consumer<Runnable> async,
+            Clock clock,
+            Consumer<String> warn,
+            Landed landed,
+            @Nullable FactorStates factors,
+            BiConsumer<Player, AuthMethod> here) {
+        this.here = Objects.requireNonNull(here, "here");
         this.factors = factors;
         this.history = Objects.requireNonNull(history, "history");
         this.async = Objects.requireNonNull(async, "async");
@@ -68,6 +83,7 @@ public final class LoginRecords {
     /** The player is in by this login. */
     public void loggedIn(Player player, AuthState.Authenticated in) {
         Objects.requireNonNull(player, "player");
+        here.accept(player, Objects.requireNonNull(in, "in").method());
         FactorStates known = factors;
         if (known != null) {
             UUID id = Objects.requireNonNull(in, "in").account().id();

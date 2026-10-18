@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
@@ -35,6 +36,7 @@ public final class ChangePassword {
     private final NetworkEvents events;
     private final RememberedSessions remembered;
     private final BreachedPasswords breaches;
+    private final AuthEvents listeners;
 
     public ChangePassword(
             AccountRepository accounts,
@@ -57,6 +59,21 @@ public final class ChangePassword {
             NetworkEvents events,
             RememberedSessions remembered,
             BreachedPasswords breaches) {
+        this(accounts, hashing, lane, sessions, policy, events, remembered, breaches, AuthEvents.NONE);
+    }
+
+    /** @param listeners told of every change made */
+    public ChangePassword(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Supplier<PasswordPolicy> policy,
+            NetworkEvents events,
+            RememberedSessions remembered,
+            BreachedPasswords breaches,
+            AuthEvents listeners) {
+        this.listeners = Objects.requireNonNull(listeners, "listeners");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -155,6 +172,7 @@ public final class ChangePassword {
         }
         boolean replaced = loggedIn(connection, generation, current.withPassword(hash));
         endOtherSessions(connection, id);
+        listeners.passwordChanged(id, current.name());
         return replaced ? new ChangeResult.Replaced() : new ChangeResult.Changed();
     }
 

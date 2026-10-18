@@ -10,8 +10,6 @@ import java.util.function.Function;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 
-import com.uxplima.auth.api.AccountType;
-import com.uxplima.auth.api.LoginWay;
 import com.uxplima.auth.api.paper.event.BanEvent;
 import com.uxplima.auth.api.paper.event.FailedLoginEvent;
 import com.uxplima.auth.api.paper.event.KindSwitchEvent;
@@ -21,6 +19,7 @@ import com.uxplima.auth.api.paper.event.PreLoginEvent;
 import com.uxplima.auth.api.paper.event.PreRegisterEvent;
 import com.uxplima.auth.api.paper.event.RegisterEvent;
 import com.uxplima.auth.api.paper.event.UnregisterEvent;
+import com.uxplima.auth.application.SessionsAuthApi;
 import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -88,7 +87,7 @@ public final class PaperEvents implements AuthEvents {
 
     @Override
     public void kindSwitched(UUID account, PlayerName name, AccountKind to) {
-        call.accept(new KindSwitchEvent(account, name.value(), type(to)));
+        call.accept(new KindSwitchEvent(account, name.value(), SessionsAuthApi.type(to)));
     }
 
     /** An address is banned after its wrong passwords. */
@@ -102,28 +101,6 @@ public final class PaperEvents implements AuthEvents {
         if (Objects.requireNonNull(method, "method") == AuthMethod.REGISTERED) {
             call.accept(new RegisterEvent(player));
         }
-        call.accept(new LoginEvent(player, way(method)));
-    }
-
-    /** The API's name of a way in. */
-    public static LoginWay way(AuthMethod method) {
-        return switch (method) {
-            case PASSWORD -> LoginWay.PASSWORD;
-            case REGISTERED -> LoginWay.REGISTERED;
-            case PREMIUM -> LoginWay.PREMIUM;
-            case BEDROCK -> LoginWay.BEDROCK;
-            case SESSION -> LoginWay.SESSION;
-            case FORCED -> LoginWay.FORCED;
-            case NETWORK -> LoginWay.NETWORK;
-        };
-    }
-
-    /** The API's name of a kind of account. */
-    public static AccountType type(AccountKind kind) {
-        return switch (kind) {
-            case CRACKED -> AccountType.CRACKED;
-            case PREMIUM -> AccountType.PREMIUM;
-            case BEDROCK -> AccountType.BEDROCK;
-        };
+        call.accept(new LoginEvent(player, SessionsAuthApi.way(method)));
     }
 }

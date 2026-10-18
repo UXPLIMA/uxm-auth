@@ -171,15 +171,4 @@ final class PaperEventsTest {
                         "register Steve",
                         "login Steve " + LoginWay.REGISTERED + " async=false");
     }
-
-    @Test
-    @DisplayName("every way in and every kind has its name in the API")
-    void everyNameMaps() {
-        for (AuthMethod method : AuthMethod.values()) {
-            assertThat(PaperEvents.way(method).name()).isEqualTo(method.name());
-        }
-        for (AccountKind kind : AccountKind.values()) {
-            assertThat(PaperEvents.type(kind).name()).isEqualTo(kind.name());
-        }
-    }
 }

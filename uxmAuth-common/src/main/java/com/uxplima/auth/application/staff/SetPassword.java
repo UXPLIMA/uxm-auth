@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
@@ -47,6 +48,7 @@ public final class SetPassword {
     private final BreachedPasswords breaches;
     private final RememberedSessions remembered;
     private final NetworkEvents events;
+    private final AuthEvents listeners;
 
     public SetPassword(
             AccountRepository accounts,
@@ -55,6 +57,19 @@ public final class SetPassword {
             BreachedPasswords breaches,
             RememberedSessions remembered,
             NetworkEvents events) {
+        this(accounts, hashing, policy, breaches, remembered, events, AuthEvents.NONE);
+    }
+
+    /** @param listeners told of every password staff set */
+    public SetPassword(
+            AccountRepository accounts,
+            Hashing hashing,
+            Supplier<PasswordPolicy> policy,
+            BreachedPasswords breaches,
+            RememberedSessions remembered,
+            NetworkEvents events,
+            AuthEvents listeners) {
+        this.listeners = Objects.requireNonNull(listeners, "listeners");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.policy = Objects.requireNonNull(policy, "policy");
@@ -83,6 +98,7 @@ public final class SetPassword {
         }
         remembered.forget(found.id());
         events.publish(new Bulletin.SessionsEnded(found.id(), Optional.empty()));
+        listeners.passwordChanged(found.id(), found.name());
         return new Outcome.Set();
     }
 }

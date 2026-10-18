@@ -15,8 +15,21 @@ import com.tngtech.archunit.lang.ArchRule;
  * type reaches in here, one of the two platforms stops being able to load the class, and the plugin has
  * silently become two plugins that share a name.
  */
-@AnalyzeClasses(packages = "com.uxplima.auth", importOptions = ImportOption.DoNotIncludeTests.class)
+@AnalyzeClasses(
+        packages = "com.uxplima.auth",
+        importOptions = {ImportOption.DoNotIncludeTests.class, ArchitectureTest.NotTheApi.class})
 final class ArchitectureTest {
+
+    /**
+     * The API module carries each platform's events on purpose and has its own fence. What is held here is that
+     * the common module reaches none of them, which the rule after the first says.
+     */
+    static final class NotTheApi implements ImportOption {
+        @Override
+        public boolean includes(com.tngtech.archunit.core.importer.Location location) {
+            return !location.contains("com/uxplima/auth/api/");
+        }
+    }
 
     // The whole point of the module. Paper and Velocity have almost nothing in common except Adventure, so
     // anything here that names one of them cannot run on the other.
@@ -26,6 +39,13 @@ final class ArchitectureTest {
             .dependOnClassesThat()
             .resideInAnyPackage(
                     "org.bukkit..", "io.papermc..", "com.destroystokyo..", "com.velocitypowered..", "com.mojang..");
+
+    // The API's platform events are each platform's to fire; the common module answers the API, never an event.
+    @ArchTest
+    static final ArchRule commonFiresNoPlatformEvent = noClasses()
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("com.uxplima.auth.api.paper..", "com.uxplima.auth.api.velocity..");
 
     // The domain models the problem, not the server. Keeping the text library and the logger out of it is
     // what lets a plain JUnit test drive the rules with no server and no mock.

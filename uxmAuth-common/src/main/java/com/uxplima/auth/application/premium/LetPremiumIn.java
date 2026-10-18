@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.Disputes;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
@@ -35,6 +36,7 @@ public final class LetPremiumIn {
     private final Supplier<ConflictStrategy> conflict;
     private final Supplier<String> mark;
     private final UuidScheme scheme;
+    private final AuthEvents listeners;
     private final Clock clock;
 
     public LetPremiumIn(
@@ -44,6 +46,19 @@ public final class LetPremiumIn {
             Supplier<String> mark,
             UuidScheme scheme,
             Clock clock) {
+        this(accounts, disputes, conflict, mark, scheme, clock, AuthEvents.NONE);
+    }
+
+    /** @param listeners told of every cracked account that turns premium here */
+    public LetPremiumIn(
+            AccountRepository accounts,
+            Disputes disputes,
+            Supplier<ConflictStrategy> conflict,
+            Supplier<String> mark,
+            UuidScheme scheme,
+            Clock clock,
+            AuthEvents listeners) {
+        this.listeners = Objects.requireNonNull(listeners, "listeners");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.disputes = Objects.requireNonNull(disputes, "disputes");
         this.conflict = Objects.requireNonNull(conflict, "conflict");
@@ -163,6 +178,7 @@ public final class LetPremiumIn {
                 holder.registrationAddress(),
                 holder.lastLoginAt(),
                 holder.lastAddress()));
+        listeners.kindSwitched(id, name, AccountKind.PREMIUM);
     }
 
     /** The paid player's own account, under the name Mojang gives it now, in Mojang's case. */

@@ -52,4 +52,17 @@ final class UnregisterTest {
         assertThat(unregister.remove(new PlayerName("Steve"))).isEqualTo(Unregister.Removed.UNKNOWN);
         assertThat(published).hasSize(1);
     }
+
+    @Test
+    @DisplayName("an account staff removed is told to the listeners once, under its own name")
+    void aRemovalIsTold() {
+        fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.testing.HeardEvents listeners = new com.uxplima.auth.testing.HeardEvents();
+        Unregister told = new Unregister(fixture.accounts, events, listeners);
+
+        told.remove(new PlayerName("steve"));
+        told.remove(new PlayerName("steve"));
+
+        assertThat(listeners.heard).containsExactly("unregistered Steve");
+    }
 }

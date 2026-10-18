@@ -299,4 +299,30 @@ final class ChangePasswordTest {
                 .run(connection, Password.of(old), Password.of(fresh))
                 .join();
     }
+
+    @Test
+    @DisplayName("a change the player made is told to the listeners once, and a refused one is not")
+    void aChangeIsTold() {
+        UUID connection = loggedIn("Steve", "hunter22");
+        com.uxplima.auth.testing.HeardEvents listeners = new com.uxplima.auth.testing.HeardEvents();
+        ChangePassword useCase = new ChangePassword(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                events,
+                fixture.remembered,
+                com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                listeners);
+
+        assertThat(useCase.run(connection, Password.of("wrong999"), Password.of("fresh777"))
+                        .join())
+                .isEqualTo(new ChangeResult.WrongOld());
+        assertThat(useCase.run(connection, Password.of("hunter22"), Password.of("fresh777"))
+                        .join())
+                .isEqualTo(new ChangeResult.Changed());
+
+        assertThat(listeners.heard).containsExactly("changed Steve");
+    }
 }

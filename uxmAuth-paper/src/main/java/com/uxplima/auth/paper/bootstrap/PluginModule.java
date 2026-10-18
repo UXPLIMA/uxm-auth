@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import org.bukkit.plugin.ServicePriority;
+import org.bukkit.plugin.ServicesManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
@@ -20,6 +22,9 @@ import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.mail.MailFiles;
+import com.uxplima.auth.api.AuthApi;
+import com.uxplima.auth.api.AuthApiProvider;
+import com.uxplima.auth.application.SessionsAuthApi;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
@@ -107,6 +112,8 @@ final class PluginModule {
     private @Nullable AuthGraph auth;
     /** Takes the placeholders down again; null while none are published. */
     private @Nullable Runnable unpublish;
+    /** Takes the API back from other plugins; null while it is not offered. */
+    private @Nullable Runnable withdraw;
 
     PluginModule(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -186,6 +193,10 @@ final class PluginModule {
         }
         saveChoices();
         store = null;
+        if (withdraw != null) {
+            withdraw.run();
+            withdraw = null;
+        }
         if (unpublish != null) {
             unpublish.run();
             unpublish = null;
@@ -198,6 +209,21 @@ final class PluginModule {
             database.close();
             database = null;
         }
+    }
+
+    /**
+     * Offer the API to other plugins, through the services manager and through the provider every platform shares.
+     * Both are taken back at shutdown, so a reload never leaves another plugin asking the graph it replaced.
+     */
+    private void offerApi(AuthGraph graph) {
+        AuthApi api = new SessionsAuthApi(graph.sessions::state);
+        ServicesManager services = plugin.getServer().getServicesManager();
+        services.register(AuthApi.class, api, plugin, ServicePriority.Normal);
+        Runnable fromProvider = AuthApiProvider.offer(api);
+        this.withdraw = () -> {
+            fromProvider.run();
+            services.unregister(AuthApi.class, api);
+        };
     }
 
     /**
@@ -282,6 +308,7 @@ final class PluginModule {
         this.auth = graph;
         graph.start();
         publishPlaceholders(graph);
+        offerApi(graph);
         registerPlayerCommands(graph, commands, resolvers, scheduler);
 
         registerAdminCommand(

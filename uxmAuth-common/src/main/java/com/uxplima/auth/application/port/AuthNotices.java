@@ -1,6 +1,8 @@
 package com.uxplima.auth.application.port;
 
 import java.time.Duration;
+import java.util.Objects;
+import java.util.function.BiConsumer;
 
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.state.AuthMethod;
@@ -29,6 +31,66 @@ public interface AuthNotices {
         @Override
         public void conflictSettled(String name) {}
     };
+
+    /** Both of these hear everything, the first first. */
+    static AuthNotices both(AuthNotices first, AuthNotices second) {
+        Objects.requireNonNull(first, "first");
+        Objects.requireNonNull(second, "second");
+        return new AuthNotices() {
+            @Override
+            public void registered(PlayerName name, String address) {
+                first.registered(name, address);
+                second.registered(name, address);
+            }
+
+            @Override
+            public void loggedIn(PlayerName name, String address, AuthMethod method) {
+                first.loggedIn(name, address, method);
+                second.loggedIn(name, address, method);
+            }
+
+            @Override
+            public void knownAddress(PlayerName name, String address, int accounts) {
+                first.knownAddress(name, address, accounts);
+                second.knownAddress(name, address, accounts);
+            }
+
+            @Override
+            public void banned(String address, Duration length) {
+                first.banned(address, length);
+                second.banned(address, length);
+            }
+
+            @Override
+            public void conflictSettled(String name) {
+                first.conflictSettled(name);
+                second.conflictSettled(name);
+            }
+        };
+    }
+
+    /** Hears the bans, and nothing else. */
+    static AuthNotices onBan(BiConsumer<String, Duration> banned) {
+        Objects.requireNonNull(banned, "banned");
+        return new AuthNotices() {
+            @Override
+            public void registered(PlayerName name, String address) {}
+
+            @Override
+            public void loggedIn(PlayerName name, String address, AuthMethod method) {}
+
+            @Override
+            public void knownAddress(PlayerName name, String address, int accounts) {}
+
+            @Override
+            public void banned(String address, Duration length) {
+                banned.accept(address, length);
+            }
+
+            @Override
+            public void conflictSettled(String name) {}
+        };
+    }
 
     void registered(PlayerName name, String address);
 

@@ -49,6 +49,7 @@ import com.uxplima.auth.application.mail.RecoverPassword;
 import com.uxplima.auth.application.perf.TimedAccounts;
 import com.uxplima.auth.application.perf.Timings;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthNotices;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
@@ -133,6 +134,7 @@ import com.uxplima.auth.paper.adapter.outbound.captcha.CaptchaMap;
 import com.uxplima.auth.paper.adapter.outbound.client.DialogClients;
 import com.uxplima.auth.paper.adapter.outbound.discord.DiscordNotices;
 import com.uxplima.auth.paper.adapter.outbound.effect.AuthMoments;
+import com.uxplima.auth.paper.adapter.outbound.event.PaperEvents;
 import com.uxplima.auth.paper.adapter.outbound.handshake.PremiumHelloDoor;
 import com.uxplima.auth.paper.adapter.outbound.handshake.ServerHellos;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
@@ -248,6 +250,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
         this.events = bulletins(settings, plugin.getLogger());
+        PaperEvents fired = new PaperEvents(
+                plugin.getServer()::getPlayer, plugin.getServer().getPluginManager()::callEvent);
         this.discord = new DiscordNotices(
                 () -> settings.current().discord(), DiscordNotices.WEBHOOK, plugin.getLogger()::warning, DISCORD_QUEUE);
         this.alerts = new Alerts(
@@ -256,7 +260,7 @@ final class AuthGraph implements AutoCloseable {
                 events,
                 task -> scheduler.async(task),
                 Instant::now,
-                discord);
+                AuthNotices.both(discord, AuthNotices.onBan(fired::banned)));
         LogIn.Failures failures = alerts.watching(bans);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
@@ -360,7 +364,8 @@ final class AuthGraph implements AutoCloseable {
                 failures,
                 () -> settings.current().passwordPolicy(),
                 captchas,
-                factors.secondStep);
+                factors.secondStep,
+                fired);
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -380,7 +385,8 @@ final class AuthGraph implements AutoCloseable {
                 clock,
                 cap::full,
                 breaches,
-                captchas::blocksRegistration);
+                captchas::blocksRegistration,
+                fired);
         ChangePassword change = new ChangePassword(
                 accounts,
                 hashing,
@@ -389,7 +395,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 events,
                 remembered,
-                breaches);
+                breaches,
+                fired);
         RecoverPassword recovering = mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
@@ -434,7 +441,13 @@ final class AuthGraph implements AutoCloseable {
         this.email = email.command();
         this.addressDuty = email.duty();
         LoginRecords records = new LoginRecords(
-                history, task -> scheduler.async(task), clock, plugin.getLogger()::warning, alerts::landed);
+                history,
+                task -> scheduler.async(task),
+                clock,
+                plugin.getLogger()::warning,
+                alerts::landed,
+                factorStates,
+                fired::loggedIn);
         // At start, and once a day after, a login older than the window goes.
         this.historyTask = scheduler.asyncTimer(
                 Duration.ZERO,
@@ -479,7 +492,8 @@ final class AuthGraph implements AutoCloseable {
                                         () -> settings.current().ownership().renameMark(),
                                         // The scheme this start recorded: a reload cannot change it.
                                         boot.ownership().uuidScheme(),
-                                        clock),
+                                        clock,
+                                        fired),
                                 new Moves(accounts)),
                         messages,
                         scheduler,
@@ -546,14 +560,15 @@ final class AuthGraph implements AutoCloseable {
                 new StaffDesk.Cases(
                         force,
                         bans,
-                        new Unregister(accounts, events),
+                        new Unregister(accounts, events, fired),
                         new SetPassword(
                                 accounts,
                                 hashing,
                                 () -> settings.current().passwordPolicy(),
                                 breaches,
                                 remembered,
-                                events),
+                                events,
+                                fired),
                         new ForceRegister(
                                 accounts,
                                 hashing,
@@ -562,7 +577,7 @@ final class AuthGraph implements AutoCloseable {
                                 breaches,
                                 clock),
                         new FactorOff(accounts, factors.factors, mail.emails),
-                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events),
+                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events, fired),
                         new ResolveConflict(
                                 accounts,
                                 disputes,

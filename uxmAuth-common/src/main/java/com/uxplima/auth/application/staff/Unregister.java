@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -25,8 +26,15 @@ public final class Unregister {
 
     private final AccountRepository accounts;
     private final NetworkEvents events;
+    private final AuthEvents listeners;
 
     public Unregister(AccountRepository accounts, NetworkEvents events) {
+        this(accounts, events, AuthEvents.NONE);
+    }
+
+    /** @param listeners told of every account removed */
+    public Unregister(AccountRepository accounts, NetworkEvents events, AuthEvents listeners) {
+        this.listeners = Objects.requireNonNull(listeners, "listeners");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.events = Objects.requireNonNull(events, "events");
     }
@@ -39,6 +47,7 @@ public final class Unregister {
         }
         accounts.delete(account.get().id());
         events.publish(new Bulletin.Unregistered(account.get().id()));
+        listeners.unregistered(account.get().id(), account.get().name());
         return Removed.REMOVED;
     }
 }

@@ -211,4 +211,24 @@ final class LoginRecordsTest {
         world.door.leave(steve);
         assertThat(world.factorStates.on(account().id())).isEmpty();
     }
+
+    @Test
+    @DisplayName("every login here, the network's too, is told at once on the caller's thread, before anything is"
+            + " written")
+    void everyLoginIsToldAtOnce() {
+        List<String> told = new ArrayList<>();
+        LoginRecords records = new LoginRecords(
+                world.history,
+                later::add,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                warned::add,
+                (account, name, address, method) -> {},
+                null,
+                (player, method) -> told.add(player.getName() + " " + method + " written " + later.size()));
+
+        records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.NETWORK));
+        records.loggedIn(steve, new AuthState.Authenticated(account(), AuthMethod.PASSWORD));
+
+        assertThat(told).containsExactly("Steve NETWORK written 0", "Steve PASSWORD written 0");
+    }
 }

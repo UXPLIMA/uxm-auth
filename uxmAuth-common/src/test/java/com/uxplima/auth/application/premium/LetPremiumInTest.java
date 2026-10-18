@@ -255,4 +255,20 @@ final class LetPremiumInTest {
         assertThat(found.id()).isEqualTo(mine.id());
         assertThat(fixture.accounts.findById(holder.id()).orElseThrow().name()).isEqualTo(new PlayerName("Notch_"));
     }
+
+    @Test
+    @DisplayName("an owner's account that turns premium at the door is told to the listeners once; a new paid"
+            + " account and a returning one switch nothing")
+    void aTurnAtTheDoorIsTold() {
+        cracked("Notch");
+        com.uxplima.auth.testing.HeardEvents listeners = new com.uxplima.auth.testing.HeardEvents();
+        LetPremiumIn told = new LetPremiumIn(
+                fixture.accounts, disputes, () -> conflict, () -> "_", UuidScheme.KEEP_FIRST, fixture.clock, listeners);
+
+        in(told.admit(MOJANG, NOTCH, HERE, true));
+        in(told.admit(MOJANG, NOTCH, HERE, false));
+        in(told.admit(java.util.UUID.randomUUID(), new PlayerName("Fresh"), HERE, false));
+
+        assertThat(listeners.heard).containsExactly("switched Notch PREMIUM");
+    }
 }

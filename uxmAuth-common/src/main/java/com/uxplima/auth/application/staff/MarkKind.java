@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
@@ -44,6 +45,7 @@ public final class MarkKind {
     private final Function<PlayerName, PremiumAnswer> lookup;
     private final UuidScheme scheme;
     private final NetworkEvents events;
+    private final AuthEvents listeners;
 
     /** @param lookup asks the operator's sources who holds a name; it may go to the web */
     public MarkKind(
@@ -51,6 +53,17 @@ public final class MarkKind {
             Function<PlayerName, PremiumAnswer> lookup,
             UuidScheme scheme,
             NetworkEvents events) {
+        this(accounts, lookup, scheme, events, AuthEvents.NONE);
+    }
+
+    /** @param listeners told of every kind staff switched */
+    public MarkKind(
+            AccountRepository accounts,
+            Function<PlayerName, PremiumAnswer> lookup,
+            UuidScheme scheme,
+            NetworkEvents events,
+            AuthEvents listeners) {
+        this.listeners = Objects.requireNonNull(listeners, "listeners");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.lookup = Objects.requireNonNull(lookup, "lookup");
         this.scheme = Objects.requireNonNull(scheme, "scheme");
@@ -89,6 +102,7 @@ public final class MarkKind {
         }
         accounts.update(withKind(account, account.id(), AccountKind.CRACKED, null));
         events.publish(new Bulletin.Rejoin(account.id()));
+        listeners.kindSwitched(account.id(), account.name(), AccountKind.CRACKED);
         return Marked.DONE;
     }
 
@@ -102,6 +116,7 @@ public final class MarkKind {
         }
         accounts.update(withKind(account, id, AccountKind.PREMIUM, mojangId));
         events.publish(new Bulletin.Rejoin(account.id()));
+        listeners.kindSwitched(id, account.name(), AccountKind.PREMIUM);
         return Marked.DONE;
     }
 

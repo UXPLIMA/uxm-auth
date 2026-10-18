@@ -177,4 +177,24 @@ final class MarkKindTest {
             database.close();
         }
     }
+
+    @Test
+    @DisplayName("a kind staff switched is told to the listeners once each way; a refused switch tells nothing")
+    void aSwitchIsTold() {
+        steve();
+        web.put("steve", new PremiumAnswer.Premium(MOJANG, "Steve"));
+        com.uxplima.auth.testing.HeardEvents listeners = new com.uxplima.auth.testing.HeardEvents();
+        MarkKind told = new MarkKind(
+                fixture.accounts,
+                name -> web.getOrDefault(name.key(), new PremiumAnswer.Unknown()),
+                UuidScheme.KEEP_FIRST,
+                events,
+                listeners);
+
+        assertThat(told.cracked(new PlayerName("Steve"))).isEqualTo(MarkKind.Marked.ALREADY);
+        assertThat(told.premium(new PlayerName("Steve"))).isEqualTo(MarkKind.Marked.DONE);
+        assertThat(told.cracked(new PlayerName("Steve"))).isEqualTo(MarkKind.Marked.DONE);
+
+        assertThat(listeners.heard).containsExactly("switched Steve PREMIUM", "switched Steve CRACKED");
+    }
 }

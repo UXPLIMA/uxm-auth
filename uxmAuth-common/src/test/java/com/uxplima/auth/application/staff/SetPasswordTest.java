@@ -85,4 +85,26 @@ final class SetPasswordTest {
                 .isEqualTo(new SetPassword.Outcome.Unknown());
         assertThat(published).isEmpty();
     }
+
+    @Test
+    @DisplayName("a password staff set is told to the listeners once; an unknown name tells nothing")
+    void aSetPasswordIsTold() {
+        fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.testing.HeardEvents listeners = new com.uxplima.auth.testing.HeardEvents();
+        SetPassword told = new SetPassword(
+                fixture.accounts,
+                fixture.hashing,
+                () -> fixture.policy,
+                BreachedPasswords.NONE,
+                fixture.remembered,
+                events,
+                listeners);
+
+        assertThat(told.set(new PlayerName("Nobody"), Password.of("fresh777")))
+                .isInstanceOf(SetPassword.Outcome.Unknown.class);
+        assertThat(told.set(new PlayerName("steve"), Password.of("fresh777")))
+                .isInstanceOf(SetPassword.Outcome.Set.class);
+
+        assertThat(listeners.heard).containsExactly("changed Steve");
+    }
 }

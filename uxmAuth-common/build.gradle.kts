@@ -17,6 +17,8 @@ dependencies {
     // api, not implementation: HoconConfig, Messages and ConfigurationNode appear in the
     // signatures that a platform module has to name, so they belong on its compile classpath.
     api(libs.uxmlib.common)
+    // The API another plugin compiles against: the use cases answer it, and both platforms carry it unrelocated.
+    api(project(":uxmAuth-api"))
     api(libs.configurate.hocon)
     // api: Database is in the signature of the repository a platform module opens.
     api(libs.uxmlib.storage)
