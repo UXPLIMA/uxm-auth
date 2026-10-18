@@ -60,9 +60,21 @@ public final class CountryFile implements Closeable {
             return Optional.empty();
         }
         try {
-            return Optional.of(new CountryFile(new Reader(file.toFile())));
-        } catch (IOException | RuntimeException unreadable) {
+            return Optional.of(read(file));
+        } catch (IOException unreadable) {
             return Optional.empty();
+        }
+    }
+
+    /** The file opened, or why a file that is there could not be: not a country database, or not readable now. */
+    static CountryFile read(Path file) throws IOException {
+        Objects.requireNonNull(file, "file");
+        try {
+            return new CountryFile(new Reader(file.toFile()));
+        } catch (RuntimeException unreadable) {
+            throw new IOException(file.getFileName() + " is not a country database", unreadable);
+        } catch (IOException unreadable) {
+            throw new IOException(file.getFileName() + " could not be read: " + unreadable.getMessage(), unreadable);
         }
     }
 

@@ -75,6 +75,32 @@ final class CountryBookTest {
     }
 
     @Test
+    @DisplayName("a file that cannot be read at a reload leaves the open one answering, and the reload says so")
+    void anUnreadableFileKeepsTheOpenOne() throws Exception {
+        CountryDatabase.write(folder.resolve(CountryFile.NAME), Map.of("203.0.113.0/24", "TR"));
+        try (CountryBook book = new CountryBook(folder)) {
+            book.reload();
+            Path broken = folder.resolve("broken.part");
+            java.nio.file.Files.writeString(broken, "not a country database");
+            java.nio.file.Files.move(
+                    broken,
+                    folder.resolve(CountryFile.NAME),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(book::reload)
+                    .isInstanceOf(java.io.IOException.class)
+                    .hasMessageContaining(CountryFile.NAME);
+            assertThat(book.ready()).isTrue();
+            assertThat(book.of("203.0.113.7")).contains("TR");
+
+            java.nio.file.Files.delete(folder.resolve(CountryFile.NAME));
+            book.reload();
+            assertThat(book.ready()).as("a file taken away is let go").isFalse();
+        }
+    }
+
+    @Test
     @DisplayName("a closed file says it is closed rather than that it does not know the address")
     void aClosedFileSaysSo() throws Exception {
         CountryDatabase.write(folder.resolve(CountryFile.NAME), Map.of("203.0.113.0/24", "TR"));

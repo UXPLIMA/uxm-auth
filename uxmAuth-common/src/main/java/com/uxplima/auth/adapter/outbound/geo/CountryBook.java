@@ -2,6 +2,7 @@ package com.uxplima.auth.adapter.outbound.geo;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
@@ -12,7 +13,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The country file in the data folder, as the door asks it. A reload opens the file that is there now and
- * closes the one before, so a fetched file is read without a restart.
+ * closes the one before, so a fetched file is read without a restart; a file that cannot be read is not swapped in.
  */
 public final class CountryBook implements Countries, Closeable {
 
@@ -26,10 +27,14 @@ public final class CountryBook implements Countries, Closeable {
         this.folder = Objects.requireNonNull(folder, "folder");
     }
 
-    /** Opens the file that is in the folder now, or none when there is none. */
+    /**
+     * Opens the file that is in the folder now, or none when there is none. A file that is there and cannot be
+     * read leaves the open one answering, and says why: a lookup is never left unanswered by a bad reload.
+     */
     public void reload() throws IOException {
-        CountryFile before = open.getAndSet(
-                CountryFile.open(folder.resolve(CountryFile.NAME)).orElse(null));
+        Path file = folder.resolve(CountryFile.NAME);
+        CountryFile now = Files.isRegularFile(file) ? CountryFile.read(file) : null;
+        CountryFile before = open.getAndSet(now);
         if (before != null) {
             before.close();
         }
