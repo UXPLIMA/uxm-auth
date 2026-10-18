@@ -75,7 +75,7 @@ final class SmtpMailerTest {
                             Mailer.Kind.LOGIN_CODE,
                             STEVE,
                             Locale.forLanguageTag("tr"),
-                            Map.of("player", "Steve", "code", "482913", "minutes", "15", "server", "Örnek"))
+                            Map.of("player", "Steve", "code", "482913", "minutes", "15"))
                     .whenComplete(
                             (done, failure) -> thread.set(Thread.currentThread().getName()))
                     .join();
@@ -85,6 +85,9 @@ final class SmtpMailerTest {
             assertThat(thread.get()).startsWith("uxmauth-mail-");
             assertThat(smtp.lines()).contains("RCPT TO:<steve@example.net>");
             assertThat(body(smtp.messages().getFirst())).contains("Steve", "482913");
+            assertThat(body(smtp.messages().getFirst()))
+                    .as("the sender's name stands for the server")
+                    .contains("Örnek Ağ");
             assertThat(console).isEmpty();
         }
     }

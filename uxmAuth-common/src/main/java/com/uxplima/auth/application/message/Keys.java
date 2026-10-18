@@ -251,6 +251,41 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>That is neither the code your app shows now nor a backup code. Tries left:"
                     + " <value><left><body>."),
     FACTOR_NOTHING_ASKED("factor.nothing-asked", "<etag:'ERROR'> <body>No code is asked of you now."),
+    EMAIL_USAGE(
+            "email.usage",
+            "<body>Use <value>/email add <address><body> to link an address a forgotten password is"
+                    + " sent to, <value>/email confirm <code><body> with the code it gets, or <value>/email"
+                    + " remove<body> to take it away."),
+    EMAIL_LINKED("email.linked", "<body>Linked now: <value><address><body>."),
+    EMAIL_SENT(
+            "email.sent",
+            "<good>A code went to <value><address><good>. Type <value>/email confirm <code><good>"
+                    + " within <value><minutes><good> minutes."),
+    EMAIL_COOLDOWN(
+            "email.cooldown",
+            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body>" + " seconds."),
+    EMAIL_CONFIRMED(
+            "email.confirmed",
+            "<good>Linked: <value><address><good>. A forgotten password can be set again through it."),
+    EMAIL_WRONG("email.wrong", "<etag:'ERROR'> <body>That is not the code. Tries left: <value><left><body>."),
+    EMAIL_ALREADY_LINKED("email.already-linked", "<etag:'ERROR'> <body><value><address><body> is linked already."),
+    EMAIL_REMOVED("email.removed", "<good><value><address><good> is no longer linked."),
+    EMAIL_NOT_AN_ADDRESS("email.not-an-address", "<etag:'ERROR'> <body>That is not a mail address."),
+    EMAIL_DOMAIN_REFUSED("email.domain-refused", "<etag:'ERROR'> <body>This server takes no address at that domain."),
+    EMAIL_MAIL_OFF("email.mail-off", "<etag:'ERROR'> <body>This server sends no mail."),
+    EMAIL_MAIL_FAILED("email.mail-failed", "<etag:'ERROR'> <body>The mail could not be sent. Try again later."),
+    EMAIL_EXPIRED(
+            "email.expired",
+            "<etag:'ERROR'> <body>That code is too old. Ask a new one with <value>/email add" + " <address><body>."),
+    EMAIL_NOTHING_PENDING(
+            "email.nothing-pending",
+            "<etag:'ERROR'> <body>No code waits. Ask one with <value>/email add <address><body>."),
+    EMAIL_TOO_MANY_ATTEMPTS(
+            "email.too-many-attempts",
+            "<etag:'ERROR'> <body>The tries for that code are spent. Ask a new one with <value>/email"
+                    + " add <address><body>."),
+    EMAIL_NONE_LINKED("email.none-linked", "<etag:'ERROR'> <body>No address is linked."),
+    EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(
             "session.not-chosen",
@@ -341,6 +376,12 @@ public enum Keys implements MessageKey {
             "<body>Each code works once in place of the app's code. Copy them and keep them safe, they are not shown"
                     + " again."),
     SCREEN_BACKUP_CODES("screen.backup.codes", "Codes"),
+    SCREEN_EMAIL_TITLE("screen.email.title", "<value>Mail address"),
+    SCREEN_EMAIL_BODY(
+            "screen.email.body", "<body>Type the address a forgotten password is sent to. A code goes to it first."),
+    SCREEN_EMAIL_ADDRESS("screen.email.address", "Address"),
+    SCREEN_EMAIL_CODE_BODY("screen.email.code-body", "<body>Type the code that went to the address."),
+    SCREEN_EMAIL_CODE("screen.email.code", "Code"),
     SCREEN_PIN_TITLE("screen.pin.title", "<value>Your code"),
     SCREEN_PIN_BODY("screen.pin.body", "<body>Press the digits of your code, then enter."),
     SCREEN_PIN_ERASE("screen.pin.erase", "Erase"),

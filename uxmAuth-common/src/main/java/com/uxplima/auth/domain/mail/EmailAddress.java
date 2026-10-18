@@ -72,6 +72,12 @@ public final class EmailAddress {
         return domain;
     }
 
+    /** The address as it is shown back: the first letter of the name and of the domain, and the ending. */
+    public String masked() {
+        String ending = domain.substring(domain.lastIndexOf('.'));
+        return name.charAt(0) + "***@" + domain.charAt(0) + "***" + ending;
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof EmailAddress that && name.equals(that.name) && domain.equals(that.domain);

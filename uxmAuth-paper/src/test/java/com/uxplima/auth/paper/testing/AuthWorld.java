@@ -254,6 +254,7 @@ public final class AuthWorld implements AutoCloseable {
                 database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
         this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
         this.owedSetups = new com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups(sessions);
+        this.emails = new com.uxplima.auth.adapter.outbound.SqlEmails(database, clock);
         this.factorCheck =
                 new com.uxplima.auth.application.factor.FactorCheck(factors, hashing, () -> TOTP, () -> BACKUP);
         this.confirmFactor = new com.uxplima.auth.application.factor.ConfirmFactor(
@@ -346,6 +347,58 @@ public final class AuthWorld implements AutoCloseable {
     /** The app's code now for this secret. */
     public String codeNow(com.uxplima.auth.domain.factor.TotpSecret secret) {
         return TOTP.code(secret.bytes(), TOTP.step(clock.instant()));
+    }
+
+    /** The mail table of this world. */
+    public final com.uxplima.auth.adapter.outbound.SqlEmails emails;
+
+    /** The values of every mail this world sent, in order. */
+    public final List<java.util.Map<String, String>> mailed = java.util.Collections.synchronizedList(new ArrayList<>());
+
+    /** What the mail server of this world answers. */
+    public volatile com.uxplima.auth.application.port.Mailer.Outcome mailOutcome =
+            com.uxplima.auth.application.port.Mailer.Outcome.SENT;
+
+    /** The domains this world refuses an address at. */
+    public volatile List<String> deniedDomains = List.of();
+
+    /** The time mailed codes are sent and checked at, which a test moves on. */
+    public volatile Instant mailNow = clock.instant();
+
+    /** Codes by mail in this world: fifteen minutes, five tries, a minute apart, six digits. */
+    public com.uxplima.auth.application.mail.MailCodes mailCodes() {
+        return new com.uxplima.auth.application.mail.MailCodes(
+                emails,
+                (kind, to, language, values) -> {
+                    mailed.add(values);
+                    return java.util.concurrent.CompletableFuture.completedFuture(mailOutcome);
+                },
+                hashing,
+                lane,
+                () -> new com.uxplima.auth.application.mail.MailCodes.Settings(
+                        Duration.ofMinutes(15), 5, Duration.ofSeconds(60), 6),
+                bans::failed,
+                new java.util.SplittableRandom(11),
+                () -> mailNow);
+    }
+
+    /** {@code /email} in this world, with these forms for a Bedrock player. */
+    public com.uxplima.auth.paper.adapter.inbound.mail.EmailLink emailLink(
+            com.uxplima.auth.paper.adapter.inbound.mail.EmailLink.Forms forms,
+            java.util.function.Predicate<java.util.UUID> bedrock) {
+        return new com.uxplima.auth.paper.adapter.inbound.mail.EmailLink(
+                new com.uxplima.auth.application.mail.LinkEmail(
+                        emails,
+                        mailCodes(),
+                        () -> new com.uxplima.auth.domain.mail.DomainRule(List.of(), deniedDomains),
+                        lane),
+                sessions,
+                forms,
+                bedrock,
+                lane,
+                replies,
+                moments,
+                messages);
     }
 
     /** Who must set the app up before playing: holders of this node; nobody when it is empty. */

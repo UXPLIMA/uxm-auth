@@ -30,6 +30,8 @@ final class EmailAddressTest {
                 .isEmpty();
         assertThat(EmailAddress.parse("<steve@example.net>")).isEmpty();
         assertThat(EmailAddress.parse("steve@example..net")).isEmpty();
+        assertThat(EmailAddress.parse("st..eve@example.net")).isEmpty();
+        assertThat(EmailAddress.parse(".steve@example.net")).isEmpty();
         assertThat(EmailAddress.parse("steve@-example.net")).isEmpty();
         assertThat(EmailAddress.parse("x".repeat(65) + "@example.net")).isEmpty();
         assertThat(EmailAddress.parse("steve@" + "a".repeat(250) + ".net")).isEmpty();
@@ -41,5 +43,14 @@ final class EmailAddressTest {
         assertThat(EmailAddress.parse("steve@example.net").orElseThrow().toString())
                 .doesNotContain("steve")
                 .doesNotContain("example");
+    }
+
+    @Test
+    @DisplayName("shown back masked: the first letter of the name and of the domain, and the ending")
+    void itIsShownMasked() {
+        assertThat(EmailAddress.parse("berke@example.com").orElseThrow().masked())
+                .isEqualTo("b***@e***.com");
+        assertThat(EmailAddress.parse("b@mail.example.co.uk").orElseThrow().masked())
+                .isEqualTo("b***@m***.uk");
     }
 }

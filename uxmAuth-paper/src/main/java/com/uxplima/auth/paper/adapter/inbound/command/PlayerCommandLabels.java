@@ -28,7 +28,8 @@ public final class PlayerCommandLabels {
             LogoutCommand.class,
             ClaimCommand.class,
             CaptchaCommand.class,
-            TwoFactorCommand.class);
+            TwoFactorCommand.class,
+            EmailCommand.class);
 
     private PlayerCommandLabels() {}
 

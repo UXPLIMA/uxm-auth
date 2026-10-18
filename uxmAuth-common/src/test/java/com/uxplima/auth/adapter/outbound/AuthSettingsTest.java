@@ -16,9 +16,11 @@ import java.util.Set;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
+import com.uxplima.auth.domain.mail.DomainRule;
 import com.uxplima.auth.domain.network.AfterLogin;
 import com.uxplima.auth.domain.network.Balance;
 import com.uxplima.auth.domain.network.Route;
@@ -695,6 +697,28 @@ final class AuthSettingsTest {
                 .hasMessageContaining("mail.from-address");
         assertThatThrownBy(() -> settingsFrom(folder, "mail { port = 0 }\n")).hasMessageContaining("mail.port");
         assertThatThrownBy(() -> settingsFrom(folder, "mail { threads = 0 }\n")).hasMessageContaining("mail.threads");
+    }
+
+    @Test
+    @DisplayName("every domain and fifteen-minute codes of six digits with five tries and a minute between by default")
+    void emailIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").email())
+                .isEqualTo(new EmailSettings(
+                        new DomainRule(List.of(), List.of()),
+                        new MailCodes.Settings(Duration.ofMinutes(15), 5, Duration.ofSeconds(60), 6)));
+        assertThat(settingsFrom(folder, """
+                                email {
+                                  allowed-domains = ["example.com"], denied-domains = ["temp.example.com"]
+                                  code-minutes = 5, code-attempts = 3, cooldown-seconds = 120, code-length = 8
+                                }
+                                """).email())
+                .isEqualTo(new EmailSettings(
+                        new DomainRule(List.of("example.com"), List.of("temp.example.com")),
+                        new MailCodes.Settings(Duration.ofMinutes(5), 3, Duration.ofMinutes(2), 8)));
+        assertThatThrownBy(() -> settingsFrom(folder, "email { code-attempts = 0 }\n"))
+                .hasMessageContaining("email.code-attempts");
+        assertThatThrownBy(() -> settingsFrom(folder, "email { denied-domains = [\"no domain\"] }\n"))
+                .hasMessageContaining("email.denied-domains");
     }
 
     @Test

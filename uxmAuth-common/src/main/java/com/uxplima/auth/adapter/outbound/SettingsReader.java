@@ -300,7 +300,7 @@ final class SettingsReader {
      * <p>A list written as {@code []} is an operator's choice of nothing, and a list nobody wrote is the
      * default, so the node is asked whether it exists before it is read.
      */
-    private static List<String> list(HoconConfig config, String block, String name, List<String> shipped) {
+    static List<String> list(HoconConfig config, String block, String name, List<String> shipped) {
         if (config.nodeAt((Object[]) (block + "." + name).split("\\.")).virtual()) {
             return shipped;
         }

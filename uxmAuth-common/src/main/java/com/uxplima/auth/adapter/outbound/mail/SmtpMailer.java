@@ -3,6 +3,7 @@ package com.uxplima.auth.adapter.outbound.mail;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.ZonedDateTime;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -72,8 +73,11 @@ public final class SmtpMailer implements Mailer, AutoCloseable {
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(to, "to");
         Objects.requireNonNull(language, "language");
-        Map<String, String> filled = Map.copyOf(Objects.requireNonNull(values, "values"));
         MailSettings now = settings.get();
+        Map<String, String> named = new HashMap<>(Objects.requireNonNull(values, "values"));
+        // The sender's name stands for the server unless the caller names it otherwise.
+        named.putIfAbsent("server", now.fromName());
+        Map<String, String> filled = Map.copyOf(named);
         if (!now.enabled()) {
             return CompletableFuture.completedFuture(Outcome.OFF);
         }

@@ -69,6 +69,7 @@ public final class PluginSettings {
             ProtectionSettings protection,
             SecondFactorSettings secondFactor,
             MailSettings mail,
+            EmailSettings email,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -84,6 +85,7 @@ public final class PluginSettings {
             Objects.requireNonNull(protection, "protection");
             Objects.requireNonNull(secondFactor, "secondFactor");
             Objects.requireNonNull(mail, "mail");
+            Objects.requireNonNull(email, "email");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -237,6 +239,7 @@ public final class PluginSettings {
                 ProtectionReader.protection(config),
                 SecondFactorSettings.read(config),
                 MailSettings.read(config),
+                EmailSettings.read(config),
                 lists,
                 common(lists));
     }

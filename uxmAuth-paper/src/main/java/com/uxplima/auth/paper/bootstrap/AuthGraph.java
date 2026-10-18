@@ -62,6 +62,7 @@ import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.EmailCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PlayerCommandLabels;
@@ -143,6 +144,8 @@ final class AuthGraph implements AutoCloseable {
     final SessionCommand session;
     final FactorGraph factors;
     final TwoFactorCommand twoFactor;
+    final EmailCommand email;
+    private final MailGraph mail;
     final CaptchaCommand captchaCommand;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
@@ -426,6 +429,19 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
+        this.mail = new MailGraph(
+                plugin,
+                settings,
+                database,
+                sessions,
+                bans::failed,
+                id -> bedrock.player(id).isPresent(),
+                hashing,
+                lane,
+                replies,
+                moments,
+                messages);
+        this.email = mail.command;
         formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }
@@ -486,6 +502,7 @@ final class AuthGraph implements AutoCloseable {
         filters.uninstall();
         hellos.close();
         web.close();
+        mail.close();
         lane.close();
     }
 

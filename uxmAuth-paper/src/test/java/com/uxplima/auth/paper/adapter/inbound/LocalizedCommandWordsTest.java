@@ -12,6 +12,7 @@ import java.util.Objects;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.EmailCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LogoutCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
@@ -79,7 +80,8 @@ final class LocalizedCommandWordsTest {
                 ClaimCommand.class,
                 PremiumCommand.class,
                 SessionCommand.class,
-                TwoFactorCommand.class
+                TwoFactorCommand.class,
+                EmailCommand.class
             })
     @DisplayName("a word for one language reaches every player command too")
     void everyPlayerCommandTakesAWordForOneLanguage(Class<?> handler, @TempDir Path folder) throws IOException {
