@@ -842,6 +842,52 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("the website table is off by default with the usual column names; on, its hash is the one new"
+            + " passwords are written in, and a column or a hash it cannot use is refused by name")
+    void websiteTableIsRead(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot shipped = settingsFrom(folder, "");
+        WebsiteTable off = shipped.websiteTable();
+        assertThat(off.enabled()).isFalse();
+        assertThat(off.hash()).isEqualTo(WebsiteTable.Hash.SHA256);
+        assertThat(off.columns())
+                .isEqualTo(new WebsiteTable.Columns(
+                        "username", "realname", "password", "ip", "lastlogin", "regdate", "regip"));
+        assertThat(shipped.hashers().currentAlgorithm()).isEqualTo(com.uxplima.auth.domain.hash.HashAlgorithm.ARGON2ID);
+
+        PluginSettings.Snapshot on = settingsFrom(
+                folder,
+                "website-table { enabled = true, table = \"accounts\", hash = \"pbkdf2\","
+                        + " columns { name = \"user_name\" } }\n");
+        assertThat(on.websiteTable().table()).isEqualTo("accounts");
+        assertThat(on.websiteTable().columns().name()).isEqualTo("user_name");
+        assertThat(on.hashers().currentAlgorithm()).isEqualTo(com.uxplima.auth.domain.hash.HashAlgorithm.PBKDF2_HEX);
+        for (String hash : new String[] {"sha256", "bcrypt", "argon2"}) {
+            assertThat(settingsFrom(folder, "website-table { enabled = true, hash = \"" + hash + "\" }\n")
+                            .hashers()
+                            .currentAlgorithm())
+                    .isNotEqualTo(com.uxplima.auth.domain.hash.HashAlgorithm.ARGON2ID);
+        }
+
+        assertThatThrownBy(() -> settingsFrom(folder, "website-table { columns { password = \"pass word\" } }\n"))
+                .hasMessageContaining("website-table.columns.password");
+        assertThatThrownBy(() -> settingsFrom(folder, "website-table { table = \"users;drop\" }\n"))
+                .hasMessageContaining("website-table.table");
+        assertThatThrownBy(() -> settingsFrom(folder, "website-table { hash = \"md5\" }\n"))
+                .hasMessageContaining("website-table.hash");
+        for (String own : new String[] {"pbkdf2-hex", "argon2i"}) {
+            assertThatThrownBy(() -> settingsFrom(folder, "hashing { algorithm = \"" + own + "\" }\n"))
+                    .as("only the website table writes %s", own)
+                    .hasMessageContaining("hashing.algorithm");
+        }
+        assertThatThrownBy(() -> settingsFrom(
+                        folder,
+                        "website-table { enabled = true, hash = \"bcrypt\" }\npasswords { max-length = 100 }\n"))
+                .as("a website's bcrypt reads 72 bytes too")
+                .hasMessageContaining("72")
+                .hasMessageContaining("website-table.hash");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

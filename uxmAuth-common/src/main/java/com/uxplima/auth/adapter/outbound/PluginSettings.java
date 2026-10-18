@@ -73,6 +73,7 @@ public final class PluginSettings {
             StaffSettings staff,
             PlaceholderSettings placeholders,
             DiscordSettings discord,
+            WebsiteTable websiteTable,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -92,6 +93,7 @@ public final class PluginSettings {
             Objects.requireNonNull(staff, "staff");
             Objects.requireNonNull(placeholders, "placeholders");
             Objects.requireNonNull(discord, "discord");
+            Objects.requireNonNull(websiteTable, "websiteTable");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -99,15 +101,17 @@ public final class PluginSettings {
             Objects.requireNonNull(network, "network");
             Objects.requireNonNull(passwordLists, "passwordLists");
             Objects.requireNonNull(common, "common");
-            if (hashing.algorithm() == HashAlgorithm.BCRYPT && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
+            if (writtenIn(hashing, websiteTable) == HashAlgorithm.BCRYPT
+                    && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
                 throw new IllegalArgumentException("passwords.max-length is " + passwords.maxLength()
                         + ", and bcrypt reads only the first " + AuthSettings.BCRYPT_BYTES
-                        + " bytes: lower it, or choose another hashing.algorithm");
+                        + " bytes: lower it, or choose another "
+                        + (websiteTable.enabled() ? "website-table.hash" : "hashing.algorithm"));
             }
             // Built once here, so a value the domain refuses is refused when the file is read.
             namePolicyOf(names);
-            passwordPolicyOf(passwords, hashing, common);
-            hashersOf(hashing);
+            passwordPolicyOf(passwords, writtenIn(hashing, websiteTable), common);
+            hashersOf(hashing, websiteTable);
         }
 
         /** The language every message falls back to. */
@@ -121,12 +125,20 @@ public final class PluginSettings {
 
         /** The password rules. Under bcrypt they also refuse a password past its 72 bytes. */
         public PasswordPolicy passwordPolicy() {
-            return passwordPolicyOf(passwords, hashing, common);
+            return passwordPolicyOf(passwords, writtenIn(hashing, websiteTable), common);
         }
 
-        /** The current algorithm for new hashes, and all four for reading old ones. */
+        /**
+         * The current algorithm for new hashes, and every one for reading old ones. While the website table is on, its
+         * format is the current one.
+         */
         public Hashing hashers() {
-            return hashersOf(hashing);
+            return hashersOf(hashing, websiteTable);
+        }
+
+        /** The algorithm new passwords are written in: the website's while its table is on. */
+        private static HashAlgorithm writtenIn(AuthSettings.HashSettings hashing, WebsiteTable website) {
+            return website.enabled() ? website.hash().hasher().algorithm() : hashing.algorithm();
         }
 
         private static NamePolicy namePolicyOf(AuthSettings.Names names) {
@@ -135,8 +147,8 @@ public final class PluginSettings {
         }
 
         private static PasswordPolicy passwordPolicyOf(
-                AuthSettings.Passwords passwords, AuthSettings.HashSettings hashing, CommonPasswords common) {
-            int maxBytes = hashing.algorithm() == HashAlgorithm.BCRYPT ? AuthSettings.BCRYPT_BYTES : 0;
+                AuthSettings.Passwords passwords, HashAlgorithm writtenIn, CommonPasswords common) {
+            int maxBytes = writtenIn == HashAlgorithm.BCRYPT ? AuthSettings.BCRYPT_BYTES : 0;
             return new PasswordPolicy(
                     passwords.minLength(),
                     passwords.maxLength(),
@@ -146,13 +158,18 @@ public final class PluginSettings {
                     common);
         }
 
-        private static Hashing hashersOf(AuthSettings.HashSettings hashing) {
+        private static Hashing hashersOf(AuthSettings.HashSettings hashing, WebsiteTable website) {
             List<PasswordHasher> all = List.of(
                     new Argon2idHasher(
                             hashing.argon2MemoryKib(), hashing.argon2Iterations(), hashing.argon2Parallelism()),
                     new BcryptHasher(hashing.bcryptCost()),
                     new Pbkdf2Hasher(hashing.pbkdf2Iterations()),
-                    new AuthMeSha256Hasher());
+                    new AuthMeSha256Hasher(),
+                    WebsiteTable.Hash.PBKDF2.hasher(),
+                    WebsiteTable.Hash.ARGON2.hasher());
+            if (website.enabled()) {
+                return new Hashing(website.hash().hasher(), all);
+            }
             PasswordHasher current = all.stream()
                     .filter(hasher -> hasher.algorithm() == hashing.algorithm())
                     .findFirst()
@@ -249,6 +266,7 @@ public final class PluginSettings {
                 StaffSettings.read(config),
                 PlaceholderSettings.read(config),
                 DiscordSettings.read(config),
+                WebsiteTable.read(config),
                 lists,
                 common(lists));
     }

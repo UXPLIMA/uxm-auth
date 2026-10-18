@@ -334,7 +334,11 @@ final class SettingsReader {
     private static HashAlgorithm algorithm(String written) {
         String name = written.trim().toUpperCase(Locale.ROOT).replace('-', '_');
         try {
-            return HashAlgorithm.valueOf(name);
+            HashAlgorithm chosen = HashAlgorithm.valueOf(name);
+            if (chosen == HashAlgorithm.PBKDF2_HEX || chosen == HashAlgorithm.ARGON2I) {
+                throw new IllegalArgumentException("only a website table writes " + written);
+            }
+            return chosen;
         } catch (IllegalArgumentException unknown) {
             throw new IllegalArgumentException(
                     "hashing.algorithm is " + written
