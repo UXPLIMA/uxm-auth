@@ -45,7 +45,8 @@ public final class ForceLogin {
     /** Tells every member to let the player of the account under this name in. Reads the table. */
     public Asked ask(PlayerName name) {
         Optional<Account> account = accounts.findByName(Objects.requireNonNull(name, "name"));
-        account.ifPresent(found -> events.publish(new Bulletin.LetIn(found.id())));
+        account.ifPresent(found ->
+                events.publish(new Bulletin.LetIn(found.id(), UUID.randomUUID().toString())));
         return account.isPresent() ? Asked.ASKED : Asked.UNKNOWN;
     }
 

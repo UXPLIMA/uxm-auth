@@ -48,9 +48,16 @@ final class ForceLoginTest {
         fixture.registered("Steve", "hunter22");
 
         assertThat(force.ask(new PlayerName("steve"))).isEqualTo(ForceLogin.Asked.ASKED);
-        assertThat(published).containsExactly(new Bulletin.LetIn(account("Steve")));
+        assertThat(force.ask(new PlayerName("Steve"))).isEqualTo(ForceLogin.Asked.ASKED);
+        assertThat(published)
+                .extracting(bulletin -> ((Bulletin.LetIn) bulletin).account())
+                .containsExactly(account("Steve"), account("Steve"));
+        assertThat(published)
+                .extracting(bulletin -> ((Bulletin.LetIn) bulletin).nonce())
+                .as("each request is one of a kind, so a copy of it lets nobody in")
+                .doesNotHaveDuplicates();
         assertThat(force.ask(new PlayerName("Nobody"))).isEqualTo(ForceLogin.Asked.UNKNOWN);
-        assertThat(published).hasSize(1);
+        assertThat(published).hasSize(2);
     }
 
     @Test

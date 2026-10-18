@@ -36,12 +36,28 @@ final class BulletinsTest {
     @Test
     @DisplayName("staff letting an account in travels whole too, and is never read as an ended session")
     void aLetInOpens() {
-        Bulletins.Sent letIn = new Bulletins.Sent(new Bulletin.LetIn(STEVE), ORIGIN, NOW);
+        Bulletins.Sent letIn = new Bulletins.Sent(new Bulletin.LetIn(STEVE, "n0nce-1"), ORIGIN, NOW);
 
         assertThat(bulletins.open(bulletins.seal(letIn), NOW)).contains(letIn);
-        assertThat(bulletins.open(claims.seal("b1|L|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + STEVE + "|x"), NOW))
-                .as("a let-in carries nothing after the account")
+        assertThat(bulletins.open(claims.seal("b1|L|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + STEVE + "|"), NOW))
+                .as("a let-in carries the nonce that makes it one of a kind")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("a let-in opens once: the same sealed text again inside the fresh time lets nobody in twice")
+    void aLetInIsNotReplayed() {
+        Bulletins.Sent letIn = new Bulletins.Sent(new Bulletin.LetIn(STEVE, "n0nce-2"), ORIGIN, NOW);
+        String sealed = bulletins.seal(letIn);
+
+        assertThat(bulletins.open(sealed, NOW)).contains(letIn);
+        assertThat(bulletins.open(sealed, NOW.plusSeconds(1))).isEmpty();
+        Bulletins.Sent another = new Bulletins.Sent(new Bulletin.LetIn(STEVE, "n0nce-3"), ORIGIN, NOW);
+        assertThat(bulletins.open(bulletins.seal(another), NOW.plusSeconds(1))).contains(another);
+        assertThat(bulletins.open(bulletins.seal(ended), NOW)).contains(ended);
+        assertThat(bulletins.open(bulletins.seal(ended), NOW))
+                .as("an ended session lets nobody in")
+                .contains(ended);
     }
 
     @Test

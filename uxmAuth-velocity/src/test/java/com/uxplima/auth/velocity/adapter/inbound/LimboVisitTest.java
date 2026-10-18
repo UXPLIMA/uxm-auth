@@ -274,7 +274,7 @@ final class LimboVisitTest {
         LimboVisit visit = visit(visits);
         visit.arrive();
 
-        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE));
+        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE, "n0nce"));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (System.nanoTime() < deadline && !events.contains("released")) {
             Thread.onSpinWait();
@@ -293,14 +293,14 @@ final class LimboVisitTest {
         visit.arrive();
 
         visits.left(STEVE, visit());
-        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE));
+        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE, "n0nce"));
         assertThat(events).as("another visit leaving leaves this one known").containsExactly("released");
 
         events.clear();
         LimboVisit again = visit(visits);
         again.arrive();
         visits.left(STEVE, again);
-        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE));
+        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE, "n0nce"));
         assertThat(events).as("a visit that left is forgotten").isEmpty();
     }
 }

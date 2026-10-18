@@ -2,9 +2,12 @@ package com.uxplima.auth.domain.network;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Seals a bulletin with the network's secret, and opens one only signed and fresh.
@@ -33,6 +36,7 @@ public final class Bulletins {
     private static final int PARTS = 6;
 
     private final Claims claims;
+    private final Map<String, Instant> opened = new ConcurrentHashMap<>();
 
     public Bulletins(Claims claims) {
         this.claims = Objects.requireNonNull(claims, "claims");
@@ -44,7 +48,7 @@ public final class Bulletins {
                 switch (sent.bulletin()) {
                     case Bulletin.SessionsEnded ended ->
                         text(sent, SESSIONS_ENDED, ended.account(), ended.keep().orElse(""));
-                    case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), "");
+                    case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), letIn.nonce());
                 });
     }
 
@@ -64,7 +68,28 @@ public final class Bulletins {
     public Optional<Sent> open(String sealed, Instant now) {
         Objects.requireNonNull(sealed, "sealed");
         Objects.requireNonNull(now, "now");
-        return claims.unseal(sealed).flatMap(Bulletins::parse).filter(read -> claims.fresh(read.issued(), now));
+        return claims.unseal(sealed)
+                .flatMap(Bulletins::parse)
+                .filter(read -> claims.fresh(read.issued(), now))
+                .filter(read -> firstTime(read, now));
+    }
+
+    /**
+     * Whether this is the first time a let-in is opened. One that grants a login is opened once: a copy of the frame,
+     * heard again inside the fresh time, would let in whoever joined under the name since. The nonces are kept for
+     * as long as their let-in is fresh.
+     */
+    private boolean firstTime(Sent read, Instant now) {
+        if (!(read.bulletin() instanceof Bulletin.LetIn letIn)) {
+            return true;
+        }
+        opened.entrySet().removeIf(kept -> !claims.fresh(kept.getValue(), now));
+        AtomicBoolean first = new AtomicBoolean();
+        opened.compute(letIn.nonce(), (nonce, before) -> {
+            first.set(before == null);
+            return before == null ? read.issued() : before;
+        });
+        return first.get();
     }
 
     private static Optional<Sent> parse(String text) {
@@ -80,7 +105,8 @@ public final class Bulletins {
                         case SESSIONS_ENDED ->
                             Optional.of(new Bulletin.SessionsEnded(
                                     account, more.isEmpty() ? Optional.empty() : Optional.of(more)));
-                        case LET_IN -> more.isEmpty() ? Optional.of(new Bulletin.LetIn(account)) : Optional.empty();
+                        case LET_IN ->
+                            more.isEmpty() ? Optional.empty() : Optional.of(new Bulletin.LetIn(account, more));
                         default -> Optional.empty();
                     };
             return bulletin.map(read ->

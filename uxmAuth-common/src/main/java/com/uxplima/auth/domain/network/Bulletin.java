@@ -24,10 +24,16 @@ public sealed interface Bulletin {
         }
     }
 
-    /** Staff let the waiting player of this account in, on whichever server or proxy they wait. */
-    record LetIn(UUID account) implements Bulletin {
+    /**
+     * Staff let the waiting player of this account in, on whichever server or proxy they wait. The nonce makes each
+     * request one of a kind, so a copy of it heard again lets nobody in.
+     */
+    record LetIn(UUID account, String nonce) implements Bulletin {
         public LetIn {
             Objects.requireNonNull(account, "account");
+            if (!VISIT.matcher(Objects.requireNonNull(nonce, "nonce")).matches()) {
+                throw new IllegalArgumentException("A nonce is letters, digits and dashes, up to 64: " + nonce);
+            }
         }
     }
 
