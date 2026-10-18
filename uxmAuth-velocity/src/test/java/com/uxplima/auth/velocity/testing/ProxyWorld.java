@@ -126,6 +126,12 @@ public final class ProxyWorld implements AutoCloseable {
     public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
     public final com.uxplima.auth.application.factor.FactorCheck factorCheck;
     public final com.uxplima.auth.application.factor.SecondStep secondStep;
+    public final com.uxplima.auth.adapter.outbound.SqlEmails emails;
+    public final com.uxplima.auth.application.mail.MailCodes mailCodes;
+
+    /** The values of every mail this proxy sent, in order. */
+    public final List<java.util.Map<String, String>> mailed =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
     /** Which ways in ask the code on this proxy; a test changes it. */
     public com.uxplima.auth.application.factor.SecondStep.Settings stepSettings =
@@ -137,9 +143,34 @@ public final class ProxyWorld implements AutoCloseable {
         this.accounts = new SqlAccountRepository(database);
         this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
                 database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("network"), clock);
-        this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
+        this.emails = new com.uxplima.auth.adapter.outbound.SqlEmails(database, clock);
+        this.mailCodes = new com.uxplima.auth.application.mail.MailCodes(
+                emails,
+                (kind, to, language, values) -> {
+                    mailed.add(values);
+                    return java.util.concurrent.CompletableFuture.completedFuture(
+                            com.uxplima.auth.application.port.Mailer.Outcome.SENT);
+                },
+                hashing,
+                lane,
+                () -> new com.uxplima.auth.application.mail.MailCodes.Settings(
+                        Duration.ofMinutes(15), 5, Duration.ofSeconds(60), 6),
+                (address, host) -> java.util.Optional.empty(),
+                new java.util.SplittableRandom(17),
+                clock::instant);
+        com.uxplima.auth.application.mail.MailLogin mailLogin =
+                new com.uxplima.auth.application.mail.MailLogin(emails, mailCodes);
+        this.secondStep =
+                new com.uxplima.auth.application.factor.SecondStep(factors, emails, () -> stepSettings, account -> {
+                    java.util.concurrent.CompletableFuture<?> unused = mailLogin.send(account, Locale.ENGLISH);
+                });
         this.factorCheck = new com.uxplima.auth.application.factor.FactorCheck(
-                factors, hashing, () -> TOTP, () -> new com.uxplima.auth.domain.factor.BackupCodes(8, 10));
+                factors,
+                hashing,
+                () -> TOTP,
+                () -> new com.uxplima.auth.domain.factor.BackupCodes(8, 10),
+                (account, typed) ->
+                        mailCodes.takes(account, com.uxplima.auth.application.port.Emails.Purpose.LOGIN, typed));
     }
 
     /** Turns the app on for the account under this name, and answers its secret. */

@@ -69,7 +69,10 @@ final class LogInTest {
                 () -> fixture.policy,
                 LogIn.Captcha.NONE,
                 new com.uxplima.auth.application.factor.SecondStep(
-                        factors, () -> new com.uxplima.auth.application.factor.SecondStep.Settings(true, false, 3)));
+                        factors,
+                        new com.uxplima.auth.testing.InMemoryEmails(),
+                        () -> new com.uxplima.auth.application.factor.SecondStep.Settings(true, false, 3),
+                        account -> {}));
 
         assertThat(guarded.run(connection, Password.of("hunter22"), "10.0.0.7").join())
                 .isEqualTo(new LoginResult.CodeNeeded());

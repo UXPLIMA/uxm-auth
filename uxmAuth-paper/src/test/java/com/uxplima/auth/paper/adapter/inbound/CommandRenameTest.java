@@ -167,7 +167,8 @@ final class CommandRenameTest {
                                             player -> {
                                                 throw new AssertionError("no code is answered here");
                                             },
-                                            world.messages)),
+                                            world.messages),
+                                    world.mailToggle()),
                             resolvers))
                     .isEqualTo("app");
         } finally {

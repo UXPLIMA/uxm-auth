@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorLogin;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup;
+import com.uxplima.auth.paper.adapter.inbound.factor.MailToggle;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
@@ -15,8 +16,9 @@ import com.uxplima.uxmlib.command.annotation.annotations.PlayerOnly;
 import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
 
 /**
- * {@code /2fa setup|confirm <code>|backup <code>|off <code>}: a logged-in player turns a code from an authenticator
- * app after the password on, asks a new set of backup codes, and turns it off again. {@code /2fa <code>} is the code
+ * {@code /2fa setup|confirm <code>|backup <code>|off <code>|email on|email off <code>}: a logged-in player turns a
+ * code from an authenticator app after the password on, asks a new set of backup codes, turns it off again, and
+ * takes the login code by mail instead. {@code /2fa <code>} is the code
  * of the second step, after the password.
  */
 @FromConfig(
@@ -32,10 +34,12 @@ public final class TwoFactorCommand {
 
     private final FactorSetup setup;
     private final FactorLogin login;
+    private final MailToggle mail;
 
-    public TwoFactorCommand(FactorSetup setup, FactorLogin login) {
+    public TwoFactorCommand(FactorSetup setup, FactorLogin login, MailToggle mail) {
         this.setup = Objects.requireNonNull(setup, "setup");
         this.login = Objects.requireNonNull(login, "login");
+        this.mail = Objects.requireNonNull(mail, "mail");
     }
 
     @Subcommand("")
@@ -80,5 +84,19 @@ public final class TwoFactorCommand {
     @PlayerOnly
     public void backup(Sender sender, @Arg("code") String code) {
         CompletableFuture<Void> unused = setup.backup((Player) sender.bukkit(), code);
+    }
+
+    @FromConfig(value = "email-on", fallbackName = "email on", description = "Get the login code by mail")
+    @Permission(PERMISSION)
+    @PlayerOnly
+    public void mailOn(Sender sender) {
+        CompletableFuture<Void> unused = mail.on((Player) sender.bukkit());
+    }
+
+    @FromConfig(value = "email-off", fallbackName = "email off", description = "Stop the login code by mail")
+    @Permission(PERMISSION)
+    @PlayerOnly
+    public void mailOff(Sender sender, @Arg("code") String code) {
+        CompletableFuture<Void> unused = mail.off((Player) sender.bukkit(), code);
     }
 }

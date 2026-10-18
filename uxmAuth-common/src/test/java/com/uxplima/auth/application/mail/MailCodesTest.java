@@ -206,6 +206,16 @@ final class MailCodesTest {
             }
 
             @Override
+            public boolean mailsLoginCode(UUID account) {
+                return emails.mailsLoginCode(account);
+            }
+
+            @Override
+            public void setMailsLoginCode(UUID account, boolean on) {
+                emails.setMailsLoginCode(account, on);
+            }
+
+            @Override
             public Optional<Emails.Code> code(UUID account, Emails.Purpose purpose) {
                 return emails.code(account, purpose);
             }
@@ -236,5 +246,41 @@ final class MailCodesTest {
                         .join())
                 .isEqualTo(new MailCodes.Checked.NothingPending());
         assertThat(emails.code(STEVE, Emails.Purpose.VERIFY)).contains(newer);
+    }
+
+    @Test
+    @DisplayName("a login code is mailed only while none is out: a code still good is not replaced by a new mail")
+    void aLiveCodeIsNotReplaced() {
+        MailCodes.Issued first = codes.issueUnlessLive(
+                        STEVE, Emails.Purpose.LOGIN, TO, Mailer.Kind.LOGIN_CODE, Locale.ENGLISH, Map.of())
+                .join();
+        now = now.plusSeconds(120);
+
+        assertThat(first).isInstanceOf(MailCodes.Issued.Sent.class);
+        assertThat(codes.issueUnlessLive(
+                                STEVE, Emails.Purpose.LOGIN, TO, Mailer.Kind.LOGIN_CODE, Locale.ENGLISH, Map.of())
+                        .join())
+                .isEqualTo(new MailCodes.Issued.Live(TO));
+        assertThat(mailed).hasSize(1);
+        now = now.plus(Duration.ofMinutes(15));
+        assertThat(codes.issueUnlessLive(
+                                STEVE, Emails.Purpose.LOGIN, TO, Mailer.Kind.LOGIN_CODE, Locale.ENGLISH, Map.of())
+                        .join())
+                .as("once it is past its time a new one goes")
+                .isInstanceOf(MailCodes.Issued.Sent.class);
+        assertThat(mailed).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("taking a code as a second factor spends it once and counts nothing against the address itself")
+    void aCodeIsTakenAsAFactor() {
+        codes.issueUnlessLive(STEVE, Emails.Purpose.LOGIN, TO, Mailer.Kind.LOGIN_CODE, Locale.ENGLISH, Map.of())
+                .join();
+        String code = lastCode();
+
+        assertThat(codes.takes(STEVE, Emails.Purpose.LOGIN, "000000")).isFalse();
+        assertThat(codes.takes(STEVE, Emails.Purpose.LOGIN, code)).isTrue();
+        assertThat(codes.takes(STEVE, Emails.Purpose.LOGIN, code)).isFalse();
+        assertThat(failed).isEmpty();
     }
 }

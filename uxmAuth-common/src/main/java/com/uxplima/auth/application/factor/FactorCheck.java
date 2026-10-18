@@ -19,21 +19,34 @@ import com.uxplima.auth.domain.password.Password;
 
 /**
  * Whether a typed code answers an account's second factor: the app's code for now, taken once across every server,
- * or one of the backup codes, spent once. A backup code is checked against slow hashes, so this runs off the server
+ * the login code mailed to it, or one of the backup codes, each spent once. A backup code is checked against slow hashes, so this runs off the server
  * thread, on the lane the password hashes run on.
  */
 public final class FactorCheck {
+
+    /** The login code mailed to the account, taken once. */
+    @FunctionalInterface
+    public interface MailedCode {
+        /** No mail: nothing is ever taken. */
+        MailedCode NONE = (account, typed) -> false;
+
+        /** Whether this is the code mailed to the account, which is spent when it is. */
+        boolean takes(UUID account, String typed);
+    }
 
     private final Factors factors;
     private final Hashing hashing;
     private final Supplier<Totp> totp;
     private final Supplier<BackupCodes> backup;
+    private final MailedCode mailed;
 
-    public FactorCheck(Factors factors, Hashing hashing, Supplier<Totp> totp, Supplier<BackupCodes> backup) {
+    public FactorCheck(
+            Factors factors, Hashing hashing, Supplier<Totp> totp, Supplier<BackupCodes> backup, MailedCode mailed) {
         this.factors = Objects.requireNonNull(factors, "factors");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.totp = Objects.requireNonNull(totp, "totp");
         this.backup = Objects.requireNonNull(backup, "backup");
+        this.mailed = Objects.requireNonNull(mailed, "mailed");
     }
 
     /** Whether the code passes for the account; a code that passes is spent. */
@@ -42,7 +55,10 @@ public final class FactorCheck {
         Objects.requireNonNull(typed, "typed");
         Objects.requireNonNull(now, "now");
         Optional<String> code = backup.get().read(typed);
-        return code.isPresent() ? spendsBackup(account, code.get()) : appTakes(account, typed, now);
+        if (code.isPresent()) {
+            return spendsBackup(account, code.get());
+        }
+        return appTakes(account, typed, now) || mailed.takes(account, typed.strip());
     }
 
     /** Hashes a new set for the account in place of every code before it, and gives it back to be shown once. */

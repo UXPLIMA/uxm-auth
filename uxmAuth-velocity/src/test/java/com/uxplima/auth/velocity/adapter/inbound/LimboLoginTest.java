@@ -342,6 +342,31 @@ final class LimboLoginTest {
     }
 
     @Test
+    @DisplayName(
+            "an account that takes its code by mail gets it as the password passes, and the mailed code lets it in")
+    void aMailedCodeLetsThePlayerIn() throws Exception {
+        registeredWithTheApp();
+        java.util.UUID account = world.accounts.findByName(NAME).orElseThrow().id();
+        world.factors.removeApp(account);
+        world.emails.setAddress(
+                account,
+                com.uxplima.auth.domain.mail.EmailAddress.parse("s@example.net").orElseThrow());
+        world.emails.setMailsLoginCode(account, true);
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/login hunter22")))
+                .isEqualTo(plain(world.messages.render(READER, Keys.FACTOR_CODE_NEEDED)));
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        while (world.mailed.isEmpty() && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        String code = java.util.Objects.requireNonNull(world.mailed.getLast().get("code"), "code");
+
+        assertThat(said(login, "/2fa " + code)).isEqualTo(new LimboLogin.Outcome.In(AuthMethod.PASSWORD));
+    }
+
+    @Test
     @DisplayName("a backup code, typed as it was shown, lets the player in once")
     void aBackupCodeLetsThePlayerIn() throws Exception {
         registeredWithTheApp();

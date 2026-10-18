@@ -27,8 +27,12 @@ public final class SqlEmails implements Emails {
 
     private static final String READ_ADDRESS = "SELECT address FROM uxmauth_email WHERE account_id = ?";
     private static final String DROP_ADDRESS = "DELETE FROM uxmauth_email WHERE account_id = ?";
+    private static final String MOVE_ADDRESS =
+            "UPDATE uxmauth_email SET address = ?, confirmed_at = ? WHERE account_id = ?";
     private static final String WRITE_ADDRESS =
-            "INSERT INTO uxmauth_email (account_id, address, confirmed_at) VALUES (?, ?, ?)";
+            "INSERT INTO uxmauth_email (account_id, address, confirmed_at, login_code) VALUES (?, ?, ?, ?)";
+    private static final String READ_LOGIN_CODE = "SELECT login_code FROM uxmauth_email WHERE account_id = ?";
+    private static final String WRITE_LOGIN_CODE = "UPDATE uxmauth_email SET login_code = ? WHERE account_id = ?";
     private static final String LOCK =
             "UPDATE uxmauth_mail_code SET revision = revision + 1 WHERE account_id = ? AND purpose = ?";
     private static final String FIRST = "INSERT INTO uxmauth_mail_code (account_id, purpose, address, code_hash,"
@@ -60,12 +64,19 @@ public final class SqlEmails implements Emails {
         String value = Objects.requireNonNull(address, "address").value();
         long now = clock.millis();
         database.inTransaction(sql -> {
-            sql.update(DROP_ADDRESS, statement -> statement.setString(1, id));
-            sql.update(WRITE_ADDRESS, statement -> {
-                statement.setString(1, id);
-                statement.setString(2, value);
-                statement.setLong(3, now);
+            int moved = sql.update(MOVE_ADDRESS, statement -> {
+                statement.setString(1, value);
+                statement.setLong(2, now);
+                statement.setString(3, id);
             });
+            if (moved == 0) {
+                sql.update(WRITE_ADDRESS, statement -> {
+                    statement.setString(1, id);
+                    statement.setString(2, value);
+                    statement.setLong(3, now);
+                    statement.setBoolean(4, false);
+                });
+            }
         });
     }
 
@@ -73,6 +84,23 @@ public final class SqlEmails implements Emails {
     public void removeAddress(UUID account) {
         String id = Objects.requireNonNull(account, "account").toString();
         database.inTransaction(sql -> sql.update(DROP_ADDRESS, statement -> statement.setString(1, id)));
+    }
+
+    @Override
+    public boolean mailsLoginCode(UUID account) {
+        String id = Objects.requireNonNull(account, "account").toString();
+        return database.transaction(sql -> sql.queryFirst(
+                        READ_LOGIN_CODE, statement -> statement.setString(1, id), row -> row.getBoolean("login_code")))
+                .orElse(false);
+    }
+
+    @Override
+    public void setMailsLoginCode(UUID account, boolean on) {
+        String id = Objects.requireNonNull(account, "account").toString();
+        database.inTransaction(sql -> sql.update(WRITE_LOGIN_CODE, statement -> {
+            statement.setBoolean(1, on);
+            statement.setString(2, id);
+        }));
     }
 
     @Override

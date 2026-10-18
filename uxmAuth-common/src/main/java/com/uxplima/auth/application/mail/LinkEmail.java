@@ -119,6 +119,7 @@ public final class LinkEmail {
         return switch (issued) {
             case MailCodes.Issued.Sent sent -> new Outcome.Sent(sent.to().masked(), sent.lasts());
             case MailCodes.Issued.Cooldown cooldown -> new Outcome.Cooldown(cooldown.left());
+            case MailCodes.Issued.Live live -> throw new IllegalStateException("a link always sends a fresh code");
             case MailCodes.Issued.Off off -> new Outcome.MailOff();
             case MailCodes.Issued.Failed failed -> new Outcome.MailFailed();
         };

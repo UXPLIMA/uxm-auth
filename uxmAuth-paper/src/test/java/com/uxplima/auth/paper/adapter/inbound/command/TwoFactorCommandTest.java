@@ -63,7 +63,8 @@ final class TwoFactorCommandTest {
                         offer,
                         player -> new PlayerGuest(
                                 player, world.openingOf(player), world.door, world.moments, world.replies),
-                        world.messages));
+                        world.messages),
+                world.mailToggle());
     }
 
     @AfterEach

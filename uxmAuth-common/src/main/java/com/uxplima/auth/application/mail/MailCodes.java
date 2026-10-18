@@ -23,6 +23,7 @@ import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.mail.EmailAddress;
 import com.uxplima.auth.domain.password.Password;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Codes sent by mail. An account holds one code per purpose, sent no faster than the cooldown, good for a while
@@ -66,6 +67,9 @@ public final class MailCodes {
 
         /** A code of this purpose went out too recently; another may go after this long. */
         record Cooldown(Duration left) implements Issued {}
+
+        /** A code of this purpose is out and still good; nothing was sent. */
+        record Live(EmailAddress to) implements Issued {}
 
         /** Mail is off. */
         record Off() implements Issued {}
@@ -135,6 +139,31 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values) {
+        return issue(account, purpose, to, kind, language, values, false);
+    }
+
+    /**
+     * Sends a code of this purpose only when none is out that is still good, so a player typing the one they got
+     * is never handed a new one under it: {@link Issued.Live} then.
+     */
+    public CompletableFuture<Issued> issueUnlessLive(
+            UUID account,
+            Emails.Purpose purpose,
+            EmailAddress to,
+            Mailer.Kind kind,
+            Locale language,
+            Map<String, String> values) {
+        return issue(account, purpose, to, kind, language, values, true);
+    }
+
+    private CompletableFuture<Issued> issue(
+            UUID account,
+            Emails.Purpose purpose,
+            EmailAddress to,
+            Mailer.Kind kind,
+            Locale language,
+            Map<String, String> values,
+            boolean keepLive) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(purpose, "purpose");
         Objects.requireNonNull(to, "to");
@@ -143,31 +172,43 @@ public final class MailCodes {
         Map<String, String> filled = new HashMap<>(Objects.requireNonNull(values, "values"));
         Settings now = settings.get();
         String code = digits(now.codeLength());
-        return lane.submit(() -> stored(account, purpose, to, hash(code), now)).thenCompose(stored -> {
-            if (stored.isPresent()) {
-                return CompletableFuture.completedFuture(stored.get());
-            }
-            filled.put("code", code);
-            filled.put("minutes", String.valueOf(now.codeTime().toMinutes()));
-            return mailer.send(kind, to, language, filled).thenApply(sent -> sent(account, purpose, to, sent, now));
-        });
+        return lane.submit(() -> stored(account, purpose, to, hash(code), now, keepLive))
+                .thenCompose(stored -> {
+                    if (stored.isPresent()) {
+                        return CompletableFuture.completedFuture(stored.get());
+                    }
+                    filled.put("code", code);
+                    filled.put("minutes", String.valueOf(now.codeTime().toMinutes()));
+                    return mailer.send(kind, to, language, filled)
+                            .thenApply(sent -> sent(account, purpose, to, sent, now));
+                });
     }
 
-    /** Nothing when a fresh code is stored; the cooldown that refused one otherwise. */
+    /** Nothing when a fresh code is stored; the cooldown, or the live code, that refused one otherwise. */
     private Optional<Issued> stored(
-            UUID account, Emails.Purpose purpose, EmailAddress to, PasswordHash hash, Settings now) {
+            UUID account, Emails.Purpose purpose, EmailAddress to, PasswordHash hash, Settings now, boolean keepLive) {
         Instant at = clock.get();
-        AtomicReference<Issued.Cooldown> waiting = new AtomicReference<>();
+        AtomicReference<@Nullable Issued> refused = new AtomicReference<>();
         emails.changeCode(account, purpose, before -> {
-            Optional<Instant> free = before.map(code -> code.sent().plus(now.cooldown()));
-            if (free.isPresent() && free.get().isAfter(at)) {
-                waiting.set(new Issued.Cooldown(Duration.between(at, free.get())));
+            refused.set(refusal(before, at, now, keepLive));
+            if (refused.get() != null) {
                 return before;
             }
-            waiting.set(null);
             return Optional.of(new Emails.Code(to, hash, at.plus(now.codeTime()), now.attempts(), at));
         });
-        return Optional.ofNullable(waiting.get());
+        return Optional.ofNullable(refused.get());
+    }
+
+    private static @Nullable Issued refusal(Optional<Emails.Code> before, Instant at, Settings now, boolean keepLive) {
+        if (before.isEmpty()) {
+            return null;
+        }
+        Emails.Code code = before.get();
+        if (keepLive && code.expires().isAfter(at) && code.attemptsLeft() > 0) {
+            return new Issued.Live(code.to());
+        }
+        Instant free = code.sent().plus(now.cooldown());
+        return free.isAfter(at) ? new Issued.Cooldown(Duration.between(at, free)) : null;
     }
 
     private Issued sent(UUID account, Emails.Purpose purpose, EmailAddress to, Mailer.Outcome outcome, Settings now) {
@@ -177,6 +218,19 @@ public final class MailCodes {
         // Nothing reached the player, so nothing holds them back from asking again.
         emails.changeCode(account, purpose, before -> Optional.empty());
         return outcome == Mailer.Outcome.OFF ? new Issued.Off() : new Issued.Failed();
+    }
+
+    /**
+     * Takes a code of this purpose as a second factor: a try is spent, and the code is gone when it passes or its
+     * last try is spent. Nothing counts against the address here; the step that asked counts its own failures.
+     * Runs on the caller's thread, which is the hashing lane's.
+     */
+    public boolean takes(UUID account, Emails.Purpose purpose, String typed) {
+        Objects.requireNonNull(account, "account");
+        Objects.requireNonNull(purpose, "purpose");
+        Checked checked = reserved(
+                account, purpose, Objects.requireNonNull(typed, "typed").strip());
+        return checked instanceof Checked.Right;
     }
 
     /** Checks a typed code of this purpose, typed from this address. */
@@ -191,6 +245,19 @@ public final class MailCodes {
     }
 
     private Checked checked(UUID account, Emails.Purpose purpose, String typed, String address, String host) {
+        Checked checked = reserved(account, purpose, typed);
+        if (!(checked instanceof Checked.Wrong wrong)) {
+            return checked;
+        }
+        Optional<Duration> banned = failures.failed(address, host);
+        if (banned.isPresent()) {
+            return new Checked.Banned(banned.get());
+        }
+        return wrong.attemptsLeft() <= 0 ? new Checked.TooManyAttempts() : wrong;
+    }
+
+    /** Spends a try and checks the code: right and taken, wrong with the tries left, or why there was none. */
+    private Checked reserved(UUID account, Emails.Purpose purpose, String typed) {
         Instant at = clock.get();
         AtomicReference<Emails.Code> found = new AtomicReference<>();
         emails.changeCode(account, purpose, before -> {
@@ -212,9 +279,7 @@ public final class MailCodes {
         if (before.attemptsLeft() <= 0) {
             return new Checked.TooManyAttempts();
         }
-        return matches(typed, before.hash())
-                ? taken(account, purpose, before)
-                : wrong(account, purpose, before, address, host);
+        return matches(typed, before.hash()) ? taken(account, purpose, before) : wrong(account, purpose, before);
     }
 
     private Checked taken(UUID account, Emails.Purpose purpose, Emails.Code before) {
@@ -227,17 +292,14 @@ public final class MailCodes {
         return took.get() ? new Checked.Right(before.to()) : new Checked.NothingPending();
     }
 
-    private Checked wrong(UUID account, Emails.Purpose purpose, Emails.Code before, String address, String host) {
+    /** A wrong code: the last try takes the code with it. */
+    private Checked wrong(UUID account, Emails.Purpose purpose, Emails.Code before) {
         int left = before.attemptsLeft() - 1;
         if (left <= 0) {
             emails.changeCode(
                     account, purpose, now -> now.filter(code -> !code.hash().equals(before.hash())));
         }
-        Optional<Duration> banned = failures.failed(address, host);
-        if (banned.isPresent()) {
-            return new Checked.Banned(banned.get());
-        }
-        return left <= 0 ? new Checked.TooManyAttempts() : new Checked.Wrong(left);
+        return new Checked.Wrong(left);
     }
 
     private boolean matches(String typed, PasswordHash stored) {

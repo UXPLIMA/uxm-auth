@@ -18,6 +18,7 @@ public final class InMemoryEmails implements Emails {
 
     private final Map<UUID, EmailAddress> addresses = new ConcurrentHashMap<>();
     private final Map<Key, Code> codes = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> loginCodes = new ConcurrentHashMap<>();
 
     @Override
     public Optional<EmailAddress> address(UUID account) {
@@ -32,6 +33,17 @@ public final class InMemoryEmails implements Emails {
     @Override
     public void removeAddress(UUID account) {
         addresses.compute(account, (id, before) -> null);
+        loginCodes.compute(account, (id, before) -> null);
+    }
+
+    @Override
+    public boolean mailsLoginCode(UUID account) {
+        return addresses.containsKey(account) && loginCodes.getOrDefault(account, false);
+    }
+
+    @Override
+    public void setMailsLoginCode(UUID account, boolean on) {
+        loginCodes.compute(account, (id, before) -> on);
     }
 
     @Override

@@ -210,7 +210,8 @@ public enum Keys implements MessageKey {
     FACTOR_USAGE(
             "factor.usage",
             "<body>Use <value>/2fa setup<body> to ask a code from an authenticator app after your password,"
-                    + " <value>/2fa backup <code><body> for new backup codes, or <value>/2fa off <code><body> to stop."),
+                    + " <value>/2fa email on<body> to get it by mail instead, <value>/2fa backup <code><body> for new"
+                    + " backup codes, or <value>/2fa off <code><body> to stop."),
     FACTOR_SECRET(
             "factor.secret",
             "<body>Add an account in your authenticator app with this key: <value><secret><body>. Click it to copy."),
@@ -238,6 +239,15 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Your account asks a code from an app already. Turn it off first with"
                     + " <value>/2fa off <code><body>."),
     FACTOR_NOT_ON("factor.not-on", "<etag:'ERROR'> <body>Your account asks no code from an app."),
+    FACTOR_MAIL_ON(
+            "factor.mail-on",
+            "<good>From now on a login code is mailed to <value><address><good> after your password."),
+    FACTOR_MAIL_OFF("factor.mail-off", "<good>No more login codes are mailed to you."),
+    FACTOR_MAIL_ALREADY_ON("factor.mail-already-on", "<etag:'ERROR'> <body>Login codes are mailed to you already."),
+    FACTOR_MAIL_NOT_ON("factor.mail-not-on", "<etag:'ERROR'> <body>No login codes are mailed to you."),
+    FACTOR_MAIL_NO_ADDRESS(
+            "factor.mail-no-address",
+            "<etag:'ERROR'> <body>Link an address first with <value>/email add <address><body>."),
     FACTOR_REQUIRED(
             "factor.required",
             "<etag:'ERROR'> <body>Your account must ask a code from an authenticator app before you can play. Type"
@@ -245,7 +255,8 @@ public enum Keys implements MessageKey {
     FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     FACTOR_CODE_NEEDED(
             "factor.code-needed",
-            "<body>Now type the code from your authenticator app, or a backup code, with <value>/2fa <code><body>."),
+            "<body>Now type the code from your authenticator app or the one mailed to you, or a backup code, with"
+                    + " <value>/2fa <code><body>."),
     FACTOR_LOGIN_WRONG(
             "factor.login-wrong",
             "<etag:'ERROR'> <body>That is neither the code your app shows now nor a backup code. Tries left:"

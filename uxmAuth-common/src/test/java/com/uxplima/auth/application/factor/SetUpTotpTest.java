@@ -45,7 +45,8 @@ final class SetUpTotpTest {
             factors,
             new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4))),
             () -> settings.totp(),
-            () -> settings.backup());
+            () -> settings.backup(),
+            FactorCheck.MailedCode.NONE);
     private final SetUpTotp setUp =
             new SetUpTotp(factors, check, () -> settings, failures, new SplittableRandom(3), () -> now);
 

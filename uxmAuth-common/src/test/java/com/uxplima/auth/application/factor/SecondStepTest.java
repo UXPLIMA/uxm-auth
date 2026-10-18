@@ -2,17 +2,21 @@ package com.uxplima.auth.application.factor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.factor.FactorKind;
 import com.uxplima.auth.domain.factor.TotpSecret;
 import com.uxplima.auth.domain.hash.PasswordHash;
+import com.uxplima.auth.domain.mail.EmailAddress;
 import com.uxplima.auth.domain.password.PasswordVerdict;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.testing.AuthFixture;
+import com.uxplima.auth.testing.InMemoryEmails;
 import com.uxplima.auth.testing.InMemoryFactors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,7 +28,9 @@ final class SecondStepTest {
 
     private final InMemoryFactors factors = new InMemoryFactors();
     private SecondStep.Settings settings = new SecondStep.Settings(true, false, 3);
-    private final SecondStep step = new SecondStep(factors, () -> settings);
+    private final InMemoryEmails emails = new InMemoryEmails();
+    private final List<Account> mailed = new ArrayList<>();
+    private final SecondStep step = new SecondStep(factors, emails, () -> settings, mailed::add);
     private final Account steve = AuthFixture.account("Steve", new PasswordHash("$hash$x"));
 
     private void appOn() {
@@ -111,5 +117,61 @@ final class SecondStepTest {
         assertThat(step.awaiting(steve, AuthMethod.SESSION))
                 .isEqualTo(new AuthState.SecondFactor(
                         steve, AuthMethod.SESSION, Set.of(FactorKind.APP), Attempts.fresh(3), null));
+    }
+
+    private void mailOn() {
+        emails.setAddress(steve.id(), EmailAddress.parse("steve@example.net").orElseThrow());
+        emails.setMailsLoginCode(steve.id(), true);
+    }
+
+    @Test
+    @DisplayName("an account that takes its code by mail waits for it, and the code is mailed as the step opens")
+    void aMailedCodeIsAsked() {
+        mailOn();
+
+        assertThat(step.after(steve, AuthMethod.PASSWORD, null))
+                .isEqualTo(new AuthState.SecondFactor(
+                        steve, AuthMethod.PASSWORD, Set.of(FactorKind.EMAIL), Attempts.fresh(3), null));
+        assertThat(mailed).containsExactly(steve);
+        assertThat(step.asks(steve, AuthMethod.PASSWORD)).isTrue();
+        assertThat(mailed).as("asking mails nothing").hasSize(1);
+    }
+
+    @Test
+    @DisplayName("an account with the app and the mail takes either, and the code is mailed too")
+    void bothAreTaken() {
+        appOn();
+        mailOn();
+
+        assertThat(step.after(steve, AuthMethod.PASSWORD, null))
+                .isInstanceOfSatisfying(
+                        AuthState.SecondFactor.class,
+                        waiting -> assertThat(waiting.kinds())
+                                .containsExactlyInAnyOrder(FactorKind.APP, FactorKind.EMAIL));
+        assertThat(step.awaiting(steve, AuthMethod.NETWORK))
+                .isInstanceOfSatisfying(
+                        AuthState.SecondFactor.class,
+                        waiting -> assertThat(waiting.kinds())
+                                .containsExactlyInAnyOrder(FactorKind.APP, FactorKind.EMAIL));
+        assertThat(mailed).containsExactly(steve, steve);
+    }
+
+    @Test
+    @DisplayName("a mail code with no linked address left is no factor, and nothing is mailed")
+    void noAddressNoMail() {
+        emails.setMailsLoginCode(steve.id(), true);
+
+        assertThat(step.after(steve, AuthMethod.PASSWORD, null))
+                .isEqualTo(new AuthState.Authenticated(steve, AuthMethod.PASSWORD));
+        assertThat(mailed).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a way the operator lets skip the code mails nothing either")
+    void aSkipMailsNothing() {
+        mailOn();
+
+        assertThat(step.after(steve, AuthMethod.PREMIUM, null)).isInstanceOf(AuthState.Authenticated.class);
+        assertThat(mailed).isEmpty();
     }
 }

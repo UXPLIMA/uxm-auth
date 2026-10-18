@@ -31,6 +31,7 @@ import com.uxplima.auth.adapter.outbound.geo.CountryUpkeep;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.factor.SecondStep;
+import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
@@ -81,6 +82,7 @@ final class ProxyGraph implements AutoCloseable {
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;
     private @Nullable ScheduledTask countryTask;
+    private @Nullable ProxyMail mail;
 
     ProxyGraph(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -106,8 +108,6 @@ final class ProxyGraph implements AutoCloseable {
         NetworkSecret secret = secret(settings);
         // Sealed with the secret every member shares, so a code set up on any server reads here.
         SqlFactors factors = new SqlFactors(database, SecretSeal.fromPassphrase(secret.encoded()), clock);
-        SecondStep secondStep =
-                new SecondStep(factors, () -> settings.current().secondFactor().step());
         SqlRememberedSessions remembered = new SqlRememberedSessions(database, clock);
         Remember remember = new Remember(
                 remembered,
@@ -119,6 +119,10 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
+        ProxyMail mail = new ProxyMail(proxy, logger, folder, settings, database, bans::failed, words);
+        this.mail = mail;
+        SecondStep secondStep = new SecondStep(
+                factors, mail.emails, () -> settings.current().secondFactor().step(), mail::loginMailed);
         Admission admission = admission(settings, bans, watchCountries(settings, clock), clock);
         ProxySessions sessions = listen(
                 door,
@@ -135,7 +139,14 @@ final class ProxyGraph implements AutoCloseable {
                 accounts,
                 words,
                 sessions,
-                guards(settings, accounts, remember, bans, clock, remembered, new Codes(factors, secondStep)));
+                guards(
+                        settings,
+                        accounts,
+                        remember,
+                        bans,
+                        clock,
+                        remembered,
+                        new Codes(factors, secondStep, mail.codes)));
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
@@ -159,7 +170,15 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().passwordLists().breachCheck(),
                 logger::warn);
         return new WaitingWorld.Guards(
-                remember, bans::failed, cap::full, breaches, events, remembered, codes.factors(), codes.step());
+                remember,
+                bans::failed,
+                cap::full,
+                breaches,
+                events,
+                remembered,
+                codes.factors(),
+                codes.step(),
+                codes.mail());
     }
 
     /** The door's rules, in order: the country, a banned address, then too many connections from one. */
@@ -289,6 +308,9 @@ final class ProxyGraph implements AutoCloseable {
         }
         events.close();
         waiting.close();
+        if (mail != null) {
+            mail.close();
+        }
     }
 
     private void register(Object listener) {
@@ -331,7 +353,7 @@ final class ProxyGraph implements AutoCloseable {
     private record Steps(NetworkSecret secret, SecondStep secondStep) {}
 
     /** The factor table and the step after the password, which the waiting world reads. */
-    private record Codes(SqlFactors factors, SecondStep step) {}
+    private record Codes(SqlFactors factors, SecondStep step, MailCodes mail) {}
 
     /** The decision at the pre-login: the web sources, the operator's rule, and the memories of claims and failures. */
     private AtTheDoor atTheDoor(

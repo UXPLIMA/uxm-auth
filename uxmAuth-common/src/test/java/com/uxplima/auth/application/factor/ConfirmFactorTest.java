@@ -45,8 +45,8 @@ final class ConfirmFactorTest {
         return Optional.ofNullable(ban);
     };
     private Instant now = AuthFixture.NOW;
-    private final FactorCheck check =
-            new FactorCheck(factors, fixture.hashing, () -> TOTP, () -> new BackupCodes(8, 10));
+    private final FactorCheck check = new FactorCheck(
+            factors, fixture.hashing, () -> TOTP, () -> new BackupCodes(8, 10), FactorCheck.MailedCode.NONE);
     private final ConfirmFactor confirm =
             new ConfirmFactor(fixture.accounts, fixture.sessions, check, failures, () -> now);
     private final Account steve = AuthFixture.account("Steve", new PasswordHash("$hash$x"));

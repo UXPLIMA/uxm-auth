@@ -70,7 +70,8 @@ final class FactorSetupTest {
         factors = new SqlFactors(world.database, SecretSeal.fromPassphrase("lab"), world.clock);
         SetUpTotp.Settings settings =
                 new SetUpTotp.Settings("Uxplima", "{player}", TOTP, Duration.ofMinutes(10), new BackupCodes(8, 10));
-        FactorCheck check = new FactorCheck(factors, world.hashing, settings::totp, settings::backup);
+        FactorCheck check =
+                new FactorCheck(factors, world.hashing, settings::totp, settings::backup, FactorCheck.MailedCode.NONE);
         SetUpTotp setUp = new SetUpTotp(
                 factors, check, () -> settings, world.bans::failed, new SplittableRandom(5), world.clock::instant);
         FactorSetup.Hand hand = new FactorSetup.Hand() {

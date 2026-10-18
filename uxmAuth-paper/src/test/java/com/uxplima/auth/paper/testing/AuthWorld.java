@@ -252,11 +252,23 @@ public final class AuthWorld implements AutoCloseable {
                 new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
         this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
                 database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
-        this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
-        this.owedSetups = new com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups(sessions);
         this.emails = new com.uxplima.auth.adapter.outbound.SqlEmails(database, clock);
-        this.factorCheck =
-                new com.uxplima.auth.application.factor.FactorCheck(factors, hashing, () -> TOTP, () -> BACKUP);
+        com.uxplima.auth.application.mail.MailLogin mailLogin =
+                new com.uxplima.auth.application.mail.MailLogin(emails, mailCodes());
+        this.secondStep =
+                new com.uxplima.auth.application.factor.SecondStep(factors, emails, () -> stepSettings, account -> {
+                    java.util.concurrent.CompletableFuture<?> unused =
+                            mailLogin.send(account, java.util.Locale.ENGLISH);
+                });
+        this.owedSetups = new com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups(sessions);
+        com.uxplima.auth.application.mail.MailCodes codes = mailCodes();
+        this.factorCheck = new com.uxplima.auth.application.factor.FactorCheck(
+                factors,
+                hashing,
+                () -> TOTP,
+                () -> BACKUP,
+                (account, typed) ->
+                        codes.takes(account, com.uxplima.auth.application.port.Emails.Purpose.LOGIN, typed));
         this.confirmFactor = new com.uxplima.auth.application.factor.ConfirmFactor(
                 accounts, sessions, factorCheck, bans::failed, clock::instant);
         this.logIn =
@@ -382,6 +394,20 @@ public final class AuthWorld implements AutoCloseable {
                 () -> mailNow);
     }
 
+    /** {@code /2fa email on|off} in this world. */
+    public com.uxplima.auth.paper.adapter.inbound.factor.MailToggle mailToggle() {
+        return new com.uxplima.auth.paper.adapter.inbound.factor.MailToggle(
+                new com.uxplima.auth.application.mail.MailFactor(
+                        emails,
+                        com.uxplima.auth.application.mail.MailFactor.by(factorCheck, clock::instant),
+                        bans::failed),
+                sessions,
+                lane,
+                replies,
+                moments,
+                messages);
+    }
+
     /** {@code /email} in this world, with these forms for a Bedrock player. */
     public com.uxplima.auth.paper.adapter.inbound.mail.EmailLink emailLink(
             com.uxplima.auth.paper.adapter.inbound.mail.EmailLink.Forms forms,
@@ -414,7 +440,14 @@ public final class AuthWorld implements AutoCloseable {
         com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty made = duty;
         if (made == null) {
             made = new com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty(
-                    owedSetups, () -> requiredNode, setUpTotp(), factorSetup(), id -> false, lane, replies, messages);
+                    owedSetups,
+                    () -> requiredNode,
+                    id -> setUpTotp().active(id) || emails.mailsLoginCode(id),
+                    factorSetup(),
+                    id -> false,
+                    lane,
+                    replies,
+                    messages);
             duty = made;
         }
         return made;

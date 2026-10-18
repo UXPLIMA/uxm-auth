@@ -28,7 +28,12 @@ final class FactorCheckTest {
 
     private final InMemoryFactors factors = new InMemoryFactors();
     private final Hashing hashing = new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4)));
-    private final FactorCheck check = new FactorCheck(factors, hashing, () -> TOTP, () -> new BackupCodes(8, 10));
+    private final java.util.List<String> mailedTaken = new java.util.ArrayList<>();
+    private final FactorCheck check =
+            new FactorCheck(factors, hashing, () -> TOTP, () -> new BackupCodes(8, 10), (account, typed) -> {
+                mailedTaken.add(typed);
+                return "424242".equals(typed);
+            });
 
     private String appCode() {
         return TOTP.code(SECRET.bytes(), TOTP.step(NOW));
@@ -91,8 +96,23 @@ final class FactorCheckTest {
         };
         racing.setBackupCodes(STEVE, factors.backupCodes(STEVE));
 
-        assertThat(new FactorCheck(racing, hashing, () -> TOTP, () -> new BackupCodes(8, 10))
+        assertThat(new FactorCheck(
+                                racing, hashing, () -> TOTP, () -> new BackupCodes(8, 10), FactorCheck.MailedCode.NONE)
                         .passes(STEVE, "ABCDEFGHJK", NOW))
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("a code the app does not take is tried as the mailed code; one the app takes is never")
+    void aMailedCodePasses() {
+        factors.setApp(STEVE, SECRET);
+
+        assertThat(check.passes(STEVE, appCode(), NOW)).isTrue();
+        assertThat(mailedTaken).isEmpty();
+        assertThat(check.passes(STEVE, "424242", NOW)).isTrue();
+        assertThat(check.passes(UUID.randomUUID(), "424242", NOW))
+                .as("no app at all")
+                .isTrue();
+        assertThat(check.passes(STEVE, "000000", NOW)).isFalse();
     }
 }

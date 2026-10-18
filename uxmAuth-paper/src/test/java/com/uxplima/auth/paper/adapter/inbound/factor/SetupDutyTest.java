@@ -215,6 +215,22 @@ final class SetupDutyTest {
     }
 
     @Test
+    @DisplayName("a player with the node who takes the login code by mail owes nothing more")
+    void aMailedCodeIsEnough() {
+        steve.addAttachment(plugin, NODE, true);
+        world.emails.setAddress(
+                account().id(),
+                com.uxplima.auth.domain.mail.EmailAddress.parse("s@example.net").orElseThrow());
+        world.emails.setMailsLoginCode(account().id(), true);
+        world.sessions.update(steve.getUniqueId(), state -> new AuthState.Authenticated(account(), AuthMethod.PREMIUM));
+
+        world.door.open(steve, AuthSettings.Moment.LOGGED_IN);
+        await(() -> state() instanceof AuthState.Authenticated);
+
+        assertThat(world.fired).containsExactly(AuthSettings.Moment.LOGGED_IN);
+    }
+
+    @Test
     @DisplayName("a player who arrives logged in, by a session or a premium name, is held the same way")
     void anArrivalLoggedInIsHeld() {
         steve.addAttachment(plugin, NODE, true);

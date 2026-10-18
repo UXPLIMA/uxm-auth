@@ -23,7 +23,9 @@ import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.mail.MailFactor;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -31,6 +33,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.factor.BedrockSetupForm;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorLogin;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup;
+import com.uxplima.auth.paper.adapter.inbound.factor.MailToggle;
 import com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups;
 import com.uxplima.auth.paper.adapter.inbound.factor.QrMapGuard;
 import com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty;
@@ -60,6 +63,7 @@ final class FactorGraph {
     final SetupDuty duty;
 
     private final FactorSetup setup;
+    private final MailToggle mailToggle;
     private final Sessions sessions;
     private final Messages messages;
 
@@ -77,20 +81,22 @@ final class FactorGraph {
             MomentRunner moments,
             Messages messages,
             AuthScreens screens,
-            ScreenShower shower) {
+            ScreenShower shower,
+            MailGraph mail) {
         this.sessions = sessions;
         this.messages = messages;
         Path folder = plugin.getDataFolder().toPath();
         AuthSettings.Network network = settings.current().network();
         SqlFactors factors =
                 new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
-        this.secondStep =
-                new SecondStep(factors, () -> settings.current().secondFactor().step());
+        this.secondStep = new SecondStep(
+                factors, mail.emails, () -> settings.current().secondFactor().step(), mail::loginMailed);
         FactorCheck check = new FactorCheck(
                 factors,
                 hashing,
                 () -> settings.current().secondFactor().setup().totp(),
-                () -> settings.current().secondFactor().setup().backup());
+                () -> settings.current().secondFactor().setup().backup(),
+                (account, typed) -> mail.codes.takes(account, Emails.Purpose.LOGIN, typed));
         ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, failures, Instant::now);
         this.screen = new FactorScreen(confirm, screens, shower, messages, lane);
         SetUpTotp setUp = new SetUpTotp(
@@ -118,10 +124,17 @@ final class FactorGraph {
                 item -> qr.map(map -> map.holds(item)).orElse(false),
                 player -> qr.ifPresent(map -> map.take(player)),
                 setup::left);
+        this.mailToggle = new MailToggle(
+                new MailFactor(mail.emails, MailFactor.by(check, Instant::now), failures),
+                sessions,
+                lane,
+                replies,
+                moments,
+                messages);
         this.duty = new SetupDuty(
                 owed,
                 () -> settings.current().secondFactor().requiredPermission(),
-                setUp,
+                id -> setUp.active(id) || mail.emails.mailsLoginCode(id),
                 setup,
                 bedrock,
                 lane,
@@ -131,7 +144,7 @@ final class FactorGraph {
 
     /** {@code /2fa}, whose code of the second step reaches the guest each player is. */
     TwoFactorCommand command(Function<Player, Guest> guests) {
-        return new TwoFactorCommand(setup, new FactorLogin(sessions, screen, guests, messages));
+        return new TwoFactorCommand(setup, new FactorLogin(sessions, screen, guests, messages), mailToggle);
     }
 
     /**

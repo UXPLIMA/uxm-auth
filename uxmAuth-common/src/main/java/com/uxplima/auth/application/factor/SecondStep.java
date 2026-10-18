@@ -1,11 +1,14 @@
 package com.uxplima.auth.application.factor;
 
+import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Predicate;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
+import com.uxplima.auth.application.port.Emails;
 import com.uxplima.auth.application.port.Factors;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.factor.FactorKind;
@@ -17,9 +20,10 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Whether a first step that passed is the whole login. A password always leads to the code where the account has
- * an app; a remembered session leads to it unless the operator lets sessions skip it; a premium handshake and
- * Floodgate's word skip it while the operator counts them as proof. A new account, staff's word and the proxy's
- * word never ask: the proxy asked already.
+ * an app, or takes its code by mail; a remembered session leads to it unless the operator lets sessions skip it; a
+ * premium handshake and Floodgate's word skip it while the operator counts them as proof. A new account, staff's
+ * word and the proxy's word never ask: the proxy asked already. A step that takes a mailed code mails it as it
+ * opens.
  */
 public final class SecondStep {
 
@@ -39,33 +43,56 @@ public final class SecondStep {
     }
 
     /** No factor table: nothing is ever asked, for a part built without one. */
-    public static final SecondStep NONE = new SecondStep(account -> false, () -> new Settings(true, true, 1));
+    public static final SecondStep NONE =
+            new SecondStep(account -> Set.of(), () -> new Settings(true, true, 1), account -> {});
 
-    private final Predicate<UUID> hasApp;
+    private final Function<UUID, Set<FactorKind>> kinds;
     private final Supplier<Settings> settings;
+    private final Consumer<Account> mailing;
 
-    public SecondStep(Factors factors, Supplier<Settings> settings) {
-        this(account -> factors.app(account).isPresent(), settings);
-        Objects.requireNonNull(factors, "factors");
+    /** @param mailing mails the login code to an account whose step takes one, as the step opens */
+    public SecondStep(Factors factors, Emails emails, Supplier<Settings> settings, Consumer<Account> mailing) {
+        this(
+                kindsOf(Objects.requireNonNull(factors, "factors"), Objects.requireNonNull(emails, "emails")),
+                settings,
+                mailing);
     }
 
-    private SecondStep(Predicate<UUID> hasApp, Supplier<Settings> settings) {
-        this.hasApp = hasApp;
+    private SecondStep(Function<UUID, Set<FactorKind>> kinds, Supplier<Settings> settings, Consumer<Account> mailing) {
+        this.kinds = kinds;
         this.settings = Objects.requireNonNull(settings, "settings");
+        this.mailing = Objects.requireNonNull(mailing, "mailing");
+    }
+
+    private static Function<UUID, Set<FactorKind>> kindsOf(Factors factors, Emails emails) {
+        return account -> {
+            Set<FactorKind> found = EnumSet.noneOf(FactorKind.class);
+            if (factors.app(account).isPresent()) {
+                found.add(FactorKind.APP);
+            }
+            if (emails.mailsLoginCode(account)) {
+                found.add(FactorKind.EMAIL);
+            }
+            return Set.copyOf(found);
+        };
     }
 
     /** Whether a first step that passed this way leads to a code for this account. Reads the table. */
     public boolean asks(Account account, AuthMethod method) {
         Objects.requireNonNull(account, "account");
+        return !skips(Objects.requireNonNull(method, "method"))
+                && !kinds.apply(account.id()).isEmpty();
+    }
+
+    /** Whether this way skips the code by the operator's choice, before any table is read. */
+    private boolean skips(AuthMethod method) {
         Settings now = settings.get();
-        boolean byWay =
-                switch (Objects.requireNonNull(method, "method")) {
-                    case PASSWORD -> true;
-                    case SESSION -> !now.sessionsSkip();
-                    case PREMIUM, BEDROCK -> !now.premiumSkips();
-                    case REGISTERED, FORCED, NETWORK -> false;
-                };
-        return byWay && hasApp.test(account.id());
+        return switch (method) {
+            case PASSWORD -> false;
+            case SESSION -> now.sessionsSkip();
+            case PREMIUM, BEDROCK -> now.premiumSkips();
+            case REGISTERED, FORCED, NETWORK -> true;
+        };
     }
 
     /**
@@ -73,13 +100,10 @@ public final class SecondStep {
      * weak password, or logged in.
      */
     public AuthState after(Account account, AuthMethod method, @Nullable PasswordVerdict mustReplace) {
-        if (asks(account, method)) {
-            return new AuthState.SecondFactor(
-                    account,
-                    method,
-                    Set.of(FactorKind.APP),
-                    Attempts.fresh(settings.get().attempts()),
-                    mustReplace);
+        Objects.requireNonNull(account, "account");
+        Set<FactorKind> owed = skips(Objects.requireNonNull(method, "method")) ? Set.of() : kinds.apply(account.id());
+        if (!owed.isEmpty()) {
+            return waiting(account, method, owed, mustReplace);
         }
         return mustReplace == null
                 ? new AuthState.Authenticated(account, method)
@@ -88,18 +112,21 @@ public final class SecondStep {
 
     /**
      * Where a connection stands whose first step the proxy saw pass this way, and which it says owes the code: it
-     * waits for the code, unless the account has no app any more. The operator's skips were the proxy's to read.
+     * waits for the code, unless the account has no factor any more. The operator's skips were the proxy's to read.
      */
     public AuthState awaiting(Account account, AuthMethod method) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(method, "method");
-        return hasApp.test(account.id())
-                ? new AuthState.SecondFactor(
-                        account,
-                        method,
-                        Set.of(FactorKind.APP),
-                        Attempts.fresh(settings.get().attempts()),
-                        null)
-                : new AuthState.Authenticated(account, method);
+        Set<FactorKind> owed = kinds.apply(account.id());
+        return owed.isEmpty() ? new AuthState.Authenticated(account, method) : waiting(account, method, owed, null);
+    }
+
+    private AuthState waiting(
+            Account account, AuthMethod method, Set<FactorKind> owed, @Nullable PasswordVerdict mustReplace) {
+        if (owed.contains(FactorKind.EMAIL)) {
+            mailing.accept(account);
+        }
+        return new AuthState.SecondFactor(
+                account, method, owed, Attempts.fresh(settings.get().attempts()), mustReplace);
     }
 }

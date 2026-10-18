@@ -255,6 +255,7 @@ final class AuthGraph implements AutoCloseable {
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
         CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
+        this.mail = new MailGraph(plugin, settings, database, bans::failed, hashing, lane, messages);
         this.factors = new FactorGraph(
                 plugin,
                 settings,
@@ -269,7 +270,8 @@ final class AuthGraph implements AutoCloseable {
                 moments,
                 messages,
                 screens,
-                shower);
+                shower,
+                mail);
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,
@@ -429,19 +431,7 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
-        this.mail = new MailGraph(
-                plugin,
-                settings,
-                database,
-                sessions,
-                bans::failed,
-                id -> bedrock.player(id).isPresent(),
-                hashing,
-                lane,
-                replies,
-                moments,
-                messages);
-        this.email = mail.command;
+        this.email = mail.command(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }
