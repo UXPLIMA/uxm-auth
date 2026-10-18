@@ -79,6 +79,64 @@ final class PlayerCommandsTest {
     }
 
     @Test
+    @DisplayName("a wrong password that bans the address kicks at once, runs the ban moment, and the door refuses it")
+    void aBanKicksAndTheDoorRefuses() {
+        world.banSteps = new com.uxplima.auth.domain.protection.BanSteps(
+                java.util.List.of(java.time.Duration.ofMinutes(5)), 2, java.time.Duration.ofHours(24));
+        world.registered(steve, "hunter22");
+        String address = steve.getAddress().getAddress().getHostAddress();
+        world.door.hold(steve);
+        world.scheduler.drain();
+        drain();
+
+        world.scheduler.settle(login().attempt(steve, "wrong123"));
+        assertThat(steve.isOnline()).isTrue();
+        world.scheduler.settle(login().attempt(steve, "wrong123"));
+
+        assertThat(world.fired)
+                .contains(AuthSettings.Moment.BANNED)
+                .doesNotContain(AuthSettings.Moment.TOO_MANY_ATTEMPTS);
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(world.bans
+                        .rule()
+                        .check(new com.uxplima.auth.application.protection.Admission.Arrival(
+                                address, "play.example.org")))
+                .hasValueSatisfying(refused -> assertThat(refused.lasts()).isEqualTo(java.time.Duration.ofMinutes(5)));
+    }
+
+    @Test
+    @DisplayName("two players behind one shared-address host: one's wrong passwords ban neither of them")
+    void aSharedHostBansNobody() {
+        world.sharedHosts = java.util.List.of("*.tcpshield.com");
+        world.banSteps = new com.uxplima.auth.domain.protection.BanSteps(
+                java.util.List.of(java.time.Duration.ofMinutes(5)), 2, java.time.Duration.ofHours(24));
+        PlayerMock alex = server.addPlayer("Alex");
+        String steveAddress = steve.getAddress().getAddress().getHostAddress();
+        world.registered(steve, "hunter22");
+        world.registered(alex, "secret99");
+        for (PlayerMock player : java.util.List.of(steve, alex)) {
+            world.sessions.open(
+                    player.getUniqueId(),
+                    world.sessions.state(player.getUniqueId()).orElseThrow(),
+                    "visit-" + player.getName(),
+                    "mc.tcpshield.com");
+        }
+
+        for (int i = 0; i < 3; i++) {
+            world.scheduler.settle(login().attempt(steve, "wrong123"));
+        }
+        world.scheduler.settle(login().attempt(alex, "secret99"));
+
+        assertThat(world.fired).doesNotContain(AuthSettings.Moment.BANNED);
+        assertThat(world.isAuthenticated(alex)).isTrue();
+        assertThat(world.bans
+                        .rule()
+                        .check(new com.uxplima.auth.application.protection.Admission.Arrival(
+                                steveAddress, "play.example.org")))
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("a registration with the password twice makes the account and lets the player in")
     void registerMakesTheAccount() {
         world.unregistered(steve);

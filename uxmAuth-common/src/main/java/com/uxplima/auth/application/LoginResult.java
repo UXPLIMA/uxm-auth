@@ -1,5 +1,6 @@
 package com.uxplima.auth.application;
 
+import java.time.Duration;
 import java.util.Objects;
 
 import com.uxplima.auth.domain.account.Account;
@@ -18,6 +19,13 @@ public sealed interface LoginResult {
 
     /** The last try is spent. The platform decides what follows, usually a kick. */
     record TooManyAttempts() implements LoginResult {}
+
+    /** A wrong password from an address that is banned now, for this long; the platform sends the player away. */
+    record Banned(Duration lasts) implements LoginResult {
+        public Banned {
+            Objects.requireNonNull(lasts, "lasts");
+        }
+    }
 
     /** There is no password to log in with: no account, or one that never set a password. */
     record NotRegistered() implements LoginResult {}

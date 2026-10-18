@@ -33,10 +33,13 @@ public final class AddressBans {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** A wrong password from this address through this host: the time the address is banned for now, if it is. */
+    /**
+     * A wrong password from this address through this host: the time the address is banned for now, if it is. An
+     * address the server could not read is everybody's whose address it could not read, so it counts nothing.
+     */
     public Optional<Duration> failed(String address, String host) {
         Objects.requireNonNull(address, "address");
-        if (shared.get().matches(Objects.requireNonNull(host, "host"))) {
+        if (shared.get().matches(Objects.requireNonNull(host, "host")) || !AddressKey.isAddress(address)) {
             return Optional.empty();
         }
         Instant now = clock.get();

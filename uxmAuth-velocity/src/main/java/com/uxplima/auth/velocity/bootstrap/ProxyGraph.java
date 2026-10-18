@@ -101,7 +101,7 @@ final class ProxyGraph implements AutoCloseable {
                 new Admission(() -> settings.current().protection().sharedHosts(), List.of(bans.rule()));
         ProxySessions sessions = listen(
                 door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
-        waiting.open(settings, accounts, words, sessions, remember);
+        waiting.open(settings, accounts, words, sessions, remember, bans::failed);
         logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 

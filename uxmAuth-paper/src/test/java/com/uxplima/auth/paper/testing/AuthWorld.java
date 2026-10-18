@@ -21,6 +21,7 @@ import com.uxplima.auth.adapter.outbound.AuthSchema;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.application.ChangePassword;
@@ -33,6 +34,7 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
@@ -47,6 +49,7 @@ import com.uxplima.auth.domain.premium.HostPatterns;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.WhenUnknown;
+import com.uxplima.auth.domain.protection.BanSteps;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
@@ -109,6 +112,14 @@ public final class AuthWorld implements AutoCloseable {
     public final SqlRememberedSessions remembered;
     public final Remember remember;
     public final Remembering remembering;
+    public final AddressBans bans;
+
+    /** How wrong passwords ban an address in this world; past the attempts of a connection until a test sets it. */
+    public BanSteps banSteps = new BanSteps(
+            List.of(Duration.ofMinutes(5), Duration.ofMinutes(30), Duration.ofHours(1), Duration.ofDays(1)),
+            10,
+            Duration.ofHours(24));
+
     /** The shared-address hosts of this world; a test sets them. */
     public List<String> sharedHosts = List.of();
 
@@ -169,7 +180,9 @@ public final class AuthWorld implements AutoCloseable {
                 },
                 remembering);
         this.register = new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock);
-        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock);
+        this.bans = new AddressBans(
+                new SqlAddressTallies(database), () -> banSteps, () -> new HostPatterns(sharedHosts), clock::instant);
+        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);
         this.change =
                 new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered);
         this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS, remembered);

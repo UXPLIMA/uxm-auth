@@ -1,8 +1,10 @@
 package com.uxplima.auth.application;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -32,18 +34,38 @@ public final class LogIn {
 
     private static final long NO_OPENING = -1;
 
+    /** Where a wrong password counts against the address it came from, through the host the player typed. */
+    @FunctionalInterface
+    public interface Failures {
+        /** The time the address is banned for now, if this failure or an earlier one banned it. */
+        Optional<Duration> failed(String address, String host);
+    }
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
     private final Sessions sessions;
     private final Clock clock;
+    private final Failures failures;
 
     public LogIn(AccountRepository accounts, Hashing hashing, HashingLane lane, Sessions sessions, Clock clock) {
+        this(accounts, hashing, lane, sessions, clock, (address, host) -> Optional.empty());
+    }
+
+    /** @param failures where each wrong password counts against its address */
+    public LogIn(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Clock clock,
+            Failures failures) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.failures = Objects.requireNonNull(failures, "failures");
     }
 
     /** The password is wiped once the answer is known, whatever it is. */
@@ -79,8 +101,7 @@ public final class LogIn {
         if (spent == null) {
             return CompletableFuture.completedFuture(refusal(after));
         }
-        long generation = held.generation();
-        return lane.submit(() -> check(connection, generation, spent, password, address));
+        return lane.submit(() -> check(connection, held, spent, password, address));
     }
 
     /** Spends one attempt on a connection that has one left, and remembers what it became. */
@@ -106,7 +127,8 @@ public final class LogIn {
     }
 
     private LoginResult check(
-            UUID connection, long generation, AuthState.Registered spent, Password password, String address) {
+            UUID connection, Sessions.Held held, AuthState.Registered spent, Password password, String address) {
+        long generation = held.generation();
         if (!sessions.isOpen(connection, generation)) {
             return new LoginResult.Gone();
         }
@@ -116,7 +138,7 @@ public final class LogIn {
             return new LoginResult.NotRegistered();
         }
         return switch (hashing.verify(password, stored)) {
-            case Verification.Wrong wrong -> wrongAnswer(spent.attempts());
+            case Verification.Wrong wrong -> wrongAnswer(spent.attempts(), address, held.host());
             case Verification.Right right -> logIn(connection, generation, current, address);
             case Verification.RightButRehash rehash -> {
                 Account account = accounts.replacePassword(current.id(), stored, rehash.fresh())
@@ -127,7 +149,11 @@ public final class LogIn {
         };
     }
 
-    private static LoginResult wrongAnswer(Attempts afterThisOne) {
+    private LoginResult wrongAnswer(Attempts afterThisOne, String address, String host) {
+        Optional<Duration> banned = failures.failed(address, host);
+        if (banned.isPresent()) {
+            return new LoginResult.Banned(banned.get());
+        }
         return afterThisOne.exhausted()
                 ? new LoginResult.TooManyAttempts()
                 : new LoginResult.Wrong(afterThisOne.left());

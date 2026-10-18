@@ -8,6 +8,7 @@ import java.util.function.Function;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.message.Keys;
@@ -36,6 +37,7 @@ public final class LoginCommand {
     private final MomentRunner moments;
     private final Messages messages;
     private final Replies replies;
+    private final TimeWords times;
 
     /** @param openings the opening of the session each player stands in the world under */
     public LoginCommand(
@@ -51,6 +53,7 @@ public final class LoginCommand {
         this.moments = Objects.requireNonNull(moments, "moments");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.replies = Objects.requireNonNull(replies, "replies");
+        this.times = new TimeWords(messages);
     }
 
     @Subcommand("")
@@ -80,6 +83,10 @@ public final class LoginCommand {
             case LoginResult.TooManyAttempts tooMany -> {
                 moments.fire(player, AuthSettings.Moment.TOO_MANY_ATTEMPTS);
                 player.kick(messages.render(player, Keys.KICK_TOO_MANY_ATTEMPTS));
+            }
+            case LoginResult.Banned banned -> {
+                moments.fire(player, AuthSettings.Moment.BANNED);
+                player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
             }
             case LoginResult.NotRegistered notRegistered -> messages.send(player, Keys.LOGIN_NOT_REGISTERED);
             case LoginResult.AlreadyLoggedIn already -> messages.send(player, Keys.LOGIN_ALREADY);

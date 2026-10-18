@@ -15,6 +15,17 @@ public final class AddressKey {
 
     private AddressKey() {}
 
+    /** Whether the text is an address literal, as the server writes one it could read. */
+    public static boolean isAddress(String text) {
+        Objects.requireNonNull(text, "text");
+        try {
+            InetAddress.ofLiteral(text);
+            return true;
+        } catch (IllegalArgumentException notALiteral) {
+            return false;
+        }
+    }
+
     /** The key of this address; text that is no address literal is its own key. */
     public static String of(String address) {
         Objects.requireNonNull(address, "address");

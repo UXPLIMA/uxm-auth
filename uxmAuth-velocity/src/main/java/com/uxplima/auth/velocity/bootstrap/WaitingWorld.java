@@ -63,7 +63,8 @@ final class WaitingWorld implements AutoCloseable {
             SqlAccountRepository accounts,
             Messages words,
             ProxySessions network,
-            Remember remember) {
+            Remember remember,
+            LogIn.Failures failures) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
         }
@@ -74,7 +75,7 @@ final class WaitingWorld implements AutoCloseable {
             return;
         }
         try {
-            hold(limboApi.get(), settings, accounts, words, network, remember);
+            hold(limboApi.get(), settings, accounts, words, network, remember, failures);
         } catch (RuntimeException | LinkageError foreign) {
             // A LimboAPI of another major version names its types elsewhere; the proxy starts without the world.
             close();
@@ -91,11 +92,12 @@ final class WaitingWorld implements AutoCloseable {
             SqlAccountRepository accounts,
             Messages words,
             ProxySessions network,
-            Remember remember) {
+            Remember remember,
+            LogIn.Failures failures) {
         Path commands = folder.resolve(COMMANDS);
         Set<String> login = CommandFile.labels(commands, "login");
         Set<String> register = CommandFile.labels(commands, "register");
-        LimboLogin passwords = passwords(settings, accounts, words, login, register);
+        LimboLogin passwords = passwords(settings, accounts, words, new Labels(login, register), failures);
         LimboWait wait = new LimboWait(
                 LimboWorld.open(limboApi, folder, settings.current().network(), metas(login, register), logger),
                 network::waitsAtTheProxy,
@@ -107,12 +109,15 @@ final class WaitingWorld implements AutoCloseable {
         logger.info("Players who must log in wait in the proxy's own world, built with LimboAPI.");
     }
 
+    /** The labels of /login and /register, as commands.conf names them. */
+    private record Labels(Set<String> login, Set<String> register) {}
+
     private LimboLogin passwords(
             PluginSettings settings,
             SqlAccountRepository accounts,
             Messages words,
-            Set<String> login,
-            Set<String> register) {
+            Labels labels,
+            LogIn.Failures failures) {
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         HashingLane hashingLane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
@@ -125,7 +130,7 @@ final class WaitingWorld implements AutoCloseable {
                         accounts,
                         () -> settings.current().namePolicy(),
                         () -> settings.current().passwords().maxAttempts()),
-                new LogIn(accounts, hashing, hashingLane, sessions, clock),
+                new LogIn(accounts, hashing, hashingLane, sessions, clock, failures),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -135,8 +140,8 @@ final class WaitingWorld implements AutoCloseable {
                         clock),
                 sessions,
                 words,
-                () -> login,
-                () -> register,
+                labels::login,
+                labels::register,
                 () -> settings.current().passwords().confirmOnRegister());
     }
 

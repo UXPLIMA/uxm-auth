@@ -7,7 +7,6 @@ import java.util.Optional;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.application.message.Keys;
@@ -85,7 +84,7 @@ public final class DoorWords {
         Audience nobody = Audience.empty();
         List<TagResolver> values = new ArrayList<>();
         refused.values().forEach((name, value) -> values.add(Text.placeholder(name, value)));
-        values.add(Placeholder.component("time", times.left(nobody, refused.lasts())));
+        values.add(times.placeholder(nobody, refused.lasts()));
         return messages.render(nobody, refused.key(), values.toArray(TagResolver[]::new));
     }
 }

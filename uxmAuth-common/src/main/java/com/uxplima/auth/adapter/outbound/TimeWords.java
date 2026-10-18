@@ -8,6 +8,8 @@ import java.util.Objects;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.JoinConfiguration;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.uxmlib.text.Text;
@@ -44,6 +46,11 @@ public final class TimeWords {
             parts.add(unit(reader, first + 1, amounts[first + 1]));
         }
         return Component.join(JoinConfiguration.separator(messages.render(reader, Keys.TIME_SEPARATOR)), parts);
+    }
+
+    /** The time left as {@code <time>}, for a message that says it. */
+    public TagResolver placeholder(Audience reader, Duration left) {
+        return Placeholder.component("time", left(reader, left));
     }
 
     private Component unit(Audience reader, int index, long amount) {

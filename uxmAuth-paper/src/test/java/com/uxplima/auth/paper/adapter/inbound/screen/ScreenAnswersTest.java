@@ -88,6 +88,20 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("a wrong password on the screen that bans the address sends the player away with the ban moment")
+    void aBanOnTheScreenSendsAway() {
+        world.banSteps = new com.uxplima.auth.domain.protection.BanSteps(
+                List.of(java.time.Duration.ofMinutes(5)), 1, java.time.Duration.ofHours(24));
+        world.registered(steve, "hunter22");
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "nope1234"))));
+
+        assertThat(world.fired).contains(AuthSettings.Moment.BANNED);
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(shown).isEmpty();
+    }
+
+    @Test
     @DisplayName("a registration with both passwords makes the account")
     void aRegisterAnswerMakesTheAccount() {
         world.unregistered(steve);

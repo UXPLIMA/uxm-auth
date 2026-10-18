@@ -219,6 +219,43 @@ final class LogInTest {
         assertThat(fixture.accounts.writes()).isZero();
     }
 
+    @Test
+    @DisplayName("a wrong password counts against the address and the host it came through; a right one does not")
+    void aWrongPasswordCountsAgainstTheAddress() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        fixture.sessions.open(
+                connection, fixture.sessions.state(connection).orElseThrow(), "visit", "play.example.org");
+        List<String> counted = new ArrayList<>();
+        LogIn counting = new LogIn(
+                fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, fixture.clock, (address, host) -> {
+                    counted.add(address + "@" + host);
+                    return java.util.Optional.empty();
+                });
+
+        assertThat(counting.run(connection, Password.of("nope1234"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.Wrong(2));
+        assertThat(counting.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+
+        assertThat(counted).containsExactly("10.0.0.7@play.example.org");
+    }
+
+    @Test
+    @DisplayName("a wrong password that bans the address answers the ban, whatever tries the connection had left")
+    void aWrongPasswordThatBansAnswersTheBan() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        LogIn banning = new LogIn(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                fixture.clock,
+                (address, host) -> java.util.Optional.of(java.time.Duration.ofMinutes(5)));
+
+        assertThat(banning.run(connection, Password.of("nope1234"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.Banned(java.time.Duration.ofMinutes(5)));
+    }
+
     private LoginResult login(UUID connection, String password) {
         return useCase().run(connection, Password.of(password), "10.0.0.7").join();
     }

@@ -12,6 +12,7 @@ import net.kyori.adventure.text.Component;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
+import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.RegisterAccount;
@@ -51,6 +52,7 @@ public final class ScreenAnswers {
     private final Predicate<UUID> registering;
     private final Claims claims;
     private final Choices choices;
+    private final TimeWords times;
     private final PinPad pad = new PinPad();
 
     /** What the player ticked in the "remember me" box, kept with the session of this connection. */
@@ -123,6 +125,7 @@ public final class ScreenAnswers {
         this.registering = Objects.requireNonNull(registering, "registering");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.choices = Objects.requireNonNull(choices, "choices");
+        this.times = new TimeWords(messages);
     }
 
     /** The pad's digits, for whoever ends a connection to drop them. */
@@ -196,30 +199,36 @@ public final class ScreenAnswers {
     private CompletableFuture<Void> login(Guest guest, Answer answer) {
         choose(guest, answer);
         String typed = orEmpty(answer.text(AuthScreens.PASSWORD));
+        return guest.after(attempt(guest, Password.of(typed)), result -> loggedIn(guest, result));
+    }
+
+    private void loggedIn(Guest guest, LoginResult result) {
         Audience reader = guest.audience();
-        return guest.after(attempt(guest, Password.of(typed)), result -> {
-            switch (result) {
-                case LoginResult.LoggedIn loggedIn -> letIn(guest, AuthSettings.Moment.LOGGED_IN);
-                case LoginResult.Wrong wrong -> {
-                    guest.fire(AuthSettings.Moment.WRONG_PASSWORD);
-                    shower.show(
-                            reader,
-                            screens.login(
-                                    reader,
-                                    messages.render(
-                                            reader,
-                                            Keys.LOGIN_WRONG,
-                                            Text.placeholder("left", String.valueOf(wrong.attemptsLeft())))));
-                }
-                case LoginResult.TooManyAttempts tooMany -> {
-                    guest.fire(AuthSettings.Moment.TOO_MANY_ATTEMPTS);
-                    guest.kick(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
-                }
-                case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
-                case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
-                case LoginResult.Gone gone -> {}
+        switch (result) {
+            case LoginResult.LoggedIn loggedIn -> letIn(guest, AuthSettings.Moment.LOGGED_IN);
+            case LoginResult.Wrong wrong -> {
+                guest.fire(AuthSettings.Moment.WRONG_PASSWORD);
+                shower.show(
+                        reader,
+                        screens.login(
+                                reader,
+                                messages.render(
+                                        reader,
+                                        Keys.LOGIN_WRONG,
+                                        Text.placeholder("left", String.valueOf(wrong.attemptsLeft())))));
             }
-        });
+            case LoginResult.TooManyAttempts tooMany -> {
+                guest.fire(AuthSettings.Moment.TOO_MANY_ATTEMPTS);
+                guest.kick(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
+            }
+            case LoginResult.Banned banned -> {
+                guest.fire(AuthSettings.Moment.BANNED);
+                guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            }
+            case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
+            case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
+            case LoginResult.Gone gone -> {}
+        }
     }
 
     private CompletableFuture<Void> register(Guest guest, Answer answer) {

@@ -134,10 +134,15 @@ public final class ProxyWorld implements AutoCloseable {
 
     /** The password login of the proxy's waiting world, with /login, /giris and /register as its words. */
     public LimboLogin limboLogin(boolean asksTwice) {
+        return limboLogin(asksTwice, (address, host) -> java.util.Optional.empty());
+    }
+
+    /** The same, with wrong passwords counted against their address here. */
+    public LimboLogin limboLogin(boolean asksTwice, LogIn.Failures failures) {
         NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
         return new LimboLogin(
                 new ReadTheName(accounts, () -> names, () -> 3),
-                new LogIn(accounts, hashing, lane, sessions, clock),
+                new LogIn(accounts, hashing, lane, sessions, clock, failures),
                 new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock),
                 sessions,
                 messages,

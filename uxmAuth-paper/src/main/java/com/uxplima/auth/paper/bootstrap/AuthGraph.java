@@ -216,7 +216,7 @@ final class AuthGraph implements AutoCloseable {
         Welcomes welcomes = new Welcomes();
         Notices notices = new Notices(messages);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
-        LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock);
+        LogIn logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed);
         RegisterAccount registering = new RegisterAccount(
                 accounts, hashing, lane, sessions, () -> settings.current().passwordPolicy(), clock);
         ScreenAnswers answers = new ScreenAnswers(

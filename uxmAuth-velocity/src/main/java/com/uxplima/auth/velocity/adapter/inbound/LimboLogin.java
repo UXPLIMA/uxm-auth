@@ -14,6 +14,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
 import com.uxplima.auth.application.ReadTheName;
@@ -66,6 +67,7 @@ public final class LimboLogin {
     private final RegisterAccount register;
     private final Sessions sessions;
     private final Messages messages;
+    private final TimeWords times;
     private final Supplier<Set<String>> loginWords;
     private final Supplier<Set<String>> registerWords;
     private final BooleanSupplier asksTwice;
@@ -84,6 +86,7 @@ public final class LimboLogin {
         this.register = Objects.requireNonNull(register, "register");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.messages = Objects.requireNonNull(messages, "messages");
+        this.times = new TimeWords(messages);
         this.loginWords = Objects.requireNonNull(loginWords, "loginWords");
         this.registerWords = Objects.requireNonNull(registerWords, "registerWords");
         this.asksTwice = Objects.requireNonNull(asksTwice, "asksTwice");
@@ -94,6 +97,11 @@ public final class LimboLogin {
      * type, after why their last try failed when the door says they should read it.
      */
     public List<Component> arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door) {
+        return arrive(reader, id, name, door, "");
+    }
+
+    /** The same, through the host the player typed, which a wrong password is counted with. */
+    public List<Component> arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door, String host) {
         Objects.requireNonNull(reader, "reader");
         sessions.close(Objects.requireNonNull(id, "id"));
         Objects.requireNonNull(door, "door");
@@ -101,7 +109,7 @@ public final class LimboLogin {
         if (door.unverified() && state instanceof AuthState.Unregistered unregistered) {
             state = new AuthState.Unregistered(unregistered.name(), true);
         }
-        sessions.open(id, state);
+        sessions.open(id, state, UUID.randomUUID().toString(), Objects.requireNonNull(host, "host"));
         Component reminder = reminder(reader, id);
         return door.explain()
                 ? List.of(messages.render(reader, Keys.LOGIN_HANDSHAKE_FAILED), reminder)
@@ -155,6 +163,8 @@ public final class LimboLogin {
                         reader, Keys.LOGIN_WRONG, Text.placeholder("left", String.valueOf(wrong.attemptsLeft()))));
             case LoginResult.TooManyAttempts tooMany ->
                 new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
+            case LoginResult.Banned banned ->
+                new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
             case LoginResult.NotRegistered notRegistered ->
                 new Outcome.Stay(messages.render(reader, Keys.LOGIN_NOT_REGISTERED));
             case LoginResult.Gone gone -> new Outcome.Stay(reminder(reader, id));

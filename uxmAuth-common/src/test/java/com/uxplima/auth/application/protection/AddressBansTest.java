@@ -104,4 +104,14 @@ final class AddressBansTest {
         assertThat(door().decide(new Admission.Arrival("2001:db8:1:2::99", PLAY)))
                 .isPresent();
     }
+
+    @Test
+    @DisplayName("a failure from an address the server could not read counts against nobody")
+    void anUnknownAddressCountsNothing() {
+        for (int i = 0; i < 5; i++) {
+            assertThat(bans().failed("unknown", PLAY)).isEmpty();
+        }
+
+        assertThat(kept).isEmpty();
+    }
 }

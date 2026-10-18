@@ -288,6 +288,7 @@ public final class AuthSettings {
         LOGGED_IN("logged-in"),
         TIMEOUT("timeout"),
         TOO_MANY_ATTEMPTS("too-many-attempts"),
+        BANNED("banned"),
         LOGGED_OUT("logged-out"),
         PASSWORD_CHANGED("password-changed");
 

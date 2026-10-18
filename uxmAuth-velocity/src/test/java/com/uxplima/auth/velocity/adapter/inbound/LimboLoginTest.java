@@ -141,4 +141,27 @@ final class LimboLoginTest {
         assertThat(world.accounts.findByName(NAME))
                 .hasValueSatisfying(account -> assertThat(account.unverified()).isTrue());
     }
+
+    @Test
+    @DisplayName("a wrong password that bans the address sends the player away with the time left")
+    void aBanSendsAway() throws Exception {
+        java.util.List<String> hosts = new java.util.ArrayList<>();
+        LimboLogin first = world.limboLogin(true);
+        first.arrive(READER, STEVE, NAME, NONE);
+        said(first, "/register hunter22 hunter22");
+        first.leave(STEVE);
+        LimboLogin login = world.limboLogin(true, (address, host) -> {
+            hosts.add(address + "@" + host);
+            return java.util.Optional.of(java.time.Duration.ofMinutes(5));
+        });
+        login.arrive(READER, STEVE, NAME, NONE, "mc.tcpshield.com");
+
+        LimboLogin.Outcome outcome = said(login, "/login one111");
+
+        assertThat(outcome)
+                .isInstanceOfSatisfying(
+                        LimboLogin.Outcome.Out.class,
+                        out -> assertThat(plain(out.reason())).contains("5m"));
+        assertThat(hosts).containsExactly("127.0.0.1@mc.tcpshield.com");
+    }
 }
