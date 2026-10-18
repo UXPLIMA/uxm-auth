@@ -238,6 +238,10 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Your account asks a code from an app already. Turn it off first with"
                     + " <value>/2fa off <code><body>."),
     FACTOR_NOT_ON("factor.not-on", "<etag:'ERROR'> <body>Your account asks no code from an app."),
+    FACTOR_REQUIRED(
+            "factor.required",
+            "<etag:'ERROR'> <body>Your account must ask a code from an authenticator app before you can play. Type"
+                    + " <value>/2fa setup<body> to set it up."),
     FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
     FACTOR_CODE_NEEDED(
             "factor.code-needed",

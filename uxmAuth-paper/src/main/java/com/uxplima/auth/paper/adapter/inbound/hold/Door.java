@@ -18,6 +18,28 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Door {
 
+    /** What a logged-in player may still owe before they are let in. */
+    public interface Duty {
+        /** Owes nothing: everyone logged in is let in. */
+        Duty NONE = new Duty() {
+            @Override
+            public boolean owes(Player player) {
+                return false;
+            }
+
+            @Override
+            public void hold(Player player, AuthState.Authenticated in, Runnable proceed) {
+                proceed.run();
+            }
+        };
+
+        /** Whether this logged-in player must do something before they are let in. */
+        boolean owes(Player player);
+
+        /** Holds the player until they have, and runs {@code proceed} on their thread then. */
+        void hold(Player player, AuthState.Authenticated in, Runnable proceed);
+    }
+
     private final Sessions sessions;
     private final HoldKeeper keeper;
     private final WaitingClock clock;
@@ -28,6 +50,7 @@ public final class Door {
     private final Notices notices;
     private final Reports reports;
     private final Remembering remembering;
+    private final Duty duty;
 
     public Door(
             Sessions sessions,
@@ -39,7 +62,8 @@ public final class Door {
             Welcomes welcomes,
             Notices notices,
             Reports reports,
-            Remembering remembering) {
+            Remembering remembering,
+            Duty duty) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -50,6 +74,7 @@ public final class Door {
         this.notices = Objects.requireNonNull(notices, "notices");
         this.reports = Objects.requireNonNull(reports, "reports");
         this.remembering = Objects.requireNonNull(remembering, "remembering");
+        this.duty = Objects.requireNonNull(duty, "duty");
     }
 
     /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
@@ -58,7 +83,15 @@ public final class Door {
         keeper.arrive(player);
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
         if (state instanceof AuthState.Authenticated in) {
-            arrivedIn(player, in);
+            if (duty.owes(player)) {
+                // The hold may have taken their things by the time the duty is done.
+                duty.hold(player, in, () -> {
+                    keeper.giveBack(player);
+                    arrivedIn(player, in);
+                });
+            } else {
+                arrivedIn(player, in);
+            }
             return;
         }
         if (state == null) {
@@ -101,10 +134,22 @@ public final class Door {
         greeter.languageKnown(player);
     }
 
-    /** A player got in: everything the hold took comes back, and the moment of their way in runs. */
+    /**
+     * A player got in: everything the hold took comes back, and the moment of their way in runs. A player who
+     * still owes the duty stays held until it is done, and is let in then.
+     */
     public void open(Player player, AuthSettings.Moment moment) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(moment, "moment");
+        if (sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated in
+                && duty.owes(player)) {
+            duty.hold(player, in, () -> letIn(player, moment));
+            return;
+        }
+        letIn(player, moment);
+    }
+
+    private void letIn(Player player, AuthSettings.Moment moment) {
         greeter.forget(player);
         keeper.giveBack(player);
         sessions.state(player.getUniqueId())

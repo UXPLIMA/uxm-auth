@@ -14,11 +14,14 @@ import com.uxplima.uxmlib.config.HoconConfig;
  *
  * @param setup how the app is named, how its codes are made, how long a setup waits, and the backup codes
  * @param step which ways in lead to the code, and how many tries it gets
+ * @param requiredPermission the node whose holders play only with the app on; blank asks it of nobody
  */
-public record SecondFactorSettings(SetUpTotp.Settings setup, SecondStep.Settings step) {
+public record SecondFactorSettings(SetUpTotp.Settings setup, SecondStep.Settings step, String requiredPermission) {
     public SecondFactorSettings {
         Objects.requireNonNull(setup, "setup");
         Objects.requireNonNull(step, "step");
+        requiredPermission =
+                Objects.requireNonNull(requiredPermission, "requiredPermission").strip();
     }
 
     /** Reads the block, naming it in any value it refuses. */
@@ -40,7 +43,8 @@ public record SecondFactorSettings(SetUpTotp.Settings setup, SecondStep.Settings
                     new SecondStep.Settings(
                             config.getBoolean("second-factor.premium-skips", true),
                             config.getBoolean("sessions.skip-second-factor", false),
-                            config.getInt("passwords.max-attempts", 3)));
+                            config.getInt("passwords.max-attempts", 3)),
+                    config.getString("second-factor.required-permission", "uxmauth.2fa.required"));
         } catch (IllegalArgumentException wrong) {
             throw new IllegalArgumentException("second-factor: " + wrong.getMessage(), wrong);
         }

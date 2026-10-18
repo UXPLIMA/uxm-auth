@@ -118,6 +118,21 @@ final class ChangePasswordTest {
     }
 
     @Test
+    @DisplayName("a player held to set up the app changes no password until it is on")
+    void aPlayerSettingUpChangesNothing() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.domain.account.Account account =
+                ((AuthState.Registered) fixture.sessions.state(connection).orElseThrow()).account();
+        fixture.sessions.update(
+                connection,
+                state -> new AuthState.SettingUp(account, com.uxplima.auth.domain.state.AuthMethod.PASSWORD));
+
+        assertThat(change(connection, "hunter22", "fresh777")).isEqualTo(new ChangeResult.NotLoggedIn());
+        assertThat(fixture.accounts.findById(account.id()).orElseThrow().password())
+                .isEqualTo(account.password());
+    }
+
+    @Test
     @DisplayName("the old password is checked against what is stored now, not what was read at the join")
     void changeChecksTheStoredPassword() {
         UUID connection = loggedIn("Steve", "hunter22");

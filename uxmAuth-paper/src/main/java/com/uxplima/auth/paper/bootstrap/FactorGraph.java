@@ -31,7 +31,9 @@ import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.factor.BedrockSetupForm;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorLogin;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup;
+import com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups;
 import com.uxplima.auth.paper.adapter.inbound.factor.QrMapGuard;
+import com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.FactorScreen;
@@ -54,6 +56,9 @@ final class FactorGraph {
     final SecondStep secondStep;
     final FactorScreen screen;
     final QrMapGuard guard;
+    /** Holds a player whose node requires the app until it is on. */
+    final SetupDuty duty;
+
     private final FactorSetup setup;
     private final Sessions sessions;
     private final Messages messages;
@@ -96,9 +101,11 @@ final class FactorGraph {
                 new SecureRandom(),
                 Instant::now);
         Optional<QrMap> qr = QrMap.open(plugin.getServer(), folder.resolve("qr-map.id"), plugin.getLogger());
+        OwedSetups owed = new OwedSetups(sessions);
         this.setup = new FactorSetup(
                 setUp,
                 sessions,
+                owed,
                 () -> settings.current().secondFactor().setup(),
                 qr.<FactorSetup.Hand>map(map -> map).orElse(FactorSetup.Hand.NONE),
                 new BedrockSetupForm(BedrockScreen.forServer(plugin.getServer()), messages),
@@ -111,6 +118,15 @@ final class FactorGraph {
                 item -> qr.map(map -> map.holds(item)).orElse(false),
                 player -> qr.ifPresent(map -> map.take(player)),
                 setup::left);
+        this.duty = new SetupDuty(
+                owed,
+                () -> settings.current().secondFactor().requiredPermission(),
+                setUp,
+                setup,
+                bedrock,
+                lane,
+                replies,
+                messages);
     }
 
     /** {@code /2fa}, whose code of the second step reaches the guest each player is. */

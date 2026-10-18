@@ -54,15 +54,12 @@ public final class ClaimName {
         return switch (state) {
             case null -> Result.GONE;
             case AuthState.Authenticated in when in.account().kind() != AccountKind.CRACKED -> Result.ALREADY_PREMIUM;
-            case AuthState.Authenticated in -> {
-                door.ownerAsks(address, in.account().name());
-                yield Result.ASKED;
-            }
-            case AuthState.Replacing replacing -> {
-                // The password was proved; only its strength holds the player up.
-                door.ownerAsks(address, replacing.account().name());
-                yield Result.ASKED;
-            }
+            case AuthState.Authenticated in -> owner(address, in.account().name());
+            // The password was proved; only its strength holds the player up.
+            case AuthState.Replacing replacing ->
+                owner(address, replacing.account().name());
+            // The login is whole; only the app the operator requires holds the player up.
+            case AuthState.SettingUp held -> owner(address, held.account().name());
             case AuthState.Registered registered ->
                 asked(address, registered.account().name());
             case AuthState.SecondFactor waiting ->
@@ -75,6 +72,12 @@ public final class ClaimName {
     public boolean takesClaims() {
         NameRule now = rule.get();
         return now == NameRule.AUTOMATIC || now == NameRule.OPT_IN;
+    }
+
+    /** A player who proved the password asks as the owner. */
+    private Result owner(String address, PlayerName name) {
+        door.ownerAsks(address, name);
+        return Result.ASKED;
     }
 
     private Result asked(String address, PlayerName name) {

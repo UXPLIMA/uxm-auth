@@ -103,6 +103,20 @@ final class WaitingClockTest {
     }
 
     @Test
+    @DisplayName("a player held to set up the app logged in already: the login clock neither kicks nor reminds them")
+    void aPlayerSettingUpIsNotKicked() {
+        PlayerMock steve = registered("Steve");
+        waiting.start(steve);
+        sessions.update(steve.getUniqueId(), state -> new AuthState.SettingUp(account(steve), AuthMethod.PASSWORD));
+
+        clock.advance(Duration.ofMinutes(2));
+        scheduler.tick();
+
+        assertThat(steve.isOnline()).isTrue();
+        assertThat(fired).isEmpty();
+    }
+
+    @Test
     @DisplayName("a player with no account has the longer register timeout")
     void registeringHasItsOwnTimeout() {
         PlayerMock alex = server.addPlayer("Alex");

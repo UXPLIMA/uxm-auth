@@ -217,6 +217,18 @@ final class LogInTest {
     }
 
     @Test
+    @DisplayName("a player held to set up the app logged in already, and is told so")
+    void aPlayerSettingUpIsLoggedInAlready() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        Account account =
+                ((AuthState.Registered) fixture.sessions.state(connection).orElseThrow()).account();
+        fixture.sessions.update(connection, state -> new AuthState.SettingUp(account, AuthMethod.PASSWORD));
+
+        assertThat(login(connection, "hunter22")).isEqualTo(new LoginResult.AlreadyLoggedIn());
+        assertThat(fixture.sessions.state(connection)).containsInstanceOf(AuthState.SettingUp.class);
+    }
+
+    @Test
     @DisplayName("a player already logged in is told so and nothing is checked")
     void aLoggedInPlayerIsToldSo() {
         UUID connection = fixture.registered("Steve", "hunter22");

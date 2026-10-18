@@ -59,7 +59,11 @@ public final class WaitingClock {
 
     private void beat(Player player, Instant arrived, AtomicReference<Instant> reminded, TaskHandle handle) {
         AuthState state = sessions.state(player.getUniqueId()).orElse(null);
-        if (!player.isOnline() || state == null || state instanceof AuthState.Authenticated) {
+        // A player held for the app logged in already; the setup's own minutes bound it, not the login's.
+        if (!player.isOnline()
+                || state == null
+                || state instanceof AuthState.Authenticated
+                || state instanceof AuthState.SettingUp) {
             handle.cancel();
             return;
         }

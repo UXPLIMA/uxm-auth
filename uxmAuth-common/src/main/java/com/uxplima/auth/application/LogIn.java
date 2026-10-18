@@ -202,6 +202,7 @@ public final class LogIn {
             case null -> new LoginResult.Gone();
             case AuthState.Unregistered unregistered -> new LoginResult.NotRegistered();
             case AuthState.Authenticated authenticated -> new LoginResult.AlreadyLoggedIn();
+            case AuthState.SettingUp held -> new LoginResult.AlreadyLoggedIn();
             case AuthState.Replacing replacing -> new LoginResult.MustReplace(replacing.why());
             case AuthState.Registered waiting -> new LoginResult.TooManyAttempts();
             case AuthState.SecondFactor waiting -> new LoginResult.CodeNeeded();

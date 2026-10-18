@@ -89,6 +89,8 @@ public final class InWorldScreens implements ScreenOffer {
                 case AuthState.Registered registered -> shower.show(player, screens.login(player, null));
                 case AuthState.Replacing replacing -> shower.show(player, screens.replace(player, replacing.why()));
                 case AuthState.SecondFactor waiting -> factor.offer(player, null);
+                // The setup is in chat, on the map and on a Bedrock form: no screen of the login stands for it.
+                case AuthState.SettingUp held -> {}
                 case AuthState.Authenticated authenticated -> {}
             }
         });

@@ -78,6 +78,7 @@ public final class FactorSetup {
 
     private final SetUpTotp setUp;
     private final Sessions sessions;
+    private final OwedSetups owed;
     private final Supplier<SetUpTotp.Settings> settings;
     private final Hand hand;
     private final Form form;
@@ -92,6 +93,7 @@ public final class FactorSetup {
     public FactorSetup(
             SetUpTotp setUp,
             Sessions sessions,
+            OwedSetups owed,
             Supplier<SetUpTotp.Settings> settings,
             Hand hand,
             Form form,
@@ -102,6 +104,7 @@ public final class FactorSetup {
             Messages messages) {
         this.setUp = Objects.requireNonNull(setUp, "setUp");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
+        this.owed = Objects.requireNonNull(owed, "owed");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.hand = Objects.requireNonNull(hand, "hand");
         this.form = Objects.requireNonNull(form, "form");
@@ -173,9 +176,10 @@ public final class FactorSetup {
                 player, lane.submit(() -> proof.run(id, code, address, host)), outcome -> answer(player, outcome));
     }
 
-    /** The player left: an open setup goes, and so does the map. */
+    /** The player left: an open setup goes, and so does the map, and a hold for the app ends with them. */
     public void left(Player player) {
         Objects.requireNonNull(player, "player");
+        owed.forget(player.getUniqueId());
         account(player, false).ifPresent(account -> setUp.forget(account.id()));
         hand.take(player);
     }
@@ -187,6 +191,7 @@ public final class FactorSetup {
                 hand.take(player);
                 messages.send(player, Keys.FACTOR_ON);
                 codes(player, on.backupCodes());
+                owed.release(player);
             }
             case SetUpTotp.Outcome.NewCodes fresh -> codes(player, fresh.codes());
             case SetUpTotp.Outcome.Off off -> messages.send(player, Keys.FACTOR_OFF);
@@ -234,14 +239,18 @@ public final class FactorSetup {
         return Component.text(text).clickEvent(ClickEvent.copyToClipboard(text));
     }
 
-    /** The account of a logged-in player, or the reason they are not told as a refusal. */
+    /** The account of a logged-in player, or of one held for the app, or the reason they are not told as a refusal. */
     private Optional<Account> account(Player player) {
         return account(player, true);
     }
 
     private Optional<Account> account(Player player, boolean tell) {
-        if (sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated in) {
+        AuthState state = sessions.state(player.getUniqueId()).orElse(null);
+        if (state instanceof AuthState.Authenticated in) {
             return Optional.of(in.account());
+        }
+        if (state instanceof AuthState.SettingUp held) {
+            return Optional.of(held.account());
         }
         if (tell) {
             messages.send(player, Keys.FACTOR_LOG_IN_FIRST);

@@ -346,7 +346,17 @@ final class AuthGraph implements AutoCloseable {
                 factors.screen);
         this.captchaCommand = new CaptchaCommand(captcha, sessions::state, inWorld, messages);
         Door door = new Door(
-                sessions, keeper, waiting, moments, greeter, inWorld, welcomes, notices, channelReports, remembering);
+                sessions,
+                keeper,
+                waiting,
+                moments,
+                greeter,
+                inWorld,
+                welcomes,
+                notices,
+                channelReports,
+                remembering,
+                factors.duty);
 
         this.connections = new ConnectionListener(
                 scheduler,

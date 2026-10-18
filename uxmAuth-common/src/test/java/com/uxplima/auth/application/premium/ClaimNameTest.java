@@ -88,6 +88,18 @@ final class ClaimNameTest {
     }
 
     @Test
+    @DisplayName("a player held to set up the app proved the password, so their request is the owner's")
+    void aPlayerSettingUpIsTheOwner() {
+        UUID connection = fixture.registered("Notch", "hunter22");
+        Account account = fixture.accounts.findByName(new PlayerName("Notch")).orElseThrow();
+        fixture.sessions.open(connection, new AuthState.SettingUp(account, AuthMethod.PASSWORD));
+
+        assertThat(claim.claim(connection, HERE)).isEqualTo(ClaimName.Result.ASKED);
+
+        assertThat(door.ownerAsked(HERE, new PlayerName("Notch"))).isTrue();
+    }
+
+    @Test
     @DisplayName("a premium account has nothing to claim")
     void aPremiumAccountHasNothingToClaim() {
         UUID connection = UUID.randomUUID();

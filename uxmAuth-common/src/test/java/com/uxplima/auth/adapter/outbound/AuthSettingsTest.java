@@ -634,6 +634,15 @@ final class AuthSettingsTest {
         assertThatThrownBy(() -> settingsFrom(folder, "second-factor { issuer = \"\" }\n"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("second-factor.issuer");
+        assertThat(settingsFrom(folder, "").secondFactor().requiredPermission()).isEqualTo("uxmauth.2fa.required");
+        assertThat(settingsFrom(folder, "second-factor { required-permission = \" staff.app \" }\n")
+                        .secondFactor()
+                        .requiredPermission())
+                .isEqualTo("staff.app");
+        assertThat(settingsFrom(folder, "second-factor { required-permission = \"\" }\n")
+                        .secondFactor()
+                        .requiredPermission())
+                .isEmpty();
         assertThatThrownBy(() -> settingsFrom(folder, "second-factor { backup-codes = 0 }\n"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("second-factor.backup-codes");

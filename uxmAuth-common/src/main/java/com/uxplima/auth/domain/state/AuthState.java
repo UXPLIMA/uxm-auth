@@ -73,6 +73,22 @@ public sealed interface AuthState {
         }
     }
 
+    /**
+     * Logged in by this way, but the operator requires an authenticator app of this player and the account has
+     * none: the player stays held until it is set up.
+     */
+    record SettingUp(Account account, AuthMethod method) implements AuthState {
+        public SettingUp {
+            Objects.requireNonNull(account, "account");
+            Objects.requireNonNull(method, "method");
+        }
+
+        /** The app is on: the login it waited behind is whole. */
+        public Authenticated done() {
+            return new Authenticated(account, method);
+        }
+    }
+
     /** Logged in. */
     record Authenticated(Account account, AuthMethod method) implements AuthState {
         public Authenticated {

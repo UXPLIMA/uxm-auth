@@ -100,6 +100,7 @@ final class FactorSetupTest {
         setup = new FactorSetup(
                 setUp,
                 world.sessions,
+                world.owedSetups,
                 () -> settings,
                 hand,
                 form,

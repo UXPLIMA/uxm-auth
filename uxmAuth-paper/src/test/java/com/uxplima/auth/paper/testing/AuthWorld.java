@@ -155,6 +155,11 @@ public final class AuthWorld implements AutoCloseable {
     public static final com.uxplima.auth.domain.factor.Totp TOTP =
             new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1);
 
+    /** The app as this world sets it up. */
+    public static final com.uxplima.auth.application.factor.SetUpTotp.Settings SETUP =
+            new com.uxplima.auth.application.factor.SetUpTotp.Settings(
+                    "Minecraft", "{player}", TOTP, Duration.ofMinutes(10), BACKUP);
+
     public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
     public final com.uxplima.auth.application.factor.SecondStep secondStep;
     public final com.uxplima.auth.application.factor.FactorCheck factorCheck;
@@ -218,7 +223,18 @@ public final class AuthWorld implements AutoCloseable {
                         reported.add("waiting");
                     }
                 },
-                remembering);
+                remembering,
+                new Door.Duty() {
+                    @Override
+                    public boolean owes(Player player) {
+                        return setupDuty().owes(player);
+                    }
+
+                    @Override
+                    public void hold(Player player, AuthState.Authenticated in, Runnable proceed) {
+                        setupDuty().hold(player, in, proceed);
+                    }
+                });
         AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
         this.captchas = new com.uxplima.auth.application.protection.Captchas(
                 () -> captchaSettings, new java.util.SplittableRandom(11), clock::instant);
@@ -237,6 +253,7 @@ public final class AuthWorld implements AutoCloseable {
         this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
                 database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
         this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
+        this.owedSetups = new com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups(sessions);
         this.factorCheck =
                 new com.uxplima.auth.application.factor.FactorCheck(factors, hashing, () -> TOTP, () -> BACKUP);
         this.confirmFactor = new com.uxplima.auth.application.factor.ConfirmFactor(
@@ -331,21 +348,32 @@ public final class AuthWorld implements AutoCloseable {
         return TOTP.code(secret.bytes(), TOTP.step(clock.instant()));
     }
 
+    /** Who must set the app up before playing: holders of this node; nobody when it is empty. */
+    public String requiredNode = "";
+
+    /** The players held for the app in this world. */
+    public final com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups owedSetups;
+
+    private com.uxplima.auth.paper.adapter.inbound.factor.@org.jspecify.annotations.Nullable SetupDuty duty;
+
+    /** The duty of this world, made at first use from the world's own setup. */
+    private com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty setupDuty() {
+        com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty made = duty;
+        if (made == null) {
+            made = new com.uxplima.auth.paper.adapter.inbound.factor.SetupDuty(
+                    owedSetups, () -> requiredNode, setUpTotp(), factorSetup(), id -> false, lane, replies, messages);
+            duty = made;
+        }
+        return made;
+    }
+
     /** The setup of the app in this world, with no map and no form. */
     public com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup factorSetup() {
-        com.uxplima.auth.application.factor.SetUpTotp.Settings settings =
-                new com.uxplima.auth.application.factor.SetUpTotp.Settings(
-                        "Minecraft",
-                        "{player}",
-                        new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1),
-                        Duration.ofMinutes(10),
-                        BACKUP);
-        com.uxplima.auth.application.factor.SetUpTotp setUp = new com.uxplima.auth.application.factor.SetUpTotp(
-                factors, factorCheck, () -> settings, bans::failed, new java.util.SplittableRandom(1), clock::instant);
         return new com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup(
-                setUp,
+                setUpTotp(),
                 sessions,
-                () -> settings,
+                owedSetups,
+                () -> SETUP,
                 com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup.Hand.NONE,
                 com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup.Form.NONE,
                 id -> false,
@@ -353,6 +381,12 @@ public final class AuthWorld implements AutoCloseable {
                 replies,
                 moments,
                 messages);
+    }
+
+    /** Turning the app on and off in this world. */
+    public com.uxplima.auth.application.factor.SetUpTotp setUpTotp() {
+        return new com.uxplima.auth.application.factor.SetUpTotp(
+                factors, factorCheck, () -> SETUP, bans::failed, new java.util.SplittableRandom(1), clock::instant);
     }
 
     public boolean isAuthenticated(Player player) {
