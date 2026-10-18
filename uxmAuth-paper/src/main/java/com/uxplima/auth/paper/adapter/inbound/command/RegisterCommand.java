@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.RefusalWords;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.message.Keys;
@@ -117,6 +118,8 @@ public final class RegisterCommand {
             case RegisterResult.AlreadyRegistered already -> messages.send(player, Keys.REGISTER_ALREADY);
             case RegisterResult.CaptchaNeeded needed ->
                 captcha.offer(player, player.getUniqueId(), messages.render(player, Keys.CAPTCHA_NEEDED));
+            case RegisterResult.Refused refused ->
+                player.sendMessage(RefusalWords.of(messages, player, refused.reason(), Keys.REGISTER_REFUSED));
             case RegisterResult.Gone gone -> {}
         }
     }

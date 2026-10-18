@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
@@ -81,6 +82,7 @@ public final class LogIn {
     private final Supplier<PasswordPolicy> policy;
     private final Captcha captcha;
     private final SecondStep secondStep;
+    private final AuthEvents events;
 
     public LogIn(AccountRepository accounts, Hashing hashing, HashingLane lane, Sessions sessions, Clock clock) {
         this(accounts, hashing, lane, sessions, clock, (address, host) -> Optional.empty());
@@ -133,6 +135,22 @@ public final class LogIn {
             Supplier<PasswordPolicy> policy,
             Captcha captcha,
             SecondStep secondStep) {
+        this(accounts, hashing, lane, sessions, clock, failures, policy, captcha, secondStep, AuthEvents.NONE);
+    }
+
+    /** @param events asked before a password is checked, and told of a wrong one */
+    public LogIn(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Clock clock,
+            Failures failures,
+            Supplier<PasswordPolicy> policy,
+            Captcha captcha,
+            SecondStep secondStep,
+            AuthEvents events) {
+        this.events = Objects.requireNonNull(events, "events");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -163,6 +181,10 @@ public final class LogIn {
         return Wiping.after(() -> attempt(connection, opening, password, address), password);
     }
 
+    /**
+     * A connection that may answer now is first put to the listeners, off the caller's thread; a login one refuses
+     * spends no attempt and checks no password.
+     */
     private CompletableFuture<LoginResult> attempt(UUID connection, long opening, Password password, String address) {
         Sessions.Held held = sessions.held(connection)
                 .filter(found -> opening == NO_OPENING || found.generation() == opening)
@@ -170,18 +192,28 @@ public final class LogIn {
         if (held == null) {
             return CompletableFuture.completedFuture(new LoginResult.Gone());
         }
-        if (held.state() instanceof AuthState.Registered waiting
-                && captcha.blocks(connection, waiting.account().name())) {
+        if (!(held.state() instanceof AuthState.Registered waiting)
+                || waiting.attempts().exhausted()) {
+            return CompletableFuture.completedFuture(refusal(held.state()));
+        }
+        if (captcha.blocks(connection, waiting.account().name())) {
             return CompletableFuture.completedFuture(new LoginResult.CaptchaNeeded());
         }
+        return lane.submit(() -> events.beforeLogin(connection)
+                .<LoginResult>map(LoginResult.Refused::new)
+                .orElseGet(() -> spendAndCheck(connection, held, password, address)));
+    }
+
+    /** Spends the attempt, unless another answer of the same connection spent the last one meanwhile, and checks. */
+    private LoginResult spendAndCheck(UUID connection, Sessions.Held held, Password password, String address) {
         AtomicReference<AuthState.Registered> reserved = new AtomicReference<>();
         AuthState after = sessions.update(connection, held.generation(), current -> spend(current, reserved))
                 .orElse(null);
         AuthState.Registered spent = reserved.get();
         if (spent == null) {
-            return CompletableFuture.completedFuture(refusal(after));
+            return refusal(after);
         }
-        return lane.submit(() -> check(connection, held, spent, password, address));
+        return check(connection, held, spent, password, address);
     }
 
     /** Spends one attempt on a connection that has one left, and remembers what it became. */
@@ -223,7 +255,7 @@ public final class LogIn {
         return switch (hashing.verify(password, stored)) {
             case Verification.Wrong wrong -> {
                 captcha.failed(current.name());
-                yield wrongAnswer(spent.attempts(), address, held.host());
+                yield wrongAnswer(connection, spent.attempts(), address, held.host());
             }
             case Verification.Right right -> logIn(connection, generation, current, address, password);
             case Verification.RightButRehash rehash -> {
@@ -235,7 +267,8 @@ public final class LogIn {
         };
     }
 
-    private LoginResult wrongAnswer(Attempts afterThisOne, String address, String host) {
+    private LoginResult wrongAnswer(UUID connection, Attempts afterThisOne, String address, String host) {
+        events.wrongPassword(connection, afterThisOne.left());
         Optional<Duration> banned = failures.failed(address, host);
         if (banned.isPresent()) {
             return new LoginResult.Banned(banned.get());

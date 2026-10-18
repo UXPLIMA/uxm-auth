@@ -15,6 +15,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.RefusalWords;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.ChangeResult;
@@ -433,6 +434,8 @@ public final class LimboLogin {
             case LoginResult.CodeNeeded needed -> new Outcome.Stay(messages.render(reader, Keys.FACTOR_CODE_NEEDED));
             case LoginResult.NotRegistered notRegistered ->
                 new Outcome.Stay(messages.render(reader, Keys.LOGIN_NOT_REGISTERED));
+            case LoginResult.Refused refused ->
+                new Outcome.Stay(RefusalWords.of(messages, reader, refused.reason(), Keys.LOGIN_REFUSED));
             case LoginResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
         };
     }
@@ -454,6 +457,8 @@ public final class LimboLogin {
             case RegisterResult.CaptchaNeeded needed -> captcha(reader, id, Keys.CAPTCHA_NEEDED);
             case RegisterResult.AlreadyRegistered already ->
                 new Outcome.Stay(messages.render(reader, Keys.REGISTER_ALREADY));
+            case RegisterResult.Refused refused ->
+                new Outcome.Stay(RefusalWords.of(messages, reader, refused.reason(), Keys.REGISTER_REFUSED));
             case RegisterResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
         };
     }

@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.RefusalWords;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.LoginResult;
@@ -132,6 +133,8 @@ public final class LoginCommand {
             }
             case LoginResult.NotRegistered notRegistered -> messages.send(player, Keys.LOGIN_NOT_REGISTERED);
             case LoginResult.AlreadyLoggedIn already -> messages.send(player, Keys.LOGIN_ALREADY);
+            case LoginResult.Refused refused ->
+                player.sendMessage(RefusalWords.of(messages, player, refused.reason(), Keys.LOGIN_REFUSED));
             case LoginResult.Gone gone -> {}
         }
     }

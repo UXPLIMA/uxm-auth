@@ -48,4 +48,11 @@ public sealed interface LoginResult {
 
     /** The player left before the answer was ready. Nothing was written. */
     record Gone() implements LoginResult {}
+
+    /** Another plugin refused the login before the password was checked, for this reason, which may be empty. */
+    record Refused(String reason) implements LoginResult {
+        public Refused {
+            Objects.requireNonNull(reason, "reason");
+        }
+    }
 }

@@ -389,4 +389,72 @@ final class LogInTest {
             return false;
         }
     }
+
+    private LogIn heard(com.uxplima.auth.testing.HeardEvents events) {
+        return new LogIn(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                fixture.clock,
+                (address, host) -> java.util.Optional.empty(),
+                () -> fixture.policy,
+                LogIn.Captcha.NONE,
+                com.uxplima.auth.application.factor.SecondStep.NONE,
+                events);
+    }
+
+    @Test
+    @DisplayName("a login a listener refuses before it is checked answers with the reason, off the caller's thread,"
+            + " and spends no attempt")
+    void aRefusedLoginSpendsNothing() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.testing.HeardEvents events = new com.uxplima.auth.testing.HeardEvents();
+        events.refuseLogin = "The server is in maintenance.";
+
+        assertThat(heard(events)
+                        .run(connection, Password.of("wrong123"), "10.0.0.7")
+                        .join())
+                .isEqualTo(new LoginResult.Refused("The server is in maintenance."));
+
+        assertThat(events.heard).containsExactly("before-login");
+        assertThat(events.threads)
+                .allMatch(name -> !name.equals(Thread.currentThread().getName()));
+        assertThat(fixture.sessions.state(connection))
+                .hasValueSatisfying(state -> assertThat(
+                                ((AuthState.Registered) state).attempts().left())
+                        .isEqualTo(AuthFixture.MAX_ATTEMPTS));
+    }
+
+    @Test
+    @DisplayName("a login nobody refuses goes on, and a wrong password is told with the attempts left")
+    void aWrongPasswordIsTold() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        com.uxplima.auth.testing.HeardEvents events = new com.uxplima.auth.testing.HeardEvents();
+
+        assertThat(heard(events)
+                        .run(connection, Password.of("wrong123"), "10.0.0.7")
+                        .join())
+                .isEqualTo(new LoginResult.Wrong(AuthFixture.MAX_ATTEMPTS - 1));
+        assertThat(heard(events)
+                        .run(connection, Password.of("hunter22"), "10.0.0.7")
+                        .join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+
+        assertThat(events.heard)
+                .containsExactly("before-login", "wrong " + (AuthFixture.MAX_ATTEMPTS - 1), "before-login");
+    }
+
+    @Test
+    @DisplayName("a connection that cannot log in now is answered as before, and no listener is asked")
+    void nobodyIsAskedForALoginThatCannotHappen() {
+        UUID stranger = fixture.unregistered("Alex");
+        com.uxplima.auth.testing.HeardEvents events = new com.uxplima.auth.testing.HeardEvents();
+
+        assertThat(heard(events)
+                        .run(stranger, Password.of("whatever1"), "10.0.0.7")
+                        .join())
+                .isEqualTo(new LoginResult.NotRegistered());
+        assertThat(events.heard).isEmpty();
+    }
 }

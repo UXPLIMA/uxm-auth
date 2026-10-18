@@ -3,12 +3,14 @@ package com.uxplima.auth.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
@@ -52,6 +54,7 @@ public final class RegisterAccount {
     private final Clock clock;
     private final Cap cap;
     private final BreachedPasswords breaches;
+    private final AuthEvents events;
     private final Captcha captcha;
 
     public RegisterAccount(
@@ -100,6 +103,22 @@ public final class RegisterAccount {
             Cap cap,
             BreachedPasswords breaches,
             Captcha captcha) {
+        this(accounts, hashing, lane, sessions, policy, clock, cap, breaches, captcha, AuthEvents.NONE);
+    }
+
+    /** @param events asked before an account is made */
+    public RegisterAccount(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Supplier<PasswordPolicy> policy,
+            Clock clock,
+            Cap cap,
+            BreachedPasswords breaches,
+            Captcha captcha,
+            AuthEvents events) {
+        this.events = Objects.requireNonNull(events, "events");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -154,6 +173,10 @@ public final class RegisterAccount {
         long generation = held.generation();
         boolean unverified = unregistered.unverified();
         return lane.submit(() -> {
+            Optional<String> refusedHere = events.beforeRegister(connection);
+            if (refusedHere.isPresent()) {
+                return new RegisterResult.Refused(refusedHere.get());
+            }
             if (cap.full(address, held.host())) {
                 return new RegisterResult.TooManyAccounts();
             }

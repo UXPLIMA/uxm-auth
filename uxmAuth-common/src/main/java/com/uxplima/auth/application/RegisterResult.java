@@ -44,4 +44,11 @@ public sealed interface RegisterResult {
 
     /** The player left before the answer was ready. Nothing was written. */
     record Gone() implements RegisterResult {}
+
+    /** Another plugin refused the registration before the account was made, for this reason, which may be empty. */
+    record Refused(String reason) implements RegisterResult {
+        public Refused {
+            Objects.requireNonNull(reason, "reason");
+        }
+    }
 }

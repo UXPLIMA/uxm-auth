@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.RefusalWords;
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.ChangePassword;
@@ -430,6 +431,10 @@ public final class ScreenAnswers {
             case LoginResult.CodeNeeded needed -> factor.offer(reader, null);
             case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
             case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
+            case LoginResult.Refused refused ->
+                shower.show(
+                        reader,
+                        screens.login(reader, RefusalWords.of(messages, reader, refused.reason(), Keys.LOGIN_REFUSED)));
             case LoginResult.Gone gone -> {}
         }
     }
@@ -477,6 +482,8 @@ public final class ScreenAnswers {
             case RegisterResult.AlreadyRegistered already -> shower.show(reader, screens.login(reader, null));
             case RegisterResult.CaptchaNeeded needed ->
                 captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_NEEDED));
+            case RegisterResult.Refused refused ->
+                again(reader, RefusalWords.of(messages, reader, refused.reason(), Keys.REGISTER_REFUSED));
             case RegisterResult.Gone gone -> {}
         }
     }

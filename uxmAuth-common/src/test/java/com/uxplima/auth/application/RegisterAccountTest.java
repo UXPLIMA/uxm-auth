@@ -280,4 +280,47 @@ final class RegisterAccountTest {
         return new RegisterAccount(
                 fixture.accounts, fixture.hashing, fixture.lane, fixture.sessions, () -> fixture.policy, fixture.clock);
     }
+
+    @Test
+    @DisplayName("a registration a listener refuses answers with the reason, off the caller's thread, and makes"
+            + " no account; one nobody refuses is made")
+    void aRefusedRegistrationMakesNothing() {
+        UUID connection = fixture.unregistered("Steve");
+        com.uxplima.auth.testing.HeardEvents events = new com.uxplima.auth.testing.HeardEvents();
+        events.refuseRegister = "Registrations are closed.";
+        RegisterAccount heard = new RegisterAccount(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                () -> fixture.policy,
+                fixture.clock,
+                (address, host) -> false,
+                com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                id -> false,
+                events);
+
+        assertThat(heard.run(
+                                connection,
+                                new PlayerName("Steve"),
+                                Password.of("hunter22"),
+                                Password.of("hunter22"),
+                                "10.0.0.7")
+                        .join())
+                .isEqualTo(new RegisterResult.Refused("Registrations are closed."));
+        assertThat(fixture.accounts.findByName(new PlayerName("Steve"))).isEmpty();
+        assertThat(events.threads)
+                .allMatch(name -> !name.equals(Thread.currentThread().getName()));
+
+        events.refuseRegister = null;
+        assertThat(heard.run(
+                                connection,
+                                new PlayerName("Steve"),
+                                Password.of("hunter22"),
+                                Password.of("hunter22"),
+                                "10.0.0.7")
+                        .join())
+                .isInstanceOf(RegisterResult.Created.class);
+        assertThat(events.heard).containsExactly("before-register", "before-register");
+    }
 }

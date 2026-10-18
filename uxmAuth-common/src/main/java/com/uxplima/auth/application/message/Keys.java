@@ -160,6 +160,7 @@ public enum Keys implements MessageKey {
             "login.not-registered",
             "<etag:'ERROR'> <body>You have no password here yet. Register with <value>/register<body>."),
     LOGIN_ALREADY("login.already", "<tag:'AUTH'> <body>You are already logged in."),
+    LOGIN_REFUSED("login.refused", "<tag:'AUTH'> <body>Your login was refused."),
     CLAIM_UNAVAILABLE(
             "claim.unavailable",
             "<etag:'ERROR'> <body>This server cannot ask Mojang who owns a name, so there is nothing to claim here."),
@@ -194,6 +195,7 @@ public enum Keys implements MessageKey {
     REGISTER_RULES_NEEDED("register.rules-needed", "<etag:'ERROR'> <body>Tick the box to accept the rules first."),
     REGISTER_ALREADY(
             "register.already", "<etag:'ERROR'> <body>You already have an account. Log in with <value>/login<body>."),
+    REGISTER_REFUSED("register.refused", "<tag:'AUTH'> <body>Your registration was refused."),
 
     CHANGE_WRONG_OLD("change.wrong-old", "<etag:'ERROR'> <body>The old password is wrong."),
     CHANGE_NOT_LOGGED_IN("change.not-logged-in", "<etag:'ERROR'> <body>Log in first."),
