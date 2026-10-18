@@ -3,7 +3,6 @@ package com.uxplima.auth.velocity.adapter.inbound;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -29,8 +28,9 @@ final class LimboVisitTest {
 
     private final ProxyWorld world;
     private final ProxySessions sessions = new ProxySessions();
-    private final List<String> told = new ArrayList<>();
-    private final List<String> events = new ArrayList<>();
+    // A forced login answers on the lane's thread, so both are read across threads.
+    private final List<String> told = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<String> events = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final LimboVisit.Exit exit = new LimboVisit.Exit() {
         @Override
         public void tell(Component text) {
@@ -75,6 +75,10 @@ final class LimboVisitTest {
     }
 
     private LimboVisit visit() {
+        return visit(LimboVisit.Reach.NONE);
+    }
+
+    private LimboVisit visit(LimboVisit.Reach reach) {
         return new LimboVisit(
                 world.limboLogin(true),
                 sessions,
@@ -84,7 +88,8 @@ final class LimboVisitTest {
                 "127.0.0.1",
                 "play.example.org",
                 Audience.empty(),
-                exit);
+                exit,
+                reach);
     }
 
     private static void settle(CompletableFuture<Void> said) throws Exception {
@@ -250,5 +255,52 @@ final class LimboVisitTest {
         settle(visit.said("/register hunter22 hunter22"));
 
         assertThat(remembered.holds(STEVE, "127.0.0.1", world.clock.instant())).isTrue();
+    }
+
+    @Test
+    @DisplayName("staff letting the account in release its waiting player as forced; a visit that left hears nothing")
+    void staffLetThePlayerOut() throws Exception {
+        LimboVisit first = visit();
+        first.arrive();
+        settle(first.said("/register hunter22 hunter22"));
+        first.left();
+        events.clear();
+        told.clear();
+        sessions.waiting(STEVE, new Claim.Waiting(false, false, false));
+        com.uxplima.auth.application.staff.ForceLogin force = new com.uxplima.auth.application.staff.ForceLogin(
+                world.accounts, world.sessions, new com.uxplima.auth.adapter.outbound.LocalEvents(), world.clock);
+        LimboVisits visits = new LimboVisits((id, address) ->
+                world.lane.submit(() -> force.admit(id, address).isPresent()));
+        LimboVisit visit = visit(visits);
+        visit.arrive();
+
+        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline && !events.contains("released")) {
+            Thread.onSpinWait();
+        }
+
+        assertThat(events).containsExactly("released");
+        assertThat(sessions.nextStanding(STEVE)).contains(new Claim.LoggedIn(AuthMethod.FORCED));
+        assertThat(told).anySatisfy(line -> assertThat(line).contains("Staff let you in"));
+    }
+
+    @Test
+    @DisplayName("a visit that left is forgotten, and another visit's leaving does not forget it")
+    void aVisitThatLeftIsForgotten() {
+        LimboVisits visits = new LimboVisits((id, address) -> CompletableFuture.completedFuture(true));
+        LimboVisit visit = visit(visits);
+        visit.arrive();
+
+        visits.left(STEVE, visit());
+        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE));
+        assertThat(events).as("another visit leaving leaves this one known").containsExactly("released");
+
+        events.clear();
+        LimboVisit again = visit(visits);
+        again.arrive();
+        visits.left(STEVE, again);
+        visits.accept(new com.uxplima.auth.domain.network.Bulletin.LetIn(STEVE));
+        assertThat(events).as("a visit that left is forgotten").isEmpty();
     }
 }

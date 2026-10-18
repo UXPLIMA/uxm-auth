@@ -29,6 +29,7 @@ public final class Bulletins {
     private static final String VERSION = "b1";
     private static final String SEPARATOR = "|";
     private static final String SESSIONS_ENDED = "S";
+    private static final String LET_IN = "L";
     private static final int PARTS = 6;
 
     private final Claims claims;
@@ -42,15 +43,21 @@ public final class Bulletins {
         return claims.seal(
                 switch (sent.bulletin()) {
                     case Bulletin.SessionsEnded ended ->
-                        String.join(
-                                SEPARATOR,
-                                VERSION,
-                                SESSIONS_ENDED,
-                                sent.origin().toString(),
-                                String.valueOf(sent.issued().toEpochMilli()),
-                                ended.account().toString(),
-                                ended.keep().orElse(""));
+                        text(sent, SESSIONS_ENDED, ended.account(), ended.keep().orElse(""));
+                    case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), "");
                 });
+    }
+
+    /** Every bulletin travels in the same six parts: the mark, its kind, who sent it, when, its account, and more. */
+    private static String text(Sent sent, String kind, UUID account, String more) {
+        return String.join(
+                SEPARATOR,
+                VERSION,
+                kind,
+                sent.origin().toString(),
+                String.valueOf(sent.issued().toEpochMilli()),
+                account.toString(),
+                more);
     }
 
     /** The bulletin, when the text is one this network signed and it is fresh; nothing otherwise. */
@@ -62,18 +69,22 @@ public final class Bulletins {
 
     private static Optional<Sent> parse(String text) {
         List<String> parts = List.of(text.split("\\|", -1));
-        if (parts.size() != PARTS
-                || !parts.get(0).equals(VERSION)
-                || !parts.get(1).equals(SESSIONS_ENDED)) {
+        if (parts.size() != PARTS || !parts.get(0).equals(VERSION)) {
             return Optional.empty();
         }
-        String keep = parts.get(5);
         try {
-            return Optional.of(new Sent(
-                    new Bulletin.SessionsEnded(
-                            UUID.fromString(parts.get(4)), keep.isEmpty() ? Optional.empty() : Optional.of(keep)),
-                    UUID.fromString(parts.get(2)),
-                    Instant.ofEpochMilli(Long.parseLong(parts.get(3)))));
+            UUID account = UUID.fromString(parts.get(4));
+            String more = parts.get(5);
+            Optional<Bulletin> bulletin =
+                    switch (parts.get(1)) {
+                        case SESSIONS_ENDED ->
+                            Optional.of(new Bulletin.SessionsEnded(
+                                    account, more.isEmpty() ? Optional.empty() : Optional.of(more)));
+                        case LET_IN -> more.isEmpty() ? Optional.of(new Bulletin.LetIn(account)) : Optional.empty();
+                        default -> Optional.empty();
+                    };
+            return bulletin.map(read ->
+                    new Sent(read, UUID.fromString(parts.get(2)), Instant.ofEpochMilli(Long.parseLong(parts.get(3)))));
         } catch (IllegalArgumentException unreadable) {
             return Optional.empty();
         }

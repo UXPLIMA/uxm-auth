@@ -80,6 +80,20 @@ final class AddressBansTest {
     }
 
     @Test
+    @DisplayName("staff unban an address: the ban and its count are gone, and an address never banned says so")
+    void staffUnban() {
+        for (int i = 0; i < 3; i++) {
+            bans().failed(HOME, PLAY);
+        }
+
+        assertThat(bans().unban(HOME)).isEqualTo(AddressBans.Unban.LIFTED);
+        assertThat(door().decide(new Admission.Arrival(HOME, PLAY))).isEmpty();
+        assertThat(kept).isEmpty();
+        assertThat(bans().unban(HOME)).isEqualTo(AddressBans.Unban.NOT_BANNED);
+        assertThat(bans().unban("not an address")).isEqualTo(AddressBans.Unban.NOT_AN_ADDRESS);
+    }
+
+    @Test
     @DisplayName("a ban that ran out by the time the player connects lets them in")
     void aBanThatRanOutLetsIn() {
         for (int i = 0; i < 3; i++) {

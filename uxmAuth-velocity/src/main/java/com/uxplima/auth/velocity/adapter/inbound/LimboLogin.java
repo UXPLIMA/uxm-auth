@@ -350,6 +350,11 @@ public final class LimboLogin {
         return stands ? Optional.of(captcha(reader, id, Keys.CAPTCHA_NEEDED)) : Optional.empty();
     }
 
+    /** What a player staff let in reads as they leave the world. */
+    public Component letIn(Audience reader) {
+        return messages.render(Objects.requireNonNull(reader, "reader"), Keys.STAFF_LET_IN);
+    }
+
     /** The player left the waiting world. */
     public void leave(UUID id) {
         sessions.close(Objects.requireNonNull(id, "id"));

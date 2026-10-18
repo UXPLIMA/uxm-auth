@@ -11,10 +11,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.staff.AccountInfo;
+import com.uxplima.auth.application.staff.ForceLogin;
+import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.staff.InfoForm;
 import com.uxplima.auth.paper.adapter.inbound.staff.InfoMenu;
+import com.uxplima.auth.paper.adapter.inbound.staff.StaffDesk;
+import com.uxplima.auth.paper.adapter.inbound.staff.StaffGate;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffView;
 import com.uxplima.uxmlib.bedrock.BedrockDetector;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
@@ -42,6 +47,9 @@ final class StaffGraph implements AutoCloseable {
     private final Menus menus;
     private final MenuListener clicks;
     private final InfoMenu window;
+    private final Messages messages;
+    private final HashingLane lane;
+    private final Replies replies;
 
     StaffGraph(
             Plugin plugin,
@@ -54,6 +62,9 @@ final class StaffGraph implements AutoCloseable {
             Supplier<DateTimeFormatter> dates,
             Predicate<UUID> bedrock) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
+        this.messages = Objects.requireNonNull(messages, "messages");
+        this.lane = Objects.requireNonNull(lane, "lane");
+        this.replies = Objects.requireNonNull(replies, "replies");
         MenuBindings bindings = new MenuBindings();
         MenuRenderer renderer = new MenuRenderer(
                 new ItemRenderer(new CatalogueWords(messages, styler), styler::theme, bindings.placeholders()),
@@ -76,6 +87,12 @@ final class StaffGraph implements AutoCloseable {
         InfoForm form =
                 new InfoForm(BedrockScreen.forServer(plugin.getServer()), bedrock, messages, scheduler, this::reread);
         this.view = new StaffView(info, lane, replies, messages, dates, form.orElse(window));
+    }
+
+    /** What staff do to an account, behind the gate the operator set for staff in game. */
+    StaffDesk desk(ForceLogin force, AddressBans bans, Predicate<StaffAction> openInGame) {
+        return new StaffDesk(
+                new StaffGate(openInGame, messages), force, bans, lane, replies, messages, plugin.getLogger()::info);
     }
 
     /** Reads another account into the window or the form, for the staff player who picked it. */

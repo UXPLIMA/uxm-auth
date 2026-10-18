@@ -20,6 +20,16 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  */
 public final class AddressBans {
 
+    /** What staff lifting a ban came to. */
+    public enum Unban {
+        /** The address was banned, and is not now; its count starts again. */
+        LIFTED,
+        /** The address was not banned; any count it had starts again. */
+        NOT_BANNED,
+        /** What staff typed is no address. */
+        NOT_AN_ADDRESS
+    }
+
     private final AddressTallies tallies;
     private final Supplier<BanSteps> steps;
     private final Supplier<SharedAddresses> shared;
@@ -49,6 +59,18 @@ public final class AddressBans {
         BanSteps rules = steps.get();
         AddressTally after = tallies.change(AddressKey.of(address), tally -> tally.failedAt(now, rules));
         return after.bannedAt(now) ? Optional.of(after.leftAt(now)) : Optional.empty();
+    }
+
+    /** Staff lift the ban on this address and forget its wrong passwords. */
+    public Unban unban(String address) {
+        if (!AddressKey.isAddress(Objects.requireNonNull(address, "address"))) {
+            return Unban.NOT_AN_ADDRESS;
+        }
+        String key = AddressKey.of(address);
+        boolean banned =
+                tallies.find(key).filter(tally -> tally.bannedAt(clock.get())).isPresent();
+        tallies.clear(key);
+        return banned ? Unban.LIFTED : Unban.NOT_BANNED;
     }
 
     /** The door's rule: a banned address is refused with the time its ban has left. */

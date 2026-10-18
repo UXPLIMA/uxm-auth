@@ -24,6 +24,13 @@ public sealed interface Bulletin {
         }
     }
 
+    /** Staff let the waiting player of this account in, on whichever server or proxy they wait. */
+    record LetIn(UUID account) implements Bulletin {
+        public LetIn {
+            Objects.requireNonNull(account, "account");
+        }
+    }
+
     /** What a visit token may be: the nonce of a proxy's claim, or a random id a server gave a connection. */
     Pattern VISIT = Pattern.compile("[A-Za-z0-9-]{1,64}");
 }

@@ -34,6 +34,17 @@ final class BulletinsTest {
     }
 
     @Test
+    @DisplayName("staff letting an account in travels whole too, and is never read as an ended session")
+    void aLetInOpens() {
+        Bulletins.Sent letIn = new Bulletins.Sent(new Bulletin.LetIn(STEVE), ORIGIN, NOW);
+
+        assertThat(bulletins.open(bulletins.seal(letIn), NOW)).contains(letIn);
+        assertThat(bulletins.open(claims.seal("b1|L|" + ORIGIN + "|" + NOW.toEpochMilli() + "|" + STEVE + "|x"), NOW))
+                .as("a let-in carries nothing after the account")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("a bulletin signed with another secret, changed, cut or made up is not opened")
     void aForgedBulletinIsNotOpened() {
         Bulletins other = new Bulletins(new Claims(NetworkSecret.parse("r".repeat(43)), FRESH));

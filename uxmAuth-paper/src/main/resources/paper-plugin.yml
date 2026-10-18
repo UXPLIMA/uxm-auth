@@ -97,6 +97,12 @@ permissions:
   uxmauth.admin.history:
     description: Read the latest logins of an account
     default: op
+  uxmauth.admin.forcelogin:
+    description: Let a waiting player in past the login
+    default: op
+  uxmauth.admin.unban:
+    description: Lift the ban on an address
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

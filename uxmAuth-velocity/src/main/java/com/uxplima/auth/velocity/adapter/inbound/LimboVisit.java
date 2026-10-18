@@ -12,6 +12,7 @@ import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.protection.CaptchaPicture;
+import com.uxplima.auth.domain.state.AuthMethod;
 
 /**
  * One player's stay in the proxy's waiting world, from arrival to the moment they are let out logged in or sent
@@ -35,6 +36,33 @@ public final class LimboVisit {
         void draw(CaptchaPicture picture);
     }
 
+    /** How staff reach a visit: it is known while the player waits, and staff can let it in. */
+    public interface Reach {
+
+        /** Reaches nothing, for a world without staff behind it. */
+        Reach NONE = new Reach() {
+            @Override
+            public void arrived(UUID id, LimboVisit visit) {}
+
+            @Override
+            public void left(UUID id, LimboVisit visit) {}
+
+            @Override
+            public CompletableFuture<Boolean> admit(UUID id, String address) {
+                return CompletableFuture.completedFuture(false);
+            }
+        };
+
+        /** The player with this id waits in the world now. */
+        void arrived(UUID id, LimboVisit visit);
+
+        /** That visit is over. */
+        void left(UUID id, LimboVisit visit);
+
+        /** Lets the waiting player in as forced, off the thread that asks; true when they were let in. */
+        CompletableFuture<Boolean> admit(UUID id, String address);
+    }
+
     private static final Claim.Waiting NOTHING = new Claim.Waiting(false, false, false);
 
     private final LimboLogin login;
@@ -46,6 +74,7 @@ public final class LimboVisit {
     private final String host;
     private final Audience reader;
     private final Exit exit;
+    private final Reach reach;
     private final AtomicBoolean over = new AtomicBoolean();
 
     public LimboVisit(
@@ -57,7 +86,8 @@ public final class LimboVisit {
             String address,
             String host,
             Audience reader,
-            Exit exit) {
+            Exit exit,
+            Reach reach) {
         this.login = Objects.requireNonNull(login, "login");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.remember = Objects.requireNonNull(remember, "remember");
@@ -67,10 +97,12 @@ public final class LimboVisit {
         this.host = Objects.requireNonNull(host, "host");
         this.reader = Objects.requireNonNull(reader, "reader");
         this.exit = Objects.requireNonNull(exit, "exit");
+        this.reach = Objects.requireNonNull(reach, "reach");
     }
 
     /** The player arrived in the waiting world. */
     public void arrive() {
+        reach.arrived(id, this);
         login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING), host, sessions.passed(id))
                 .forEach(exit::tell);
         login.standing(reader, id).ifPresent(this::answer);
@@ -107,6 +139,20 @@ public final class LimboVisit {
     public void left() {
         over.set(true);
         login.leave(id);
+        reach.left(id, this);
+    }
+
+    /** Staff let the player in: they leave the world logged in, as forced. */
+    public CompletableFuture<Void> letIn() {
+        if (over.get()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return reach.admit(id, address).thenAccept(in -> {
+            if (in) {
+                exit.tell(login.letIn(reader));
+                answer(new LimboLogin.Outcome.In(AuthMethod.FORCED));
+            }
+        });
     }
 
     private void answer(LimboLogin.Outcome outcome) {

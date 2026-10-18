@@ -59,6 +59,8 @@ public final class EndedSessions implements Consumer<Bulletin> {
                     scheduler.entity(player, () -> endUnlessKept(player, ended.keep()));
                 }
             }
+            // Staff letting a player in is ForcedLogins' bulletin.
+            case Bulletin.LetIn letIn -> {}
         }
     }
 

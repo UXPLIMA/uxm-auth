@@ -15,6 +15,7 @@ import net.kyori.adventure.text.JoinConfiguration;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
+import com.uxplima.auth.paper.adapter.inbound.staff.StaffActions;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.PlayerNames;
 import com.uxplima.uxmlib.command.annotation.SuggestUsing;
@@ -50,6 +51,7 @@ public final class AdminCommand {
     private final LanguageChoices choices;
     private final LanguageOfAnotherPlayer another;
     private final Staff staff;
+    private final StaffActions actions;
 
     public AdminCommand(
             PluginSettings settings,
@@ -61,7 +63,7 @@ public final class AdminCommand {
         this(settings, messages, version, scheduler, health, choices, Staff.NONE);
     }
 
-    /** @param staff what staff read of an account and do to it */
+    /** @param staff what staff read of an account */
     public AdminCommand(
             PluginSettings settings,
             Messages messages,
@@ -70,6 +72,22 @@ public final class AdminCommand {
             Supplier<List<HealthCheck>> health,
             LanguageChoices choices,
             Staff staff) {
+        this(settings, messages, version, scheduler, health, choices, staff, StaffActions.NONE);
+    }
+
+    /**
+     * @param staff what staff read of an account
+     * @param actions what staff do to an account
+     */
+    public AdminCommand(
+            PluginSettings settings,
+            Messages messages,
+            String version,
+            Scheduler scheduler,
+            Supplier<List<HealthCheck>> health,
+            LanguageChoices choices,
+            Staff staff,
+            StaffActions actions) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.version = Objects.requireNonNull(version, "version");
@@ -77,6 +95,7 @@ public final class AdminCommand {
         this.health = Objects.requireNonNull(health, "health");
         this.choices = Objects.requireNonNull(choices, "choices");
         this.staff = Objects.requireNonNull(staff, "staff");
+        this.actions = Objects.requireNonNull(actions, "actions");
         this.another = new LanguageOfAnotherPlayer(
                 messages, choices, () -> settings.current().language().forcedLocale());
     }
@@ -129,6 +148,20 @@ public final class AdminCommand {
     public void doctor(Sender sender) {
         messages.send(sender.bukkit(), Keys.DOCTOR_HEADER);
         scheduler.async(() -> say(sender, HealthReport.run(health.get())));
+    }
+
+    /** Lets a waiting player in past the login, on whichever server they wait. */
+    @FromConfig(value = "forcelogin", fallbackName = "forcelogin", description = "Let a waiting player in")
+    @Permission("uxmauth.admin.forcelogin")
+    public void forceLogin(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
+        CompletableFuture<Void> unused = actions.forceLogin(sender.bukkit(), player);
+    }
+
+    /** Lifts the ban on an address and forgets its wrong passwords. */
+    @FromConfig(value = "unban", fallbackName = "unban", description = "Lift the ban on an address")
+    @Permission("uxmauth.admin.unban")
+    public void unban(Sender sender, @Arg("address") String address) {
+        CompletableFuture<Void> unused = actions.unban(sender.bukkit(), address);
     }
 
     /** Everything staff read of one account: its dates, logins, factors, address and the other accounts. */

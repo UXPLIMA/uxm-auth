@@ -58,6 +58,7 @@ import com.uxplima.auth.application.protection.ConnectionWindow;
 import com.uxplima.auth.application.protection.CountryRule;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.AccountInfo;
+import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
@@ -107,6 +108,8 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
+import com.uxplima.auth.paper.adapter.inbound.staff.ForcedLogins;
+import com.uxplima.auth.paper.adapter.inbound.staff.StaffDesk;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffView;
 import com.uxplima.auth.paper.adapter.outbound.bedrock.BedrockLink;
 import com.uxplima.auth.paper.adapter.outbound.captcha.CaptchaMap;
@@ -158,6 +161,7 @@ final class AuthGraph implements AutoCloseable {
     final SqlLoginHistory history;
     final StaffView staff;
     final StaffGraph staffing;
+    final StaffDesk desk;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -477,6 +481,10 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().staff().dates().withZone(ZoneId.systemDefault()),
                 id -> bedrock.player(id).isPresent());
         this.staff = staffing.view;
+        ForceLogin force = new ForceLogin(accounts, sessions, events, clock);
+        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
+        this.desk =
+                staffing.desk(force, bans, action -> settings.current().staff().allowsInGame(action));
         this.recover =
                 mail.recover(recovering, sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         formAnswers.set(screenClicks);

@@ -17,6 +17,7 @@ import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
 import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
 import com.uxplima.auth.application.mail.MailCodes;
+import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.domain.factor.BackupCodes;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
@@ -750,6 +751,25 @@ final class AuthSettingsTest {
         assertThat(written.dates().format(java.time.LocalDate.of(2026, 10, 18))).isEqualTo("18.10.2026");
         assertThatThrownBy(() -> settingsFrom(folder, "staff { date-format = \"{{nope\" }\n"))
                 .hasMessageContaining("staff.date-format");
+    }
+
+    @Test
+    @DisplayName("a destructive staff command runs in game only when staff.in-game names it; others always do")
+    void inGameStaffCommandsAreRead(@TempDir Path folder) throws IOException {
+        StaffSettings shipped = settingsFrom(folder, "").staff();
+        assertThat(shipped.inGame()).isEmpty();
+        assertThat(shipped.allowsInGame(StaffAction.UNREGISTER)).isFalse();
+        assertThat(shipped.allowsInGame(StaffAction.UNBAN)).isTrue();
+        assertThat(shipped.allowsInGame(StaffAction.FORCE_LOGIN)).isTrue();
+
+        StaffSettings opened = settingsFrom(folder, "staff { in-game = [unregister, resolve] }\n")
+                .staff();
+        assertThat(opened.inGame()).containsExactlyInAnyOrder(StaffAction.UNREGISTER, StaffAction.RESOLVE);
+        assertThat(opened.allowsInGame(StaffAction.UNREGISTER)).isTrue();
+        assertThat(opened.allowsInGame(StaffAction.SET_PASSWORD)).isFalse();
+        assertThatThrownBy(() -> settingsFrom(folder, "staff { in-game = [unregistre] }\n"))
+                .hasMessageContaining("staff.in-game")
+                .hasMessageContaining("unregistre");
     }
 
     @Test

@@ -336,6 +336,18 @@ public enum Keys implements MessageKey {
             "recover.too-many-attempts",
             "<etag:'ERROR'> <body>The tries for that code are spent. Ask a new one with" + " <value>/recover<body>."),
     STAFF_UNKNOWN("staff.unknown", "<etag:'ERROR'> <body>No account is under <value><name><body>."),
+    STAFF_CONSOLE_ONLY(
+            "staff.console-only",
+            "<etag:'ERROR'> <body>Run <value><command><body> from the console, or open it to staff in game under <value>staff.in-game<body> in config.conf."),
+    STAFF_FORCED_LOGIN(
+            "staff.forced-login",
+            "<tag:'AUTH'> <body>Every server was told to let <value><name><body> in, wherever they wait."),
+    STAFF_LET_IN("staff.let-in", "<tag:'AUTH'> <body>Staff let you in."),
+    STAFF_UNBANNED("staff.unbanned", "<tag:'AUTH'> <body><value><address><body> is no longer banned."),
+    STAFF_NOT_BANNED(
+            "staff.not-banned",
+            "<tag:'AUTH'> <body><value><address><body> was not banned. Its count of wrong passwords starts again."),
+    STAFF_NOT_AN_ADDRESS("staff.not-an-address", "<etag:'ERROR'> <body><value><address><body> is no address."),
     INFO_HEADER("info.header", "<tag:'AUTH'> <value><name><body>, <value><kind><body>."),
     INFO_KIND_CRACKED("info.kind.cracked", "a password account"),
     INFO_KIND_PREMIUM("info.kind.premium", "a premium account"),

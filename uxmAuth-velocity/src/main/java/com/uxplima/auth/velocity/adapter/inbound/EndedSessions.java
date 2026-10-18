@@ -25,6 +25,8 @@ public final class EndedSessions implements Consumer<Bulletin> {
                     sessions.loggedOut(ended.account());
                 }
             }
+            // Staff letting a player in is answered where the player waits.
+            case Bulletin.LetIn letIn -> {}
         }
     }
 }

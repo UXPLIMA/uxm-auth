@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
@@ -35,11 +37,13 @@ import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
 import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.application.protection.Remember;
+import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
 import com.uxplima.auth.velocity.adapter.inbound.LimboRecovery;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisit;
+import com.uxplima.auth.velocity.adapter.inbound.LimboVisits;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboWait;
 import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboWorld;
@@ -65,6 +69,7 @@ final class WaitingWorld implements AutoCloseable {
     private final Logger logger;
     private final Path folder;
     private @Nullable HashingLane lane;
+    private @Nullable ForceLogin force;
 
     WaitingWorld(Object plugin, ProxyServer proxy, Logger logger, Path folder) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -110,10 +115,12 @@ final class WaitingWorld implements AutoCloseable {
             Guards guards) {
         LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
+        LimboVisits reach = new LimboVisits((id, address) -> forced(id, address));
+        guards.events().listen(reach);
         LimboWait wait = new LimboWait(
                 LimboWorld.open(limboApi, folder, settings.current().network(), metas(labels), logger),
                 network::waitsAtTheProxy,
-                (player, exit) -> visit(passwords, network, guards.remember(), player, exit),
+                (player, exit) -> visit(passwords, network, guards.remember(), player, exit, reach),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
@@ -152,6 +159,7 @@ final class WaitingWorld implements AutoCloseable {
         Hashing hashing = boot.hashers();
         Sessions sessions = new Sessions();
         Clock clock = Clock.systemUTC();
+        this.force = new ForceLogin(accounts, sessions, guards.events(), clock);
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), clock::instant);
         return new LimboLogin(
@@ -241,8 +249,23 @@ final class WaitingWorld implements AutoCloseable {
                 guards.breaches());
     }
 
+    /** Lets a connection waiting in the world in as forced, on the lane: the account table is written. */
+    private CompletableFuture<Boolean> forced(UUID id, String address) {
+        HashingLane open = lane;
+        ForceLogin force = this.force;
+        if (open == null || force == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        return open.submit(() -> force.admit(id, address).isPresent());
+    }
+
     private static LimboVisit visit(
-            LimboLogin passwords, ProxySessions network, Remember remember, Player player, LimboVisit.Exit exit) {
+            LimboLogin passwords,
+            ProxySessions network,
+            Remember remember,
+            Player player,
+            LimboVisit.Exit exit,
+            LimboVisit.Reach reach) {
         return new LimboVisit(
                 passwords,
                 network,
@@ -252,7 +275,8 @@ final class WaitingWorld implements AutoCloseable {
                 player.getRemoteAddress().getAddress().getHostAddress(),
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(""),
                 player,
-                exit);
+                exit,
+                reach);
     }
 
     /** Each command the waiting world answers, in every word commands.conf gives it. */
