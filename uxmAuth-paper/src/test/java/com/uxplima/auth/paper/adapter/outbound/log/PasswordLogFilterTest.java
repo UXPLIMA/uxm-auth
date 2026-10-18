@@ -74,6 +74,24 @@ final class PasswordLogFilterTest {
     }
 
     @Test
+    @DisplayName("a password command word as an argument of another command hides nothing, so no line loses its tail")
+    void anArgumentWordHidesNothing() {
+        PasswordMask staff = new PasswordMask(
+                () -> Set.of("login", "l"), () -> new PasswordMask.Branches(Set.of("uxmauth"), Set.of("setpassword")));
+
+        assertThat(staff.mask("Notch issued server command: /tell Steve l hello"))
+                .isEqualTo("Notch issued server command: /tell Steve l hello");
+        assertThat(staff.mask("Notch issued server command: /kick Steve login griefing"))
+                .isEqualTo("Notch issued server command: /kick Steve login griefing");
+        assertThat(staff.mask("Notch issued server command: /say uxmauth setpassword is a command"))
+                .isEqualTo("Notch issued server command: /say uxmauth setpassword is a command");
+        assertThat(staff.mask("Notch issued server command: /tell Steve run login hello"))
+                .isEqualTo("Notch issued server command: /tell Steve run login hello");
+        assertThat(staff.mask("Notch issued server command: /execute as @s run execute run login hunter2"))
+                .doesNotContain("hunter2");
+    }
+
+    @Test
     @DisplayName("a line that is not one of these commands is left as it was")
     void anUnrelatedLineIsUntouched() {
         assertThat(mask.mask("Notch issued server command: /spawn")).isEqualTo("Notch issued server command: /spawn");

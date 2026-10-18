@@ -19,6 +19,11 @@ public final class PasswordMask {
     /** What the server writes before every command a player runs. */
     private static final String ISSUED = "issued server command: /";
 
+    /** The command that runs another, and the word after which the other one stands. */
+    private static final String EXECUTE = "execute";
+
+    private static final String RUN = "run";
+
     /** What stands in for the arguments. */
     static final String HIDDEN = "***";
 
@@ -56,10 +61,12 @@ public final class PasswordMask {
     /**
      * The line with a password command's arguments hidden, or the line itself.
      *
-     * <p>The command is read word by word, with any run of whitespace between two words, and a password command is
-     * looked for at every word: a line spaced twice still logs a password even when the server refuses to run it,
-     * and {@code /execute ... run login} carries one as much as {@code /login}. Everything after the word that
-     * opens the password is hidden.
+     * <p>The command is read word by word, with any run of whitespace between two words: a line spaced twice still
+     * logs a password even when the server refuses to run it. A password command is looked for where a command
+     * stands, which is the first word and, inside {@code /execute}, every word after a {@code run}: {@code /execute
+     * ... run login} carries a password as much as {@code /login}, and {@code /tell Steve l hello} carries none, so
+     * nobody can hide the tail of another command by naming one of ours in it. Everything after the word that opens
+     * the password is hidden.
      */
     public String mask(String line) {
         Objects.requireNonNull(line, "line");
@@ -71,7 +78,11 @@ public final class PasswordMask {
         List<int[]> words = words(line, start);
         Set<String> commands = labels.get();
         Branches carrying = branches.get();
+        boolean wraps = !words.isEmpty() && EXECUTE.equals(bare(line, words.getFirst()));
         for (int at = 0; at + 1 < words.size(); at++) {
+            if (at > 0 && !(wraps && RUN.equals(word(line, words.get(at - 1))))) {
+                continue;
+            }
             String bare = bare(line, words.get(at));
             if (commands.contains(bare)) {
                 return hiddenAfter(line, words.get(at));
