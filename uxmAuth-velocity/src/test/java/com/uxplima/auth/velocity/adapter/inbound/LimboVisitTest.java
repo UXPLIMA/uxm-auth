@@ -45,6 +45,11 @@ final class LimboVisitTest {
         public void sendAway(Component reason) {
             events.add("sent away");
         }
+
+        @Override
+        public void draw(com.uxplima.auth.domain.protection.CaptchaPicture picture) {
+            events.add("drawn");
+        }
     };
 
     private final com.uxplima.auth.adapter.outbound.SqlRememberedSessions remembered;
@@ -96,6 +101,28 @@ final class LimboVisitTest {
         assertThat(told).anySatisfy(line -> assertThat(line).contains("/register"));
         assertThat(events).containsExactly("released");
         assertThat(sessions.loggedIn(STEVE)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a captcha that stands is drawn on the map at the arrival, and a wrong code draws a new one")
+    void aCaptchaIsDrawnAtTheArrival() throws Exception {
+        world.captchaSettings = new com.uxplima.auth.application.protection.Captchas.Settings(
+                com.uxplima.auth.application.protection.Captchas.When.REGISTER,
+                1,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.MAP);
+        LimboVisit visit = visit();
+
+        visit.arrive();
+        assertThat(events).containsExactly("drawn");
+        assertThat(told).anySatisfy(line -> assertThat(line).contains("/captcha"));
+
+        settle(visit.said("/captcha WRONG"));
+
+        assertThat(events).containsExactly("drawn", "drawn");
+        assertThat(sessions.loggedIn(STEVE)).isFalse();
     }
 
     @Test

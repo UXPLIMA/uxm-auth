@@ -12,6 +12,8 @@ import java.util.function.Supplier;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.adapter.outbound.CaptchaImage;
+import com.uxplima.auth.domain.protection.CaptchaPicture;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisit;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.proxy.Player;
@@ -144,6 +146,11 @@ public final class LimboWait {
         @Override
         public void sendAway(Component reason) {
             player.disconnect(reason);
+        }
+
+        @Override
+        public void draw(CaptchaPicture picture) {
+            inWorld.sendImage(CaptchaImage.of(picture));
         }
     }
 }

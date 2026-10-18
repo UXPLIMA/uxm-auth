@@ -208,6 +208,69 @@ final class LimboLoginTest {
         assertThat(told(said(login, "/changepassword hunter22"))).contains("/login");
     }
 
+    private static String captcha(LimboLogin.Outcome outcome) {
+        assertThat(outcome).isInstanceOf(LimboLogin.Outcome.Captcha.class);
+        return plain(((LimboLogin.Outcome.Captcha) outcome).said());
+    }
+
+    @Test
+    @DisplayName("a registration the captcha stands before draws the code on the map, and /captcha answers it")
+    void aCaptchaStandsBeforeTheRegistration() throws Exception {
+        world.captchaSettings = settings(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(login.standing(READER, STEVE))
+                .hasValueSatisfying(outcome -> assertThat(captcha(outcome)).contains("/captcha"));
+        assertThat(captcha(said(login, "/register hunter22 hunter22"))).contains("Solve the captcha first");
+        String first = world.captchas.code(STEVE).orElseThrow();
+        assertThat(captcha(said(login, "/captcha WRONG"))).contains("not the code");
+        String second = world.captchas.code(STEVE).orElseThrow();
+        assertThat(second).isNotEqualTo(first);
+
+        assertThat(told(said(login, "/dogrula " + second.toLowerCase(java.util.Locale.ROOT))))
+                .contains("solved")
+                .contains("/register");
+        assertThat(login.standing(READER, STEVE)).isEmpty();
+        assertThat(said(login, "/register hunter22 hunter22"))
+                .isEqualTo(new LimboLogin.Outcome.In(AuthMethod.REGISTERED));
+    }
+
+    @Test
+    @DisplayName(
+            "a login after failures waits for the captcha, /captcha with nothing shown says so, and a leave forgets")
+    void aCaptchaStandsBeforeTheLoginAfterFailures() throws Exception {
+        LimboLogin first = world.limboLogin(true);
+        first.arrive(READER, STEVE, NAME, NONE);
+        said(first, "/register hunter22 hunter22");
+        first.leave(STEVE);
+        world.captchaSettings = settings(com.uxplima.auth.application.protection.Captchas.When.FAILURES);
+        LimboLogin login = world.limboLogin(true);
+        login.arrive(READER, STEVE, NAME, NONE);
+
+        assertThat(told(said(login, "/captcha ABCDE"))).contains("no captcha");
+        assertThat(login.standing(READER, STEVE)).isEmpty();
+        assertThat(told(said(login, "/login wrongpass"))).contains("2");
+        assertThat(login.standing(READER, STEVE)).isPresent();
+        assertThat(captcha(said(login, "/login hunter22"))).contains("Solve the captcha first");
+        assertThat(world.captchas.code(STEVE)).isPresent();
+
+        login.leave(STEVE);
+
+        assertThat(world.captchas.code(STEVE)).isEmpty();
+    }
+
+    private static com.uxplima.auth.application.protection.Captchas.Settings settings(
+            com.uxplima.auth.application.protection.Captchas.When when) {
+        return new com.uxplima.auth.application.protection.Captchas.Settings(
+                when,
+                1,
+                5,
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                java.time.Duration.ofMinutes(60),
+                com.uxplima.auth.application.protection.Captchas.JavaScreen.MAP);
+    }
+
     @Test
     @DisplayName("an address past the accounts limit stays and reads why")
     void aFullAddressStays() throws Exception {

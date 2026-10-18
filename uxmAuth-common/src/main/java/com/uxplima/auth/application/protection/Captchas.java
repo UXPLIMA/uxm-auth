@@ -166,6 +166,11 @@ public final class Captchas implements LogIn.Captcha {
         return drawn;
     }
 
+    /** A fresh code for a new showing, drawn for a map. */
+    public CaptchaPicture showPicture(UUID connection) {
+        return CaptchaPicture.draw(show(connection), random);
+    }
+
     /** The code of the latest showing to this connection, while it is unanswered. */
     public Optional<String> code(UUID connection) {
         Showing showing = showings.get(Objects.requireNonNull(connection, "connection"));

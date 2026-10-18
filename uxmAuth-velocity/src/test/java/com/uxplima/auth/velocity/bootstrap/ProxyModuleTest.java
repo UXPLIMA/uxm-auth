@@ -251,9 +251,10 @@ final class ProxyModuleTest {
         module.shutdown();
 
         verify(events).register(eq(plugin), any(LimboWait.class));
-        // /login, /register, and /changepassword for a weak password the login held up.
-        verify(limbo, org.mockito.Mockito.times(3)).registerCommand(org.mockito.ArgumentMatchers.<CommandMeta>any());
+        // /login, /register, /changepassword for a weak password the login held up, and /captcha.
+        verify(limbo, org.mockito.Mockito.times(4)).registerCommand(org.mockito.ArgumentMatchers.<CommandMeta>any());
         verify(commands).metaBuilder("changepassword");
+        verify(commands).metaBuilder("captcha");
         verify(logger).info(contains("proxy's own world"));
     }
 

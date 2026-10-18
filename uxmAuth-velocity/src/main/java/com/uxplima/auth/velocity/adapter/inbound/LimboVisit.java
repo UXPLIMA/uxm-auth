@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
+import com.uxplima.auth.domain.protection.CaptchaPicture;
 
 /**
  * One player's stay in the proxy's waiting world, from arrival to the moment they are let out logged in or sent
@@ -29,6 +30,9 @@ public final class LimboVisit {
 
         /** Send the player away from the network with this reason. */
         void sendAway(Component reason);
+
+        /** Put this captcha on a map in the player's hand. */
+        void draw(CaptchaPicture picture);
     }
 
     private static final Claim.Waiting NOTHING = new Claim.Waiting(false, false, false);
@@ -68,6 +72,7 @@ public final class LimboVisit {
     /** The player arrived in the waiting world. */
     public void arrive() {
         login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING), host).forEach(exit::tell);
+        login.standing(reader, id).ifPresent(this::answer);
     }
 
     /** Tell the player again what to type. */
@@ -106,6 +111,10 @@ public final class LimboVisit {
     private void answer(LimboLogin.Outcome outcome) {
         switch (outcome) {
             case LimboLogin.Outcome.Stay stay -> exit.tell(stay.said());
+            case LimboLogin.Outcome.Captcha captcha -> {
+                exit.tell(captcha.said());
+                exit.draw(captcha.picture());
+            }
             case LimboLogin.Outcome.In in -> {
                 if (over.compareAndSet(false, true)) {
                     sessions.loggedIn(id, in.method());

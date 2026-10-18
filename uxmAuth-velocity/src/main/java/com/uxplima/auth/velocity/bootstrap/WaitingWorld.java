@@ -2,6 +2,7 @@ package com.uxplima.auth.velocity.bootstrap;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,7 @@ import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.port.RememberedSessions;
+import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
@@ -100,14 +102,15 @@ final class WaitingWorld implements AutoCloseable {
         Set<String> login = CommandFile.labels(commands, "login");
         Set<String> register = CommandFile.labels(commands, "register");
         Set<String> change = CommandFile.labels(commands, "changepassword");
-        LimboLogin.Words labels = new LimboLogin.Words(() -> login, () -> register, () -> change);
+        Set<String> captcha = CommandFile.labels(commands, "captcha");
+        LimboLogin.Words labels = new LimboLogin.Words(() -> login, () -> register, () -> change, () -> captcha);
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
         LimboWait wait = new LimboWait(
                 LimboWorld.open(
                         limboApi,
                         folder,
                         settings.current().network(),
-                        metas(List.of(login, register, change)),
+                        metas(List.of(login, register, change, captcha)),
                         logger),
                 network::waitsAtTheProxy,
                 (player, exit) -> visit(passwords, network, guards.remember(), player, exit),
@@ -144,6 +147,8 @@ final class WaitingWorld implements AutoCloseable {
         Hashing hashing = boot.hashers();
         Sessions sessions = new Sessions();
         Clock clock = Clock.systemUTC();
+        Captchas captchas =
+                new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), clock::instant);
         return new LimboLogin(
                 new ReadTheName(
                         accounts,
@@ -156,7 +161,8 @@ final class WaitingWorld implements AutoCloseable {
                         sessions,
                         clock,
                         guards.failures(),
-                        () -> settings.current().passwordPolicy()),
+                        () -> settings.current().passwordPolicy(),
+                        captchas),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -165,8 +171,10 @@ final class WaitingWorld implements AutoCloseable {
                         () -> settings.current().passwordPolicy(),
                         clock,
                         guards.cap(),
-                        guards.breaches()),
+                        guards.breaches(),
+                        captchas::blocksRegistration),
                 change(settings, accounts, new Hashers(hashing, hashingLane), sessions, guards),
+                captchas,
                 sessions,
                 words,
                 labels,

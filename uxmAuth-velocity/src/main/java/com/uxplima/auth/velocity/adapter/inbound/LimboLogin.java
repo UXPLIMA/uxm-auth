@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -24,9 +25,11 @@ import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.RegisterResult;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.protection.Captchas;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.protection.CaptchaPicture;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.uxmlib.text.Text;
@@ -56,6 +59,14 @@ public final class LimboLogin {
             }
         }
 
+        /** The player stays, reads this, and is shown this captcha on a map in the hand. */
+        record Captcha(Component said, CaptchaPicture picture) implements Outcome {
+            public Captcha {
+                Objects.requireNonNull(said, "said");
+                Objects.requireNonNull(picture, "picture");
+            }
+        }
+
         /** The player is sent away, for this reason. */
         record Out(Component reason) implements Outcome {
             public Out {
@@ -64,15 +75,17 @@ public final class LimboLogin {
         }
     }
 
-    /** The words of /login, /register and /changepassword, as commands.conf names them. */
+    /** The words of /login, /register, /changepassword and /captcha, as commands.conf names them. */
     public record Words(
             Supplier<Set<String>> loginLabels,
             Supplier<Set<String>> registerLabels,
-            Supplier<Set<String>> changeLabels) {
+            Supplier<Set<String>> changeLabels,
+            Supplier<Set<String>> captchaLabels) {
         public Words {
             Objects.requireNonNull(loginLabels, "loginLabels");
             Objects.requireNonNull(registerLabels, "registerLabels");
             Objects.requireNonNull(changeLabels, "changeLabels");
+            Objects.requireNonNull(captchaLabels, "captchaLabels");
         }
     }
 
@@ -80,6 +93,7 @@ public final class LimboLogin {
     private final LogIn logIn;
     private final RegisterAccount register;
     private final ChangePassword change;
+    private final Captchas captchas;
     private final Sessions sessions;
     private final Messages messages;
     private final TimeWords times;
@@ -91,6 +105,7 @@ public final class LimboLogin {
             LogIn logIn,
             RegisterAccount register,
             ChangePassword change,
+            Captchas captchas,
             Sessions sessions,
             Messages messages,
             Words words,
@@ -99,6 +114,7 @@ public final class LimboLogin {
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.register = Objects.requireNonNull(register, "register");
         this.change = Objects.requireNonNull(change, "change");
+        this.captchas = Objects.requireNonNull(captchas, "captchas");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.times = new TimeWords(messages);
@@ -148,15 +164,52 @@ public final class LimboLogin {
         if (words.registerLabels().get().contains(label) && !rest.isEmpty()) {
             return registered(reader, id, name, rest, address);
         }
+        if (words.captchaLabels().get().contains(label) && rest.size() == 1) {
+            return CompletableFuture.completedFuture(answered(reader, id, rest.getFirst()));
+        }
         if (words.changeLabels().get().contains(label) && replacing(id)) {
             return replaced(reader, id, rest);
         }
         return CompletableFuture.completedFuture(new Outcome.Stay(reminder(reader, id)));
     }
 
+    /** The captcha that stands before what this player does next, drawn fresh, when one does. */
+    public Optional<Outcome> standing(Audience reader, UUID id) {
+        Objects.requireNonNull(reader, "reader");
+        boolean stands =
+                switch (sessions.state(Objects.requireNonNull(id, "id")).orElse(null)) {
+                    case AuthState.Unregistered unregistered -> captchas.blocksRegistration(id);
+                    case AuthState.Registered waiting ->
+                        captchas.blocks(id, waiting.account().name());
+                    case null, default -> false;
+                };
+        return stands ? Optional.of(captcha(reader, id, Keys.CAPTCHA_NEEDED)) : Optional.empty();
+    }
+
     /** The player left the waiting world. */
     public void leave(UUID id) {
         sessions.close(Objects.requireNonNull(id, "id"));
+        captchas.forget(id);
+    }
+
+    /** The answer to the latest captcha: the right code frees the way, any other draws a new one. */
+    private Outcome answered(Audience reader, UUID id, String code) {
+        if (captchas.code(id).isEmpty()) {
+            return new Outcome.Stay(messages.render(reader, Keys.CAPTCHA_NOTHING));
+        }
+        if (!captchas.solve(id, code)) {
+            return captcha(reader, id, Keys.CAPTCHA_WRONG);
+        }
+        return new Outcome.Stay(messages.render(reader, Keys.CAPTCHA_SOLVED)
+                .append(Component.newline())
+                .append(reminder(reader, id)));
+    }
+
+    private Outcome.Captcha captcha(Audience reader, UUID id, Keys why) {
+        Component said = messages.render(reader, why)
+                .append(Component.newline())
+                .append(messages.render(reader, Keys.CAPTCHA_MAP));
+        return new Outcome.Captcha(said, captchas.showPicture(id));
     }
 
     private CompletableFuture<Outcome> registered(
@@ -207,7 +260,7 @@ public final class LimboLogin {
                 new Outcome.Stay(PasswordWords.reason(messages, reader, mustReplace.why())
                         .map(why -> why.append(Component.newline()).append(reminder(reader, id)))
                         .orElseGet(() -> reminder(reader, id)));
-            case LoginResult.CaptchaNeeded needed -> new Outcome.Stay(messages.render(reader, Keys.CAPTCHA_NEEDED));
+            case LoginResult.CaptchaNeeded needed -> captcha(reader, id, Keys.CAPTCHA_NEEDED);
             case LoginResult.NotRegistered notRegistered ->
                 new Outcome.Stay(messages.render(reader, Keys.LOGIN_NOT_REGISTERED));
             case LoginResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
@@ -228,7 +281,7 @@ public final class LimboLogin {
                         Text.placeholder("name", taken.stored().value())));
             case RegisterResult.TooManyAccounts tooMany ->
                 new Outcome.Stay(messages.render(reader, Keys.REGISTER_TOO_MANY_ACCOUNTS));
-            case RegisterResult.CaptchaNeeded needed -> new Outcome.Stay(messages.render(reader, Keys.CAPTCHA_NEEDED));
+            case RegisterResult.CaptchaNeeded needed -> captcha(reader, id, Keys.CAPTCHA_NEEDED);
             case RegisterResult.AlreadyRegistered already ->
                 new Outcome.Stay(messages.render(reader, Keys.REGISTER_ALREADY));
             case RegisterResult.Gone gone -> new Outcome.Stay(reminder(reader, id));

@@ -95,6 +95,20 @@ public final class ProxyWorld implements AutoCloseable {
     public final DoorWords words = new DoorWords(messages);
     public final HashingLane lane = new HashingLane(1, 1, 16);
     public final Hashing hashing = new Hashing(new Argon2idHasher(1024, 1, 1), List.of(new BcryptHasher(4)));
+    /** When this world asks a captcha; off until a test sets it. */
+    public com.uxplima.auth.application.protection.Captchas.Settings captchaSettings =
+            new com.uxplima.auth.application.protection.Captchas.Settings(
+                    com.uxplima.auth.application.protection.Captchas.When.OFF,
+                    1,
+                    5,
+                    "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                    Duration.ofMinutes(60),
+                    com.uxplima.auth.application.protection.Captchas.JavaScreen.MAP);
+
+    public final com.uxplima.auth.application.protection.Captchas captchas =
+            new com.uxplima.auth.application.protection.Captchas(
+                    () -> captchaSettings, new java.util.SplittableRandom(13), Instant::now);
+
     /** Today's password rules in this world; a test makes them stricter. */
     public PasswordPolicy policy = new PasswordPolicy(6, 64, Pattern.compile("\\S+"), Set.of(), 0);
 
@@ -152,8 +166,17 @@ public final class ProxyWorld implements AutoCloseable {
         NamePolicy names = new NamePolicy(Pattern.compile("[A-Za-z0-9_+]+"), 3, 16, List.of());
         return new LimboLogin(
                 new ReadTheName(accounts, () -> names, () -> 3),
-                new LogIn(accounts, hashing, lane, sessions, clock, failures, () -> policy),
-                new RegisterAccount(accounts, hashing, lane, sessions, () -> policy, clock, cap),
+                new LogIn(accounts, hashing, lane, sessions, clock, failures, () -> policy, captchas),
+                new RegisterAccount(
+                        accounts,
+                        hashing,
+                        lane,
+                        sessions,
+                        () -> policy,
+                        clock,
+                        cap,
+                        com.uxplima.auth.application.port.BreachedPasswords.NONE,
+                        captchas::blocksRegistration),
                 new ChangePassword(
                         accounts,
                         hashing,
@@ -162,12 +185,14 @@ public final class ProxyWorld implements AutoCloseable {
                         () -> policy,
                         new LocalEvents(),
                         new SqlRememberedSessions(database, clock)),
+                captchas,
                 sessions,
                 messages,
                 new LimboLogin.Words(
                         () -> Set.of("login", "l", "giris"),
                         () -> Set.of("register", "reg"),
-                        () -> Set.of("changepassword", "cp")),
+                        () -> Set.of("changepassword", "cp"),
+                        () -> Set.of("captcha", "dogrula")),
                 () -> asksTwice);
     }
 

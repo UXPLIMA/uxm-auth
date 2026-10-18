@@ -161,4 +161,21 @@ final class LimboWaitTest {
         made.tell(Component.text("hello"));
         verify(player).sendMessage(Component.text("hello"));
     }
+
+    @Test
+    @DisplayName("a captcha goes on a map in the hand, drawn pixel for pixel")
+    void theCaptchaGoesOnAMap() {
+        spawned().onSpawn(limbo, inWorld);
+        com.uxplima.auth.domain.protection.CaptchaPicture picture =
+                com.uxplima.auth.domain.protection.CaptchaPicture.draw("K7QXR", new java.util.SplittableRandom(2));
+
+        java.util.Objects.requireNonNull(exit).draw(picture);
+
+        ArgumentCaptor<java.awt.image.BufferedImage> image =
+                ArgumentCaptor.forClass(java.awt.image.BufferedImage.class);
+        verify(inWorld).sendImage(image.capture());
+        java.awt.image.BufferedImage expected = com.uxplima.auth.adapter.outbound.CaptchaImage.of(picture);
+        assertThat(image.getValue().getRGB(0, 0, 128, 128, null, 0, 128))
+                .isEqualTo(expected.getRGB(0, 0, 128, 128, null, 0, 128));
+    }
 }
