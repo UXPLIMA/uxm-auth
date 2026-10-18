@@ -726,6 +726,16 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("logins are kept ninety days by default, as long as the operator says, and never less than a day")
+    void historyIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").staff().historyKeep()).isEqualTo(Duration.ofDays(90));
+        assertThat(settingsFrom(folder, "history { keep-days = 7 }\n").staff().historyKeep())
+                .isEqualTo(Duration.ofDays(7));
+        assertThatThrownBy(() -> settingsFrom(folder, "history { keep-days = 0 }\n"))
+                .hasMessageContaining("history.keep-days");
+    }
+
+    @Test
     @DisplayName("three password accounts a day per address by default, with exempt addresses")
     void accountsAreRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().accounts())

@@ -78,6 +78,7 @@ public final class Door {
     private final Notices notices;
     private final Reports reports;
     private final Remembering remembering;
+    private final LoginRecords records;
     private final Duty duty;
 
     public Door(
@@ -91,6 +92,7 @@ public final class Door {
             Notices notices,
             Reports reports,
             Remembering remembering,
+            LoginRecords records,
             Duty duty) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.keeper = Objects.requireNonNull(keeper, "keeper");
@@ -102,6 +104,7 @@ public final class Door {
         this.notices = Objects.requireNonNull(notices, "notices");
         this.reports = Objects.requireNonNull(reports, "reports");
         this.remembering = Objects.requireNonNull(remembering, "remembering");
+        this.records = Objects.requireNonNull(records, "records");
         this.duty = Objects.requireNonNull(duty, "duty");
     }
 
@@ -139,6 +142,7 @@ public final class Door {
             reports.loggedIn(player, in.method());
         }
         remembering.loggedIn(player, in);
+        records.loggedIn(player, in);
         // Let in before the world, by the dialog, by a session, by Floodgate or by Mojang: the way-in moment
         // waited for a world.
         welcomes.take(player.getUniqueId())
@@ -186,6 +190,7 @@ public final class Door {
                 .ifPresent(in -> {
                     reports.loggedIn(player, in.method());
                     remembering.loggedIn(player, in);
+                    records.loggedIn(player, in);
                 });
         moments.fire(player, moment);
         notices.deliver(player, true);

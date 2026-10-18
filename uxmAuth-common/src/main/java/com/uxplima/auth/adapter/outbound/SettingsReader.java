@@ -274,7 +274,7 @@ final class SettingsReader {
         return sources;
     }
 
-    private static int positive(HoconConfig config, String path, int fallback) {
+    static int positive(HoconConfig config, String path, int fallback) {
         int value = config.getInt(path, fallback);
         if (value < 1) {
             throw new IllegalArgumentException(path + " must be at least 1, got: " + value);

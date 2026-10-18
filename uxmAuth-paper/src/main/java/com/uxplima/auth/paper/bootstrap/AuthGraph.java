@@ -27,6 +27,7 @@ import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
+import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
@@ -77,6 +78,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
+import com.uxplima.auth.paper.adapter.inbound.hold.LoginRecords;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.inbound.hold.Remembering;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
@@ -150,6 +152,7 @@ final class AuthGraph implements AutoCloseable {
     final TwoFactorCommand twoFactor;
     final EmailCommand email;
     private final AddressDuty addressDuty;
+    final SqlLoginHistory history;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -168,6 +171,7 @@ final class AuthGraph implements AutoCloseable {
     private final CountryUpkeep countryUpkeep;
     private final Scheduler scheduler;
     private @Nullable TaskHandle countryTask;
+    private final TaskHandle historyTask;
     private final NetworkEvents events;
     private final ChannelReports channelReports;
     private final ServerHellos hellos;
@@ -193,6 +197,7 @@ final class AuthGraph implements AutoCloseable {
         Hashing hashing = boot.hashers();
         SqlAccountRepository accounts = new SqlAccountRepository(database);
         SqlRememberedSessions remembered = new SqlRememberedSessions(database);
+        this.history = new SqlLoginHistory(database);
         Remember remember = new Remember(
                 remembered,
                 () -> settings.current().protection().sessions(),
@@ -362,6 +367,13 @@ final class AuthGraph implements AutoCloseable {
         MailGraph.Email email = mail.email(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         this.email = email.command();
         this.addressDuty = email.duty();
+        LoginRecords records =
+                new LoginRecords(history, task -> scheduler.async(task), clock, plugin.getLogger()::warning);
+        // At start, and once a day after, a login older than the window goes.
+        this.historyTask = scheduler.asyncTimer(
+                Duration.ZERO,
+                Duration.ofDays(1),
+                task -> records.prune(settings.current().staff().historyKeep()));
         Door door = new Door(
                 sessions,
                 keeper,
@@ -373,6 +385,7 @@ final class AuthGraph implements AutoCloseable {
                 notices,
                 channelReports,
                 remembering,
+                records,
                 Door.Duty.inTurn(factors.duty, addressDuty));
 
         this.connections = new ConnectionListener(
@@ -494,6 +507,7 @@ final class AuthGraph implements AutoCloseable {
 
     @Override
     public void close() {
+        historyTask.cancel();
         if (countryTask != null) {
             countryTask.cancel();
         }

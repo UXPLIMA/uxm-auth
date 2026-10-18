@@ -198,6 +198,7 @@ public final class AuthWorld implements AutoCloseable {
         this.remembered = new SqlRememberedSessions(database, clock);
         this.remember = new Remember(remembered, () -> sessionSettings, this::sharedAddresses, clock::instant);
         this.remembering = new Remembering(remember, sessions, scheduler);
+        this.history = new com.uxplima.auth.adapter.outbound.SqlLoginHistory(database);
         this.door = new Door(
                 sessions,
                 keeper,
@@ -224,6 +225,8 @@ public final class AuthWorld implements AutoCloseable {
                     }
                 },
                 remembering,
+                new com.uxplima.auth.paper.adapter.inbound.hold.LoginRecords(
+                        history, scheduler::async, clock, message -> {}),
                 Door.Duty.inTurn(lazy(this::setupDuty), lazy(this::addressDuty)));
         AccountCap cap = new AccountCap(accounts, () -> accountSettings, this::sharedAddresses, clock::instant);
         this.captchas = new com.uxplima.auth.application.protection.Captchas(
@@ -447,6 +450,9 @@ public final class AuthWorld implements AutoCloseable {
 
     /** Whether this world's mail is on; a world with it off holds nobody for an address. */
     public boolean mailEnabled = true;
+
+    /** Every login in this world. */
+    public final com.uxplima.auth.adapter.outbound.SqlLoginHistory history;
 
     /** The players held for an address in this world. */
     public final com.uxplima.auth.paper.adapter.inbound.factor.OwedSetups addressOwed;

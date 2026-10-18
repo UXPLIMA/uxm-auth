@@ -70,6 +70,7 @@ public final class PluginSettings {
             SecondFactorSettings secondFactor,
             MailSettings mail,
             EmailSettings email,
+            StaffSettings staff,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -86,6 +87,7 @@ public final class PluginSettings {
             Objects.requireNonNull(secondFactor, "secondFactor");
             Objects.requireNonNull(mail, "mail");
             Objects.requireNonNull(email, "email");
+            Objects.requireNonNull(staff, "staff");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -240,6 +242,7 @@ public final class PluginSettings {
                 SecondFactorSettings.read(config),
                 MailSettings.read(config),
                 EmailSettings.read(config),
+                StaffSettings.read(config),
                 lists,
                 common(lists));
     }
