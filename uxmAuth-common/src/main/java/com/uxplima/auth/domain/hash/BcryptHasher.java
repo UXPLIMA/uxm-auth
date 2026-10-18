@@ -21,12 +21,22 @@ public final class BcryptHasher implements PasswordHasher {
     private static final int SALT_BYTES = 16;
 
     private final int cost;
+    private final String version;
 
     public BcryptHasher(int cost) {
+        this(cost, "2b");
+    }
+
+    /** @param version the mark new hashes carry: 2a for a website that writes 2a, 2b otherwise */
+    public BcryptHasher(int cost, String version) {
         if (cost < 4 || cost > 31) {
             throw new IllegalArgumentException("a bcrypt cost is between 4 and 31, got " + cost);
         }
+        if (!version.equals("2a") && !version.equals("2b") && !version.equals("2y")) {
+            throw new IllegalArgumentException("a bcrypt version is 2a, 2b or 2y, got " + version);
+        }
         this.cost = cost;
+        this.version = version;
     }
 
     @Override
@@ -39,7 +49,7 @@ public final class BcryptHasher implements PasswordHasher {
         Objects.requireNonNull(password, "password");
         char[] chars = password.chars();
         try {
-            return new PasswordHash(OpenBSDBCrypt.generate("2b", chars, Salts.next(SALT_BYTES), cost));
+            return new PasswordHash(OpenBSDBCrypt.generate(version, chars, Salts.next(SALT_BYTES), cost));
         } finally {
             Arrays.fill(chars, '\0');
         }
