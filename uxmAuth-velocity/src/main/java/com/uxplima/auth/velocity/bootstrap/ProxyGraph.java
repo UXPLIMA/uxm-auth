@@ -16,6 +16,7 @@ import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
@@ -28,6 +29,7 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.network.Bulletins;
@@ -84,11 +86,29 @@ final class ProxyGraph implements AutoCloseable {
         }
         Clock clock = Clock.systemUTC();
         SqlAccountRepository accounts = new SqlAccountRepository(database);
-        SqlDisputes disputes = new SqlDisputes(database);
+        ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
+        Remember remember = new Remember(
+                new SqlRememberedSessions(database, clock),
+                () -> settings.current().protection().sessions(),
+                () -> settings.current().protection().sharedHosts(),
+                clock::instant);
+        AddressBans bans = new AddressBans(
+                new SqlAddressTallies(database),
+                () -> settings.current().protection().bans(),
+                () -> settings.current().protection().sharedHosts(),
+                clock::instant);
+        Admission admission =
+                new Admission(() -> settings.current().protection().sharedHosts(), List.of(bans.rule()));
+        ProxySessions sessions = listen(
+                door, admission, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
+        waiting.open(settings, accounts, words, sessions, remember);
+        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+    }
+
+    private ProxyDoor door(PluginSettings settings, SqlAccountRepository accounts, SqlDisputes disputes, Clock clock) {
         UuidScheme scheme = settings.current().ownership().uuidScheme();
-        AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
-        ProxyDoor door = new ProxyDoor(
-                atTheDoor,
+        return new ProxyDoor(
+                atTheDoor(settings, accounts, disputes, clock),
                 new LetPremiumIn(
                         accounts,
                         disputes,
@@ -104,15 +124,6 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
                 clock);
-        Remember remember = new Remember(
-                new SqlRememberedSessions(database, clock),
-                () -> settings.current().protection().sessions(),
-                () -> settings.current().protection().sharedHosts(),
-                clock::instant);
-        ProxySessions sessions =
-                listen(door, settings, words, clock, new SqlLastServers(database, clock), remember, accounts);
-        waiting.open(settings, accounts, words, sessions, remember);
-        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
     }
 
     /**
@@ -121,6 +132,7 @@ final class ProxyGraph implements AutoCloseable {
      */
     private ProxySessions listen(
             ProxyDoor door,
+            Admission admission,
             PluginSettings settings,
             Messages words,
             Clock clock,
@@ -129,21 +141,9 @@ final class ProxyGraph implements AutoCloseable {
             SqlAccountRepository accounts) {
         ProxySessions sessions = new ProxySessions();
         Supplier<Optional<Claims>> claims = claims(settings);
-        RouteListener routes = new RouteListener(
-                sessions,
-                () -> settings.current().network().routing(),
-                lastServers,
-                proxy::getServer,
-                this::playersOnline,
-                RandomGenerator.getDefault());
+        RouteListener routes = routes(sessions, settings, lastServers);
         register(new DoorListener(
-                door,
-                new Admission(() -> settings.current().protection().sharedHosts(), List.of()),
-                remember,
-                accounts::findById,
-                sessions,
-                new DoorWords(words),
-                logger));
+                door, admission, remember, accounts::findById, sessions, new DoorWords(words), logger));
         register(new HoldListener(
                 sessions,
                 proxy.getCommandManager(),
@@ -159,6 +159,16 @@ final class ProxyGraph implements AutoCloseable {
         bulletins.listen(new EndedSessions(sessions));
         this.events = bulletins;
         return sessions;
+    }
+
+    private RouteListener routes(ProxySessions sessions, PluginSettings settings, LastServers lastServers) {
+        return new RouteListener(
+                sessions,
+                () -> settings.current().network().routing(),
+                lastServers,
+                proxy::getServer,
+                this::playersOnline,
+                RandomGenerator.getDefault());
     }
 
     @Override

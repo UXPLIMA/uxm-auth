@@ -1,10 +1,13 @@
 package com.uxplima.auth.adapter.outbound;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import com.uxplima.auth.application.message.Keys;
@@ -24,9 +27,11 @@ import com.uxplima.uxmlib.text.message.Messages;
 public final class DoorWords {
 
     private final Messages messages;
+    private final TimeWords times;
 
     public DoorWords(Messages messages) {
         this.messages = Objects.requireNonNull(messages, "messages");
+        this.times = new TimeWords(messages);
     }
 
     /** Why the identity decision turned the connection away; {@code movedTo} names a moved account. */
@@ -77,9 +82,10 @@ public final class DoorWords {
     /** Why one of the door's rules turned the connection away, read before anybody knows its language. */
     public Component admission(Admission.Refused refused) {
         Objects.requireNonNull(refused, "refused");
-        TagResolver[] values = refused.values().entrySet().stream()
-                .map(entry -> Text.placeholder(entry.getKey(), entry.getValue()))
-                .toArray(TagResolver[]::new);
-        return messages.render(Audience.empty(), refused.key(), values);
+        Audience nobody = Audience.empty();
+        List<TagResolver> values = new ArrayList<>();
+        refused.values().forEach((name, value) -> values.add(Text.placeholder(name, value)));
+        values.add(Placeholder.component("time", times.left(nobody, refused.lasts())));
+        return messages.render(nobody, refused.key(), values.toArray(TagResolver[]::new));
     }
 }

@@ -20,6 +20,7 @@ import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.premium.PremiumSources;
@@ -38,6 +39,7 @@ import com.uxplima.auth.application.premium.LetPremiumIn;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
+import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.domain.hash.Hashing;
@@ -152,6 +154,11 @@ final class AuthGraph implements AutoCloseable {
         Remember remember = new Remember(
                 remembered,
                 () -> settings.current().protection().sessions(),
+                () -> settings.current().protection().sharedHosts(),
+                Instant::now);
+        AddressBans bans = new AddressBans(
+                new SqlAddressTallies(database),
+                () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedHosts(),
                 Instant::now);
         Clock clock = Clock.systemUTC();
@@ -288,7 +295,7 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        new Admission(() -> settings.current().protection().sharedHosts(), List.of()),
+                        new Admission(() -> settings.current().protection().sharedHosts(), List.of(bans.rule())),
                         remember::resumes),
                 notices,
                 door,

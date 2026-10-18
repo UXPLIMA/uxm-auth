@@ -455,6 +455,35 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("bans climb 5 minutes, 30, an hour, a day after three failures and forgive after a quiet day")
+    void bansAreRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").protection().bans())
+                .isEqualTo(new com.uxplima.auth.domain.protection.BanSteps(
+                        java.util.List.of(
+                                java.time.Duration.ofMinutes(5),
+                                java.time.Duration.ofMinutes(30),
+                                java.time.Duration.ofMinutes(60),
+                                java.time.Duration.ofMinutes(1440)),
+                        3,
+                        java.time.Duration.ofHours(24)));
+        assertThat(settingsFrom(
+                                folder,
+                                "protection { bans { steps-minutes = [1, 2], failures = 5, forgive-after-hours = 6 } }\n")
+                        .protection()
+                        .bans())
+                .isEqualTo(new com.uxplima.auth.domain.protection.BanSteps(
+                        java.util.List.of(java.time.Duration.ofMinutes(1), java.time.Duration.ofMinutes(2)),
+                        5,
+                        java.time.Duration.ofHours(6)));
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { bans { steps-minutes = [] } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.bans");
+        assertThatThrownBy(() -> settingsFrom(folder, "protection { bans { failures = 0 } }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protection.bans");
+    }
+
+    @Test
     @DisplayName("no host is a shared-address filter until the operator lists one")
     void sharedHostsAreListed(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").protection().sharedHosts().matches("mc.tcpshield.com"))

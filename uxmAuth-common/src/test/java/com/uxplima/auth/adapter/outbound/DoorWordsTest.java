@@ -63,4 +63,21 @@ final class DoorWordsTest {
                 .contains("Notch");
         assertThat(plain(words.name(new NameVerdict.Blocked("admin")))).contains("admin");
     }
+
+    @Test
+    @DisplayName("a refusal that runs out says how long is left, in its two largest units")
+    void aBanSaysTheTimeLeft() {
+        assertThat(plain(words.admission(new com.uxplima.auth.application.protection.Admission.Refused(
+                        Keys.KICK_BANNED,
+                        Map.of(),
+                        java.time.Duration.ofMinutes(90).plusSeconds(20)))))
+                .contains("1h 30m")
+                .doesNotContain("1h 30m 20s");
+        assertThat(plain(words.admission(new com.uxplima.auth.application.protection.Admission.Refused(
+                        Keys.KICK_BANNED, Map.of(), java.time.Duration.ofDays(1)))))
+                .contains("in <value>1d<body>");
+        assertThat(plain(words.admission(new com.uxplima.auth.application.protection.Admission.Refused(
+                        Keys.KICK_BANNED, Map.of(), java.time.Duration.ofMillis(400)))))
+                .contains("in <value>1s<body>");
+    }
 }

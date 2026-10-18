@@ -5,15 +5,33 @@ import java.util.List;
 import java.util.Locale;
 
 import com.uxplima.auth.application.protection.Remember;
+import com.uxplima.auth.domain.protection.BanSteps;
 import com.uxplima.uxmlib.config.HoconConfig;
 
 /** Reads the protection block of config.conf into its record. */
 final class ProtectionReader {
 
+    private static final List<Integer> SHIPPED_STEPS = List.of(5, 30, 60, 1440);
+
     private ProtectionReader() {}
 
     static ProtectionSettings protection(HoconConfig config) {
-        return new ProtectionSettings(list(config, "shared-address-hosts"), sessions(config));
+        return new ProtectionSettings(list(config, "shared-address-hosts"), sessions(config), bans(config));
+    }
+
+    private static BanSteps bans(HoconConfig config) {
+        List<Duration> steps = (config.nodeAt("protection", "bans", "steps-minutes")
+                                .virtual()
+                        ? SHIPPED_STEPS
+                        : config.getList("protection.bans.steps-minutes", Integer.class))
+                .stream().map(minutes -> Duration.ofMinutes(minutes)).toList();
+        int failures = config.getInt("protection.bans.failures", 3);
+        int hours = config.getInt("protection.bans.forgive-after-hours", 24);
+        try {
+            return new BanSteps(steps, failures, Duration.ofHours(hours));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("protection.bans: " + wrong.getMessage(), wrong);
+        }
     }
 
     private static Remember.Settings sessions(HoconConfig config) {

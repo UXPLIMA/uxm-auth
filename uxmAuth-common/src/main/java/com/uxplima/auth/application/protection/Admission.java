@@ -1,5 +1,6 @@
 package com.uxplima.auth.application.protection;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,11 +28,20 @@ public final class Admission {
         }
     }
 
-    /** Why a connection is turned away: the message, and what fills its placeholders. */
-    public record Refused(Keys key, Map<String, String> values) {
+    /**
+     * Why a connection is turned away: the message, what fills its placeholders, and how long the refusal lasts,
+     * nothing for one that does not run out.
+     */
+    public record Refused(Keys key, Map<String, String> values, Duration lasts) {
         public Refused {
             Objects.requireNonNull(key, "key");
             values = Map.copyOf(Objects.requireNonNull(values, "values"));
+            Objects.requireNonNull(lasts, "lasts");
+        }
+
+        /** A refusal that does not run out. */
+        public Refused(Keys key, Map<String, String> values) {
+            this(key, values, Duration.ZERO);
         }
     }
 
