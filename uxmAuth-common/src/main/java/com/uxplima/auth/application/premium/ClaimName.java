@@ -65,6 +65,8 @@ public final class ClaimName {
             }
             case AuthState.Registered registered ->
                 asked(address, registered.account().name());
+            case AuthState.SecondFactor waiting ->
+                asked(address, waiting.account().name());
             case AuthState.Unregistered unregistered -> asked(address, unregistered.name());
         };
     }

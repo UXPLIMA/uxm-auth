@@ -32,6 +32,10 @@ final class ScreenFileTest {
         assertThat(screens.register().label("password")).isEqualTo("@screen.register.password");
         assertThat(screens.login().label("submit")).isEqualTo("@screen.login.submit");
         assertThat(screens.loginWorld()).isEqualTo("uxmauth_login");
+        assertThat(screens.code().title()).isEqualTo("@screen.code.title");
+        assertThat(screens.code().label("code")).isEqualTo("@screen.code.code");
+        assertThat(screens.code().label("submit")).isEqualTo("@screen.code.submit");
+        assertThat(screens.code().label("cancel")).isEqualTo("@screen.code.cancel");
     }
 
     @Test

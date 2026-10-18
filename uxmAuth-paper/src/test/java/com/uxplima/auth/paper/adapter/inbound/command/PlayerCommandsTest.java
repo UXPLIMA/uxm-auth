@@ -340,6 +340,24 @@ final class PlayerCommandsTest {
     }
 
     @Test
+    @DisplayName("a right password on an account with the app says to type the code and shows the code screen")
+    void aLoginAsksTheCodeNext() {
+        world.registered(steve, "hunter22");
+        world.appOn(steve);
+        world.door.hold(steve);
+        world.scheduler.drain();
+        drain();
+        world.fired.clear();
+
+        world.scheduler.settle(login().attempt(steve, "hunter22"));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.FACTOR_CODE_NEEDED));
+        assertThat(offered).containsExactly("Steve:code");
+        assertThat(world.fired).doesNotContain(AuthSettings.Moment.LOGGED_IN);
+    }
+
+    @Test
     @DisplayName("a registration the captcha stands before says so and shows the captcha")
     void aRegistrationWaitsForTheCaptcha() {
         world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
@@ -445,7 +463,21 @@ final class PlayerCommandsTest {
                 world.messages,
                 world.replies,
                 (reader, id, reason) -> offered.add(((org.bukkit.entity.Player) reader).getName() + ":"
-                        + plain(java.util.Objects.requireNonNull(reason))));
+                        + plain(java.util.Objects.requireNonNull(reason))),
+                new com.uxplima.auth.paper.adapter.inbound.screen.FactorOffer() {
+                    @Override
+                    public void offer(
+                            net.kyori.adventure.audience.Audience reader,
+                            net.kyori.adventure.text.@org.jspecify.annotations.Nullable Component reason) {
+                        offered.add(((org.bukkit.entity.Player) reader).getName() + ":code");
+                    }
+
+                    @Override
+                    public java.util.concurrent.CompletableFuture<Void> answer(
+                            com.uxplima.auth.paper.adapter.inbound.screen.Guest guest, String code) {
+                        return java.util.concurrent.CompletableFuture.completedFuture(null);
+                    }
+                });
     }
 
     private RegisterCommand register(AuthSettings.Passwords passwords) {

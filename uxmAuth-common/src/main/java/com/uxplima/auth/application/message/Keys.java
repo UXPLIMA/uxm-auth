@@ -84,8 +84,11 @@ public enum Keys implements MessageKey {
     JOIN_REGISTER_SUBTITLE("join.register-subtitle", "<body>Choose a password with <value>/register"),
     JOIN_LOGIN_TITLE("join.login-title", "<value>Welcome back"),
     JOIN_LOGIN_SUBTITLE("join.login-subtitle", "<body>Log in with <value>/login"),
+    JOIN_CODE_TITLE("join.code-title", "<value>One more step"),
+    JOIN_CODE_SUBTITLE("join.code-subtitle", "<body>Type the code from your app with <value>/2fa"),
     REMINDER_REGISTER("reminder.register", "<body>Register with <value>/register <password> <password>"),
     REMINDER_LOGIN("reminder.login", "<body>Log in with <value>/login <password>"),
+    REMINDER_CODE("reminder.code", "<body>Type the code from your app with <value>/2fa <code>"),
     WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
@@ -232,6 +235,12 @@ public enum Keys implements MessageKey {
                     + " <value>/2fa off <code><body>."),
     FACTOR_NOT_ON("factor.not-on", "<etag:'ERROR'> <body>Your account asks no code from an app."),
     FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
+    FACTOR_CODE_NEEDED(
+            "factor.code-needed", "<body>Now type the code from your authenticator app with <value>/2fa <code><body>."),
+    FACTOR_LOGIN_WRONG(
+            "factor.login-wrong",
+            "<etag:'ERROR'> <body>That is not the code your app shows now. Tries left: <value><left><body>."),
+    FACTOR_NOTHING_ASKED("factor.nothing-asked", "<etag:'ERROR'> <body>No code is asked of you now."),
     SESSION_LOG_IN_FIRST("session.log-in-first", "<etag:'ERROR'> <body>Log in first, then choose."),
     SESSION_NOT_CHOSEN(
             "session.not-chosen",
@@ -303,6 +312,11 @@ public enum Keys implements MessageKey {
     SCREEN_CAPTCHA_CODE("screen.captcha.code", "Code"),
     SCREEN_CAPTCHA_SUBMIT("screen.captcha.submit", "Continue"),
     SCREEN_CAPTCHA_CANCEL("screen.captcha.cancel", "Leave"),
+    SCREEN_CODE_TITLE("screen.code.title", "<value>One more step"),
+    SCREEN_CODE_BODY("screen.code.body", "<body>Type the code your authenticator app shows for this server."),
+    SCREEN_CODE_CODE("screen.code.code", "Code"),
+    SCREEN_CODE_SUBMIT("screen.code.submit", "Log in"),
+    SCREEN_CODE_CANCEL("screen.code.cancel", "Leave"),
     SCREEN_FACTOR_TITLE("screen.factor.title", "<value>Authenticator app"),
     SCREEN_FACTOR_BODY(
             "screen.factor.body",

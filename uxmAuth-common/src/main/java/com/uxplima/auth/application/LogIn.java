@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
@@ -79,6 +80,7 @@ public final class LogIn {
     private final Failures failures;
     private final Supplier<PasswordPolicy> policy;
     private final Captcha captcha;
+    private final SecondStep secondStep;
 
     public LogIn(AccountRepository accounts, Hashing hashing, HashingLane lane, Sessions sessions, Clock clock) {
         this(accounts, hashing, lane, sessions, clock, (address, host) -> Optional.empty());
@@ -117,6 +119,20 @@ public final class LogIn {
             Failures failures,
             Supplier<PasswordPolicy> policy,
             Captcha captcha) {
+        this(accounts, hashing, lane, sessions, clock, failures, policy, captcha, SecondStep.NONE);
+    }
+
+    /** @param secondStep whether a right password leads to a code from the app before the login is whole */
+    public LogIn(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Clock clock,
+            Failures failures,
+            Supplier<PasswordPolicy> policy,
+            Captcha captcha,
+            SecondStep secondStep) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -125,6 +141,7 @@ public final class LogIn {
         this.failures = Objects.requireNonNull(failures, "failures");
         this.policy = Objects.requireNonNull(policy, "policy");
         this.captcha = Objects.requireNonNull(captcha, "captcha");
+        this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
     }
 
     /** The password is wiped once the answer is known, whatever it is. */
@@ -187,6 +204,7 @@ public final class LogIn {
             case AuthState.Authenticated authenticated -> new LoginResult.AlreadyLoggedIn();
             case AuthState.Replacing replacing -> new LoginResult.MustReplace(replacing.why());
             case AuthState.Registered waiting -> new LoginResult.TooManyAttempts();
+            case AuthState.SecondFactor waiting -> new LoginResult.CodeNeeded();
         };
     }
 
@@ -226,22 +244,31 @@ public final class LogIn {
                 : new LoginResult.Wrong(afterThisOne.left());
     }
 
-    /** A right password logs in, unless today's rules refuse it: then the player is held to replace it. */
+    /**
+     * A right password logs in, unless the account asks a code next, or today's rules refuse the password: then
+     * the player is held for the code, or to replace it. A login waiting for its code is not recorded yet.
+     */
     private LoginResult logIn(UUID connection, long generation, Account account, String address, Password password) {
         if (!sessions.isOpen(connection, generation)) {
             return new LoginResult.Gone();
         }
+        captcha.passed(account.name());
+        PasswordVerdict today = policy.get().check(password);
+        PasswordVerdict weak = today instanceof PasswordVerdict.Accepted ? null : today;
+        if (secondStep.asks(account, AuthMethod.PASSWORD)) {
+            AuthState waiting = secondStep.after(account, AuthMethod.PASSWORD, weak);
+            return sessions.update(
+                            connection, generation, state -> state instanceof AuthState.Registered ? waiting : state)
+                    .<LoginResult>map(state -> new LoginResult.CodeNeeded())
+                    .orElseGet(LoginResult.Gone::new);
+        }
         Instant now = clock.instant();
         accounts.recordLogin(account.id(), now, address);
-        captcha.passed(account.name());
         Account updated = account.loggedIn(now, address);
-        PasswordVerdict today = policy.get().check(password);
-        AuthState next = today instanceof PasswordVerdict.Accepted
+        AuthState next = weak == null
                 ? new AuthState.Authenticated(updated, AuthMethod.PASSWORD)
-                : new AuthState.Replacing(updated, today);
-        LoginResult answer = today instanceof PasswordVerdict.Accepted
-                ? new LoginResult.LoggedIn(updated)
-                : new LoginResult.MustReplace(today);
+                : new AuthState.Replacing(updated, weak);
+        LoginResult answer = weak == null ? new LoginResult.LoggedIn(updated) : new LoginResult.MustReplace(weak);
         return sessions.update(connection, generation, state -> state instanceof AuthState.Registered ? next : state)
                 .map(state -> answer)
                 .orElseGet(LoginResult.Gone::new);

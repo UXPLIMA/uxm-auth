@@ -232,11 +232,7 @@ public final class ConfigurationGate implements Listener {
     }
 
     void showAgain(Waiting entry, Component reason) {
-        shower.show(
-                entry.reader(),
-                entry.state() instanceof AuthState.Unregistered
-                        ? screens.register(entry.reader(), reason)
-                        : screens.login(entry.reader(), reason));
+        shower.show(entry.reader(), screenFor(entry, reason));
     }
 
     Messages messages() {
@@ -265,9 +261,16 @@ public final class ConfigurationGate implements Listener {
     }
 
     private DialogSpec firstScreen(Waiting entry) {
-        return entry.state() instanceof AuthState.Unregistered
-                ? screens.register(entry.reader(), null)
-                : screens.login(entry.reader(), null);
+        return screenFor(entry, null);
+    }
+
+    /** The screen a connection waits on: a registration, the code of the second step, or the password. */
+    private DialogSpec screenFor(Waiting entry, @Nullable Component reason) {
+        return switch (entry.state()) {
+            case AuthState.Unregistered unregistered -> screens.register(entry.reader(), reason);
+            case AuthState.SecondFactor waiting -> screens.code(entry.reader(), reason);
+            default -> screens.login(entry.reader(), reason);
+        };
     }
 
     private Duration limit(AuthState state) {

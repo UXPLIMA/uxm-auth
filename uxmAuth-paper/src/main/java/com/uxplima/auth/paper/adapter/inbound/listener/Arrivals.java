@@ -17,6 +17,7 @@ import net.kyori.adventure.text.Component;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.ReadTheName;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.domain.name.NameVerdict;
@@ -97,6 +98,7 @@ public final class Arrivals {
     private final NetworkDoor network;
     private final Admission admission;
     private final Resume resume;
+    private final SecondStep secondStep;
 
     /**
      * @param mark the domain rule's mark, for a connection through the cracked address
@@ -117,6 +119,35 @@ public final class Arrivals {
             NetworkDoor network,
             Admission admission,
             Resume resume) {
+        this(
+                names,
+                bedrock,
+                hellos,
+                messages,
+                scheduler,
+                profiles,
+                mark,
+                scheme,
+                network,
+                admission,
+                resume,
+                SecondStep.NONE);
+    }
+
+    /** @param secondStep whether a way in that passed leads to the code of the second step */
+    public Arrivals(
+            ReadTheName names,
+            BedrockAdmission bedrock,
+            HelloAtTheDoor hellos,
+            Messages messages,
+            Scheduler scheduler,
+            BiFunction<UUID, String, PlayerProfile> profiles,
+            Supplier<DomainMark> mark,
+            UuidScheme scheme,
+            NetworkDoor network,
+            Admission admission,
+            Resume resume,
+            SecondStep secondStep) {
         this.names = Objects.requireNonNull(names, "names");
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.hellos = Objects.requireNonNull(hellos, "hellos");
@@ -128,6 +159,7 @@ public final class Arrivals {
         this.network = Objects.requireNonNull(network, "network");
         this.admission = Objects.requireNonNull(admission, "admission");
         this.resume = Objects.requireNonNull(resume, "resume");
+        this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
     }
 
     /** What this pre-login comes to. */
@@ -195,6 +227,7 @@ public final class Arrivals {
         PlayerName name = new PlayerName(event.getName());
         AuthState state = bedrock.admit(
                         event.getUniqueId(), name, event.getAddress().getHostAddress())
+                .map(this::stepped)
                 .orElseGet(() -> names.waiting(name));
         return new Arrival.Opens(event.getUniqueId(), state, null, List.of());
     }
@@ -207,7 +240,12 @@ public final class Arrivals {
             profile = profiles.apply(playAs, event.getName());
             profile.setProperties(event.getPlayerProfile().getProperties());
         }
-        return new Arrival.Opens(playAs, state, profile, List.of());
+        return new Arrival.Opens(playAs, stepped(state), profile, List.of());
+    }
+
+    /** A way in that passed, as far as it goes: the whole login, or the code of the second step next. */
+    private AuthState stepped(AuthState state) {
+        return state instanceof AuthState.Authenticated in ? secondStep.after(in.account(), in.method(), null) : state;
     }
 
     /**
@@ -236,7 +274,7 @@ public final class Arrivals {
                 && resume.resumes(
                         registered.account().id(), event.getAddress().getHostAddress(), event.getHostname())) {
             // Behind a proxy the proxy's door resumes a session; alone, this one does.
-            state = new AuthState.Authenticated(registered.account(), AuthMethod.SESSION);
+            state = secondStep.after(registered.account(), AuthMethod.SESSION, null);
         }
         return played(event, state, notices(usual, state), visit);
     }
@@ -279,6 +317,9 @@ public final class Arrivals {
         } else if (state instanceof AuthState.Authenticated resumed) {
             name = resumed.account().name();
             id = resumed.account().id();
+        } else if (state instanceof AuthState.SecondFactor waiting) {
+            name = waiting.account().name();
+            id = waiting.account().id();
         } else {
             name = ((AuthState.Unregistered) state).name();
             boolean derived =

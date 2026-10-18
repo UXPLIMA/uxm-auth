@@ -77,6 +77,43 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName(
+            "a right password on an account with the app brings up the code screen, and its code lets the player in")
+    void theCodeScreenFollowsTheRightPassword() {
+        world.registered(steve, "hunter22");
+        com.uxplima.auth.domain.factor.TotpSecret secret = world.appOn(steve);
+
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+        assertThat(shown)
+                .singleElement()
+                .satisfies(spec -> assertThat(spec.buttons())
+                        .extracting(DialogSpec.Button::action)
+                        .containsExactly(AuthScreens.FACTOR, AuthScreens.CANCEL));
+
+        world.scheduler.settle(
+                answers().answer(guest(), AuthScreens.FACTOR, answer(Map.of(AuthScreens.CODE, world.codeNow(secret)))));
+
+        assertThat(world.isAuthenticated(steve)).isTrue();
+        assertThat(world.fired).contains(AuthSettings.Moment.LOGGED_IN);
+    }
+
+    @Test
+    @DisplayName("a code pressed by a player without the login permission does nothing")
+    void theCodeAsksTheLoginPermission() {
+        world.registered(steve, "hunter22");
+        com.uxplima.auth.domain.factor.TotpSecret secret = world.appOn(steve);
+        world.scheduler.settle(answers().answer(guest(), AuthScreens.LOGIN, answer(Map.of("password", "hunter22"))));
+        steve.addAttachment(MockBukkit.createMockPlugin(), "uxmauth.login", false);
+
+        world.scheduler.settle(
+                answers().answer(guest(), AuthScreens.FACTOR, answer(Map.of(AuthScreens.CODE, world.codeNow(secret)))));
+
+        assertThat(world.isAuthenticated(steve)).isFalse();
+    }
+
+    @Test
     @DisplayName("a wrong password comes back on the login screen with the tries left on top")
     void aWrongPasswordShowsTheScreenAgain() {
         world.registered(steve, "hunter22");
@@ -582,7 +619,8 @@ final class ScreenAnswersTest {
                 },
                 world.sessions::chose,
                 world.change,
-                new CaptchaScreen(world.captchas, screens, shower, world.messages, hand));
+                new CaptchaScreen(world.captchas, screens, shower, world.messages, hand),
+                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.scheduler::async));
     }
 
     private Guest guest() {

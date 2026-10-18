@@ -102,4 +102,28 @@ final class DoorReportsTest {
 
         assertThat(world.reported).isEmpty();
     }
+
+    @Test
+    @DisplayName("a player who arrives waiting for the app's code is held, greeted for the code and reported waiting")
+    void aPlayerWaitingForTheCodeIsGreetedForTheCode() {
+        PlayerMock steve = loggedIn(AuthMethod.SESSION);
+        AuthState.Authenticated in = (AuthState.Authenticated)
+                world.sessions.state(steve.getUniqueId()).orElseThrow();
+        world.sessions.open(
+                steve.getUniqueId(),
+                new AuthState.SecondFactor(
+                        in.account(),
+                        AuthMethod.SESSION,
+                        java.util.Set.of(com.uxplima.auth.domain.factor.FactorKind.APP),
+                        com.uxplima.auth.domain.state.Attempts.fresh(3),
+                        null));
+
+        world.door.hold(steve);
+
+        assertThat(world.fired)
+                .contains(AuthSettings.Moment.JOIN_CODE)
+                .doesNotContain(AuthSettings.Moment.JOIN_REGISTERED);
+        assertThat(world.reported).containsExactly("waiting");
+        assertThat(world.offered).singleElement().isInstanceOf(AuthState.SecondFactor.class);
+    }
 }

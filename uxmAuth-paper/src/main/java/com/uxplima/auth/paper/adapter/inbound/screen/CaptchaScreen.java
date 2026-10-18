@@ -55,6 +55,7 @@ public final class CaptchaScreen implements CaptchaOffer {
             case AuthState.Registered waiting ->
                 captchas.blocks(id, waiting.account().name());
             case AuthState.Replacing replacing -> false;
+            case AuthState.SecondFactor waiting -> false;
             case AuthState.Authenticated authenticated -> false;
         };
     }

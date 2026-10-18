@@ -13,8 +13,10 @@ final class ShippedEffects {
         return switch (moment) {
             case JOIN_UNREGISTERED -> List.of("[subtitle] @join.register-title | @join.register-subtitle");
             case JOIN_REGISTERED -> List.of("[subtitle] @join.login-title | @join.login-subtitle");
+            case JOIN_CODE -> List.of("[subtitle] @join.code-title | @join.code-subtitle");
             case REMINDER_REGISTER -> List.of("[actionbar] @reminder.register");
             case REMINDER_LOGIN -> List.of("[actionbar] @reminder.login");
+            case REMINDER_CODE -> List.of("[actionbar] @reminder.code");
             case WRONG_PASSWORD -> List.of("[sound] block.note_block.bass 0.8 0.6");
             case REGISTERED -> List.of("[title] @welcome.registered", CHIME);
             case LOGGED_IN -> List.of("[title] @welcome.logged-in", CHIME);

@@ -181,6 +181,74 @@ final class ConnectionListenerTest {
     }
 
     @Test
+    @DisplayName("a remembered session of an account with the app skips the password but waits for the code")
+    void aSessionOfAnAccountWithTheAppWaitsForTheCode() throws Exception {
+        PlayerMock steve = new PlayerMock(server, "Steve");
+        world.registered(steve, "hunter22");
+        world.appOn(steve);
+        world.sessions.close(steve.getUniqueId());
+        resume = (id, address, host) -> true;
+
+        listener(world.accounts)
+                .onPreLogin(preLogin(server.createProfile(steve.getUniqueId(), "Steve"), loginConnection(MINE, true)));
+        assertThat(world.sessions.state(steve.getUniqueId()))
+                .hasValueSatisfying(state -> assertThat(state)
+                        .isInstanceOfSatisfying(
+                                AuthState.SecondFactor.class,
+                                waiting -> assertThat(waiting.method()).isEqualTo(AuthMethod.SESSION)));
+
+        world.sessions.close(steve.getUniqueId());
+        world.stepSettings = new com.uxplima.auth.application.factor.SecondStep.Settings(true, true, 3);
+        listener(world.accounts)
+                .onPreLogin(preLogin(server.createProfile(steve.getUniqueId(), "Steve"), loginConnection(MINE, true)));
+        assertThat(world.sessions.state(steve.getUniqueId())).containsInstanceOf(AuthState.Authenticated.class);
+    }
+
+    @Test
+    @DisplayName("a proved premium connection to an account with the app waits for the code once premium-skips is off")
+    void aPremiumConnectionWaitsWhenPremiumDoesNotSkip() throws Exception {
+        hellos.installed = true;
+        UUID mojang = UUID.randomUUID();
+        hellos.outcomes.put(MINE, new HelloOutcome.Proved());
+        listener(world.accounts)
+                .onPreLogin(preLogin(server.createProfile(mojang, "Notch"), loginConnection(MINE, true)));
+        world.appOn("Notch");
+        world.sessions.close(mojang);
+
+        hellos.outcomes.put(MINE, new HelloOutcome.Proved());
+        listener(world.accounts)
+                .onPreLogin(preLogin(server.createProfile(mojang, "Notch"), loginConnection(MINE, true)));
+        assertThat(world.sessions.state(mojang)).containsInstanceOf(AuthState.Authenticated.class);
+
+        world.sessions.close(mojang);
+        world.stepSettings = new com.uxplima.auth.application.factor.SecondStep.Settings(false, false, 3);
+        hellos.outcomes.put(MINE, new HelloOutcome.Proved());
+        listener(world.accounts)
+                .onPreLogin(preLogin(server.createProfile(mojang, "Notch"), loginConnection(MINE, true)));
+        assertThat(world.sessions.state(mojang))
+                .hasValueSatisfying(state -> assertThat(state)
+                        .isInstanceOfSatisfying(
+                                AuthState.SecondFactor.class,
+                                waiting -> assertThat(waiting.method()).isEqualTo(AuthMethod.PREMIUM)));
+    }
+
+    @Test
+    @DisplayName("a Bedrock player Floodgate vouches for waits for the code once premium-skips is off")
+    void aBedrockPlayerWaitsWhenPremiumDoesNotSkip() throws Exception {
+        UUID id = UUID.randomUUID();
+        bedrock = new BedrockAdmission(
+                floodgate(), new LetBedrockIn(world.accounts, () -> AuthWorld.MAX_ATTEMPTS, world.clock), () -> true);
+        listener(world.accounts).onPreLogin(preLogin(".Steve", id));
+        world.appOn(".Steve");
+        world.sessions.close(id);
+        world.stepSettings = new com.uxplima.auth.application.factor.SecondStep.Settings(false, false, 3);
+
+        listener(world.accounts).onPreLogin(preLogin(".Steve", id));
+
+        assertThat(world.sessions.state(id)).containsInstanceOf(AuthState.SecondFactor.class);
+    }
+
+    @Test
     @DisplayName("a connection the door's rules refuse is turned away before its name is read, holding no session")
     void theDoorsRulesComeFirst() {
         admission = new Admission(
@@ -802,7 +870,8 @@ final class ConnectionListenerTest {
                         scheme,
                         network,
                         admission,
-                        resume),
+                        resume,
+                        world.secondStep),
                 world.notices,
                 world.door,
                 world.keeper,

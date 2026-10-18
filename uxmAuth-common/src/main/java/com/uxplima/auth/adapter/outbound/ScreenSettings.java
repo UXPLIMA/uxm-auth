@@ -21,7 +21,8 @@ public record ScreenSettings(
         Screen pin,
         String loginWorld,
         Screen replace,
-        Screen captcha) {
+        Screen captcha,
+        Screen code) {
 
     /** The world a waiting player is moved to while the waiting room is the login world, unless the file names one. */
     public static final String LOGIN_WORLD = "uxmauth_login";
@@ -32,7 +33,8 @@ public record ScreenSettings(
             "login", List.of("password", "remember", "submit", "claim", "cancel"),
             "pin", List.of("erase", "enter", "cancel", "remember", "entered", "repeat", "mask"),
             "replace", List.of("password", "confirm", "submit", "cancel"),
-            "captcha", List.of("code", "submit", "cancel"));
+            "captcha", List.of("code", "submit", "cancel"),
+            "code", List.of("code", "submit", "cancel"));
 
     public ScreenSettings {
         Objects.requireNonNull(loginWorld, "loginWorld");
@@ -47,6 +49,35 @@ public record ScreenSettings(
         Objects.requireNonNull(pin, "pin");
         Objects.requireNonNull(replace, "replace");
         Objects.requireNonNull(captcha, "captcha");
+        Objects.requireNonNull(code, "code");
+    }
+
+    /** The screens with the shipped screen for the code of the second step. */
+    public ScreenSettings(
+            WaitingRoom waitingRoom,
+            Cancel cancel,
+            boolean canClose,
+            boolean pinPad,
+            Rules rules,
+            Screen register,
+            Screen login,
+            Screen pin,
+            String loginWorld,
+            Screen replace,
+            Screen captcha) {
+        this(
+                waitingRoom,
+                cancel,
+                canClose,
+                pinPad,
+                rules,
+                register,
+                login,
+                pin,
+                loginWorld,
+                replace,
+                captcha,
+                shipped("code"));
     }
 
     /** The screens with the shipped captcha screen. */

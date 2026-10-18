@@ -147,6 +147,18 @@ public final class AuthWorld implements AutoCloseable {
 
     public final com.uxplima.auth.application.protection.Captchas captchas;
 
+    /** The codes of the second step in this world: six digits every 30 seconds, one step either side. */
+    public static final com.uxplima.auth.domain.factor.Totp TOTP =
+            new com.uxplima.auth.domain.factor.Totp(6, Duration.ofSeconds(30), 1);
+
+    public final com.uxplima.auth.adapter.outbound.SqlFactors factors;
+    public final com.uxplima.auth.application.factor.SecondStep secondStep;
+    public final com.uxplima.auth.application.factor.ConfirmFactor confirmFactor;
+
+    /** Which ways in ask the code in this world; a test changes it. */
+    public com.uxplima.auth.application.factor.SecondStep.Settings stepSettings =
+            new com.uxplima.auth.application.factor.SecondStep.Settings(true, false, MAX_ATTEMPTS);
+
     /** For whom sessions are on in this world; a test sets it. */
     public Remember.Settings sessionSettings = new Remember.Settings(Remember.Mode.CHOSEN, Duration.ofMinutes(60));
 
@@ -217,7 +229,13 @@ public final class AuthWorld implements AutoCloseable {
                 captchas::blocksRegistration);
         this.bans =
                 new AddressBans(new SqlAddressTallies(database), () -> banSteps, this::sharedAddresses, clock::instant);
-        this.logIn = new LogIn(accounts, hashing, lane, sessions, clock, bans::failed, () -> policy, captchas);
+        this.factors = new com.uxplima.auth.adapter.outbound.SqlFactors(
+                database, com.uxplima.auth.adapter.outbound.SecretSeal.fromPassphrase("world"), clock);
+        this.secondStep = new com.uxplima.auth.application.factor.SecondStep(factors, () -> stepSettings);
+        this.confirmFactor = new com.uxplima.auth.application.factor.ConfirmFactor(
+                accounts, factors, sessions, () -> TOTP, bans::failed, clock::instant);
+        this.logIn =
+                new LogIn(accounts, hashing, lane, sessions, clock, bans::failed, () -> policy, captchas, secondStep);
         this.change =
                 new ChangePassword(accounts, hashing, lane, sessions, () -> policy, new LocalEvents(), remembered);
         this.logOut = new LogOut(sessions, () -> MAX_ATTEMPTS, remembered);
@@ -287,6 +305,23 @@ public final class AuthWorld implements AutoCloseable {
     public java.util.OptionalLong openingOf(Player player) {
         Long opening = openings.get(player.getUniqueId());
         return opening == null ? java.util.OptionalLong.empty() : java.util.OptionalLong.of(opening);
+    }
+
+    /** Turns the app on for the player's account, and answers its secret. */
+    public com.uxplima.auth.domain.factor.TotpSecret appOn(Player player) {
+        return appOn(player.getName());
+    }
+
+    /** Turns the app on for the account under this name, and answers its secret. */
+    public com.uxplima.auth.domain.factor.TotpSecret appOn(String name) {
+        com.uxplima.auth.domain.factor.TotpSecret secret = new com.uxplima.auth.domain.factor.TotpSecret(new byte[20]);
+        factors.setApp(accounts.findByName(new PlayerName(name)).orElseThrow().id(), secret);
+        return secret;
+    }
+
+    /** The app's code now for this secret. */
+    public String codeNow(com.uxplima.auth.domain.factor.TotpSecret secret) {
+        return TOTP.code(secret.bytes(), TOTP.step(clock.instant()));
     }
 
     /** The setup of the app in this world, with no map and no form. */

@@ -122,6 +122,7 @@ public final class ChangePassword {
             case AuthState.Replacing replacing ->
                 Optional.of(replacing.account().id());
             case AuthState.Registered waiting -> Optional.empty();
+            case AuthState.SecondFactor waiting -> Optional.empty();
             case AuthState.Unregistered nobody -> Optional.empty();
         };
     }

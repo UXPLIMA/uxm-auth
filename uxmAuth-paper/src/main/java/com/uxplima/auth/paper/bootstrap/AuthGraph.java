@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -68,6 +69,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.PremiumCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.RegisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
@@ -87,6 +89,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.BedrockForms;
 import com.uxplima.auth.paper.adapter.inbound.screen.CaptchaScreen;
 import com.uxplima.auth.paper.adapter.inbound.screen.ConfigurationGate;
 import com.uxplima.auth.paper.adapter.inbound.screen.FormAnswers;
+import com.uxplima.auth.paper.adapter.inbound.screen.Guest;
 import com.uxplima.auth.paper.adapter.inbound.screen.InWorldScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.PaperScreens;
 import com.uxplima.auth.paper.adapter.inbound.screen.PermissionDefaults;
@@ -139,6 +142,7 @@ final class AuthGraph implements AutoCloseable {
     final PremiumCommand premium;
     final SessionCommand session;
     final FactorGraph factors;
+    final TwoFactorCommand twoFactor;
     final CaptchaCommand captchaCommand;
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
@@ -248,6 +252,20 @@ final class AuthGraph implements AutoCloseable {
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
         CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
+        this.factors = new FactorGraph(
+                plugin,
+                settings,
+                database,
+                accounts,
+                sessions,
+                bans::failed,
+                id -> bedrock.player(id).isPresent(),
+                scheduler,
+                replies,
+                moments,
+                messages,
+                screens,
+                shower);
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,
@@ -256,7 +274,8 @@ final class AuthGraph implements AutoCloseable {
                 clock,
                 bans::failed,
                 () -> settings.current().passwordPolicy(),
-                captchas);
+                captchas,
+                factors.secondStep);
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -299,7 +318,8 @@ final class AuthGraph implements AutoCloseable {
                 claims::claim,
                 sessions::chose,
                 change,
-                captcha);
+                captcha,
+                factors.screen);
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
@@ -321,7 +341,8 @@ final class AuthGraph implements AutoCloseable {
                 (player, task) -> scheduler.entityLater(player, Duration.ofSeconds(1), task),
                 hold::isHeld,
                 shower,
-                captcha);
+                captcha,
+                factors.screen);
         this.captchaCommand = new CaptchaCommand(captcha, sessions::state, inWorld, messages);
         Door door = new Door(
                 sessions, keeper, waiting, moments, greeter, inWorld, welcomes, notices, channelReports, remembering);
@@ -360,7 +381,8 @@ final class AuthGraph implements AutoCloseable {
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
                         admission(settings, bans, countries, plugin.getLogger()),
-                        remember::resumes),
+                        remember::resumes,
+                        factors.secondStep),
                 notices,
                 door,
                 keeper,
@@ -369,7 +391,8 @@ final class AuthGraph implements AutoCloseable {
                 messages,
                 plugin.getLogger());
         ConnectionListener joins = connections;
-        this.login = new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies, captcha);
+        this.login =
+                new LoginCommand(logIn, door, joins::openingOf, moments, messages, replies, captcha, factors.screen);
         this.register = new RegisterCommand(
                 registering, door, joins::openingOf, () -> settings.current().passwords(), messages, replies, captcha);
         this.changePassword = new ChangePasswordCommand(
@@ -381,17 +404,6 @@ final class AuthGraph implements AutoCloseable {
                 new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
-        this.factors = new FactorGraph(
-                plugin,
-                settings,
-                database,
-                sessions,
-                bans::failed,
-                id -> bedrock.player(id).isPresent(),
-                scheduler,
-                replies,
-                moments,
-                messages);
         this.session = new SessionCommand(
                 remember,
                 remembering,
@@ -399,8 +411,10 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().sessions(),
                 scheduler,
                 messages);
-        this.screenClicks = new ScreenClickListener(
-                answers, player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies), scheduler);
+        Function<Player, Guest> guests =
+                player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
+        this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
+        this.twoFactor = factors.command(guests);
         formAnswers.set(screenClicks);
         this.filters = new PasswordLogFilters(new PasswordLogFilter(new PasswordMask(() -> labels)));
     }

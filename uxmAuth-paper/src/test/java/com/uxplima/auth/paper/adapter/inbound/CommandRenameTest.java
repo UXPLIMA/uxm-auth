@@ -158,7 +158,17 @@ final class CommandRenameTest {
                                     world.messages),
                             resolvers))
                     .isEqualTo("stay");
-            assertThat(label(new TwoFactorCommand(world.factorSetup()), resolvers))
+            assertThat(label(
+                            new TwoFactorCommand(
+                                    world.factorSetup(),
+                                    new com.uxplima.auth.paper.adapter.inbound.factor.FactorLogin(
+                                            world.sessions,
+                                            com.uxplima.auth.paper.adapter.inbound.screen.FactorOffer.NONE,
+                                            player -> {
+                                                throw new AssertionError("no code is answered here");
+                                            },
+                                            world.messages)),
+                            resolvers))
                     .isEqualTo("app");
         } finally {
             MockBukkit.unmock();

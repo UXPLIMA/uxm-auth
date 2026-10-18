@@ -6,8 +6,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
@@ -16,47 +18,77 @@ import com.uxplima.auth.adapter.outbound.SecretSeal;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.factor.ConfirmFactor;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
+import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.factor.BedrockSetupForm;
+import com.uxplima.auth.paper.adapter.inbound.factor.FactorLogin;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup;
 import com.uxplima.auth.paper.adapter.inbound.factor.QrMapGuard;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
+import com.uxplima.auth.paper.adapter.inbound.screen.AuthScreens;
+import com.uxplima.auth.paper.adapter.inbound.screen.FactorScreen;
+import com.uxplima.auth.paper.adapter.inbound.screen.Guest;
+import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.factor.QrMap;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
 
-/** The second factor's part of the graph: the sealed table, the setup, the QR map, the command and its guard. */
+/**
+ * The second factor's part of the graph: the sealed table, the step after the password and its screen, the setup,
+ * the QR map, the command and its guard.
+ */
 final class FactorGraph {
 
     /** Where a server alone keeps the key its secrets are sealed with. */
     static final String KEY_FILE = "second-factor.key";
 
-    final TwoFactorCommand command;
+    final SecondStep secondStep;
+    final FactorScreen screen;
     final QrMapGuard guard;
+    private final FactorSetup setup;
+    private final Sessions sessions;
+    private final Messages messages;
 
     FactorGraph(
             Plugin plugin,
             PluginSettings settings,
             Database database,
+            AccountRepository accounts,
             Sessions sessions,
             LogIn.Failures failures,
             Predicate<UUID> bedrock,
             Scheduler scheduler,
             Replies replies,
             MomentRunner moments,
-            Messages messages) {
+            Messages messages,
+            AuthScreens screens,
+            ScreenShower shower) {
+        this.sessions = sessions;
+        this.messages = messages;
         Path folder = plugin.getDataFolder().toPath();
         AuthSettings.Network network = settings.current().network();
         SqlFactors factors =
                 new SqlFactors(database, seal(network.enabled(), network.secret(), folder), Clock.systemUTC());
+        this.secondStep =
+                new SecondStep(factors, () -> settings.current().secondFactor().step());
+        ConfirmFactor confirm = new ConfirmFactor(
+                accounts,
+                factors,
+                sessions,
+                () -> settings.current().secondFactor().setup().totp(),
+                failures,
+                Instant::now);
+        this.screen = new FactorScreen(confirm, screens, shower, messages, scheduler::async);
         SetUpTotp setUp = new SetUpTotp(
                 factors, () -> settings.current().secondFactor().setup(), failures, new SecureRandom(), Instant::now);
         Optional<QrMap> qr = QrMap.open(plugin.getServer(), folder.resolve("qr-map.id"), plugin.getLogger());
-        FactorSetup setup = new FactorSetup(
+        this.setup = new FactorSetup(
                 setUp,
                 sessions,
                 () -> settings.current().secondFactor().setup(),
@@ -67,11 +99,15 @@ final class FactorGraph {
                 replies,
                 moments,
                 messages);
-        this.command = new TwoFactorCommand(setup);
         this.guard = new QrMapGuard(
                 item -> qr.map(map -> map.holds(item)).orElse(false),
                 player -> qr.ifPresent(map -> map.take(player)),
                 setup::left);
+    }
+
+    /** {@code /2fa}, whose code of the second step reaches the guest each player is. */
+    TwoFactorCommand command(Function<Player, Guest> guests) {
+        return new TwoFactorCommand(setup, new FactorLogin(sessions, screen, guests, messages));
     }
 
     /**

@@ -53,6 +53,40 @@ final class LogInTest {
     }
 
     @Test
+    @DisplayName("a right password on an account with the app asks the code next, and records no login yet")
+    void aRightPasswordAsksTheCode() {
+        UUID connection = fixture.registered("Steve", "hunter22");
+        Account steve = fixture.accounts.findByName(new PlayerName("Steve")).orElseThrow();
+        com.uxplima.auth.testing.InMemoryFactors factors = new com.uxplima.auth.testing.InMemoryFactors();
+        factors.setApp(steve.id(), new com.uxplima.auth.domain.factor.TotpSecret(new byte[20]));
+        LogIn guarded = new LogIn(
+                fixture.accounts,
+                fixture.hashing,
+                fixture.lane,
+                fixture.sessions,
+                fixture.clock,
+                (address, host) -> java.util.Optional.empty(),
+                () -> fixture.policy,
+                LogIn.Captcha.NONE,
+                new com.uxplima.auth.application.factor.SecondStep(
+                        factors, () -> new com.uxplima.auth.application.factor.SecondStep.Settings(true, false, 3)));
+
+        assertThat(guarded.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.CodeNeeded());
+
+        assertThat(fixture.sessions.state(connection))
+                .hasValueSatisfying(state -> assertThat(state)
+                        .isInstanceOfSatisfying(AuthState.SecondFactor.class, waiting -> {
+                            assertThat(waiting.method()).isEqualTo(AuthMethod.PASSWORD);
+                            assertThat(waiting.mustReplace()).isNull();
+                        }));
+        assertThat(fixture.accounts.findById(steve.id()))
+                .hasValueSatisfying(account -> assertThat(account.lastLoginAt()).isNotEqualTo(AuthFixture.NOW));
+        assertThat(guarded.run(connection, Password.of("hunter22"), "10.0.0.7").join())
+                .isEqualTo(new LoginResult.CodeNeeded());
+    }
+
+    @Test
     @DisplayName("each wrong password counts down, and the last one is too many")
     void loginWrongCountsDown() {
         UUID connection = fixture.registered("Steve", "hunter22");

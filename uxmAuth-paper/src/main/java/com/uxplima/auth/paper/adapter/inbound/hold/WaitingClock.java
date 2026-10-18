@@ -74,8 +74,16 @@ public final class WaitingClock {
         }
         if (Duration.between(reminded.get(), now).compareTo(limits.reminder()) >= 0) {
             reminded.set(now);
-            moments.fire(
-                    player, registering ? AuthSettings.Moment.REMINDER_REGISTER : AuthSettings.Moment.REMINDER_LOGIN);
+            moments.fire(player, reminder(state));
         }
+    }
+
+    /** What a waiting player is reminded of: to register, to type the password, or to type the app's code. */
+    private static AuthSettings.Moment reminder(AuthState state) {
+        return switch (state) {
+            case AuthState.Unregistered unregistered -> AuthSettings.Moment.REMINDER_REGISTER;
+            case AuthState.SecondFactor waiting -> AuthSettings.Moment.REMINDER_CODE;
+            default -> AuthSettings.Moment.REMINDER_LOGIN;
+        };
     }
 }

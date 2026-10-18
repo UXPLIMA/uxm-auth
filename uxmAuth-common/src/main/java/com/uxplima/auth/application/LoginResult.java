@@ -35,6 +35,9 @@ public sealed interface LoginResult {
         }
     }
 
+    /** The password was right, and a code from the app is asked before the login is whole. */
+    record CodeNeeded() implements LoginResult {}
+
     /** A captcha stands before this login: the connection must solve the one it is shown first. No try was spent. */
     record CaptchaNeeded() implements LoginResult {}
 

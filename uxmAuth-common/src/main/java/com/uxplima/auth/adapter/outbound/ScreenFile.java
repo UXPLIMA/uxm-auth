@@ -55,7 +55,8 @@ public final class ScreenFile {
                 screen(config, "pin"),
                 config.getString("login-world-name", ScreenSettings.LOGIN_WORLD),
                 screen(config, "replace"),
-                screen(config, "captcha"));
+                screen(config, "captcha"),
+                screen(config, "code"));
     }
 
     private static ScreenSettings.Screen screen(HoconConfig config, String name) {

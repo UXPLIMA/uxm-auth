@@ -16,6 +16,7 @@ import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.factor.TotpSecret;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.testing.InMemoryFactors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +28,7 @@ final class SetUpTotpTest {
     private static final Totp TOTP = new Totp(6, Duration.ofSeconds(30), 1);
 
     private Instant now = Instant.parse("2026-10-18T12:00:00Z");
-    private final MemoryFactors factors = new MemoryFactors();
+    private final InMemoryFactors factors = new InMemoryFactors();
     private final List<String> failedFrom = new ArrayList<>();
     private final LogIn.Failures failures = (address, host) -> {
         failedFrom.add(address + "@" + host);

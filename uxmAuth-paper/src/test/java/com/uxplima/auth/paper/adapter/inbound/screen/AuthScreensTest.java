@@ -53,7 +53,10 @@ final class AuthScreensTest {
                                         Map.entry("screen.login.password", "Password"),
                                         Map.entry("screen.captcha.title", "Prove it"),
                                         Map.entry("screen.captcha.body", "Type <code>"),
-                                        Map.entry("screen.captcha.code", "Code"))),
+                                        Map.entry("screen.captcha.code", "Code"),
+                                        Map.entry("screen.code.title", "One more step"),
+                                        Map.entry("screen.code.body", "Type the app's code"),
+                                        Map.entry("screen.code.code", "App code"))),
                         Locale.ENGLISH),
                 LocaleSource.ofDefault(Locale.ENGLISH));
     }
@@ -89,6 +92,27 @@ final class AuthScreensTest {
         });
         assertThat(spec.buttons()).extracting(DialogSpec.Button::action).containsExactly("captcha", "cancel");
         assertThat(spec.canClose()).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+            "the code screen asks the app's code in one field, long enough for a backup code, with the reason on top")
+    void theCodeScreenAsksTheAppsCode() {
+        DialogSpec spec = screens(shipped(false), passwords(true))
+                .code(steve, net.kyori.adventure.text.Component.text("Wrong code"));
+
+        assertThat(plain(spec.title())).isEqualTo("One more step");
+        assertThat(spec.body()).extracting(AuthScreensTest::plain).containsExactly("Wrong code", "Type the app's code");
+        assertThat(spec.inputs()).singleElement().isInstanceOfSatisfying(DialogSpec.TextInput.class, field -> {
+            assertThat(field.key()).isEqualTo(AuthScreens.CODE);
+            assertThat(plain(field.label())).isEqualTo("App code");
+            assertThat(field.maxLength()).isEqualTo(AuthScreens.LONGEST_CODE);
+        });
+        assertThat(spec.buttons()).extracting(DialogSpec.Button::action).containsExactly("factor", "cancel");
+        assertThat(spec.canClose()).isFalse();
+        assertThat(screens(shipped(false), passwords(true)).code(steve, null).body())
+                .extracting(AuthScreensTest::plain)
+                .containsExactly("Type the app's code");
     }
 
     @Test

@@ -33,6 +33,7 @@ final class InWorldScreensTest {
 
     private ServerMock server;
     private AuthWorld world;
+    private final List<Audience> shownTo = new ArrayList<>();
     private final List<DialogSpec> shown = new ArrayList<>();
     private final java.util.Set<java.util.UUID> sentToTheWorld = new java.util.HashSet<>();
     private boolean rules;
@@ -132,6 +133,32 @@ final class InWorldScreensTest {
             assertThat(spec.buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.REPLACE);
             assertThat(spec.inputs()).extracting(DialogSpec.Input::key).containsExactly("password", "confirm");
         });
+    }
+
+    @Test
+    @DisplayName("a player who gave the password and waits for the app's code is shown the code screen")
+    void aPlayerWaitingForTheCodeIsShownTheCodeScreen() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        com.uxplima.auth.domain.account.Account account = ((AuthState.Registered)
+                        world.sessions.state(steve.getUniqueId()).orElseThrow())
+                .account();
+
+        offer(ScreenSettings.WaitingRoom.FROZEN)
+                .offer(
+                        steve,
+                        new AuthState.SecondFactor(
+                                account,
+                                com.uxplima.auth.domain.state.AuthMethod.PASSWORD,
+                                java.util.Set.of(com.uxplima.auth.domain.factor.FactorKind.APP),
+                                com.uxplima.auth.domain.state.Attempts.fresh(3),
+                                null));
+
+        assertThat(shown).singleElement().satisfies(spec -> {
+            assertThat(spec.buttons()).extracting(DialogSpec.Button::action).contains(AuthScreens.FACTOR);
+            assertThat(spec.inputs()).extracting(DialogSpec.Input::key).containsExactly(AuthScreens.CODE);
+        });
+        assertThat(shownTo).containsExactly(steve);
     }
 
     @Test
@@ -236,6 +263,7 @@ final class InWorldScreensTest {
             @Override
             public void show(Audience who, DialogSpec spec) {
                 shown.add(spec);
+                shownTo.add(who);
             }
 
             @Override
@@ -248,6 +276,7 @@ final class InWorldScreensTest {
                 later,
                 stillWaiting,
                 shower,
-                new CaptchaScreen(world.captchas, screens, shower, world.messages, CaptchaScreen.Hand.NONE));
+                new CaptchaScreen(world.captchas, screens, shower, world.messages, CaptchaScreen.Hand.NONE),
+                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.scheduler::async));
     }
 }

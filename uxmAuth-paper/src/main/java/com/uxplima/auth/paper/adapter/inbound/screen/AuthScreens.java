@@ -44,6 +44,12 @@ public final class AuthScreens {
     /** The press that answers the captcha, and the field its code is typed in. */
     public static final String CAPTCHA = "captcha";
 
+    /** The press that answers the code of the second step, typed in the {@link #CODE} field. */
+    public static final String FACTOR = "factor";
+
+    /** The longest code the second step takes: an app's code, or a backup code with its dashes. */
+    public static final int LONGEST_CODE = 16;
+
     public static final String CODE = "code";
 
     /** The action of "this name is mine" on the login screen. */
@@ -161,6 +167,21 @@ public final class AuthScreens {
                 body,
                 List.of(new DialogSpec.TextInput(CODE, text(reader, screen.label(CODE)), code.length())),
                 buttons(reader, screen, CAPTCHA),
+                settings.canClose());
+    }
+
+    /** The code screen of the second step, with the reason the last code was refused on top. */
+    public DialogSpec code(Audience reader, @Nullable Component reason) {
+        Objects.requireNonNull(reader, "reader");
+        ScreenSettings settings = screens.get();
+        ScreenSettings.Screen screen = settings.code();
+        List<Component> body = start(reason);
+        screen.body().forEach(line -> body.add(text(reader, line)));
+        return new DialogSpec(
+                text(reader, screen.title()),
+                body,
+                List.of(new DialogSpec.TextInput(CODE, text(reader, screen.label(CODE)), LONGEST_CODE)),
+                buttons(reader, screen, FACTOR),
                 settings.canClose());
     }
 

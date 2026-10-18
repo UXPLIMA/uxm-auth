@@ -58,6 +58,7 @@ public final class ScreenAnswers {
     private final Choices choices;
     private final Replacer replacer;
     private final CaptchaScreen captcha;
+    private final FactorOffer factor;
     private final TimeWords times;
     private final PinPad pad = new PinPad();
 
@@ -139,7 +140,8 @@ public final class ScreenAnswers {
                 claims,
                 choices,
                 (Replacer) (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()),
-                new CaptchaScreen(Captchas.off(), screens, shower, messages, CaptchaScreen.Hand.NONE));
+                new CaptchaScreen(Captchas.off(), screens, shower, messages, CaptchaScreen.Hand.NONE),
+                FactorOffer.NONE);
     }
 
     /**
@@ -198,8 +200,40 @@ public final class ScreenAnswers {
                 registering,
                 claims,
                 choices,
+                change,
+                captcha,
+                FactorOffer.NONE);
+    }
+
+    /** @param factor the code of the second step, asked after a right password where the account has an app */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices,
+            ChangePassword change,
+            CaptchaScreen captcha,
+            FactorOffer factor) {
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
                 (Replacer) Objects.requireNonNull(change, "change")::replaceWeak,
-                captcha);
+                captcha,
+                factor);
     }
 
     private ScreenAnswers(
@@ -214,7 +248,8 @@ public final class ScreenAnswers {
             Claims claims,
             Choices choices,
             Replacer replacer,
-            CaptchaScreen captcha) {
+            CaptchaScreen captcha,
+            FactorOffer factor) {
         this.screens = Objects.requireNonNull(screens, "screens");
         this.register = Objects.requireNonNull(register, "register");
         this.logIn = Objects.requireNonNull(logIn, "logIn");
@@ -227,6 +262,7 @@ public final class ScreenAnswers {
         this.choices = Objects.requireNonNull(choices, "choices");
         this.replacer = Objects.requireNonNull(replacer, "replacer");
         this.captcha = Objects.requireNonNull(captcha, "captcha");
+        this.factor = Objects.requireNonNull(factor, "factor");
         this.times = new TimeWords(messages);
     }
 
@@ -259,6 +295,10 @@ public final class ScreenAnswers {
                 guest.may(LOGIN_PERMISSION) ? replace(guest, answer) : CompletableFuture.completedFuture(null);
             case AuthScreens.CAPTCHA ->
                 guest.may(CAPTCHA_PERMISSION) ? captcha(guest, answer) : CompletableFuture.completedFuture(null);
+            case AuthScreens.FACTOR ->
+                guest.may(LOGIN_PERMISSION)
+                        ? factor.answer(guest, orEmpty(answer.text(AuthScreens.CODE)))
+                        : CompletableFuture.completedFuture(null);
             case AuthScreens.CANCEL -> cancel(guest);
             case AuthScreens.CLAIM ->
                 guest.may(CLAIM_PERMISSION) && screens.offersClaim()
@@ -325,6 +365,7 @@ public final class ScreenAnswers {
             case LoginResult.MustReplace mustReplace -> shower.show(reader, screens.replace(reader, mustReplace.why()));
             case LoginResult.CaptchaNeeded needed ->
                 captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_NEEDED));
+            case LoginResult.CodeNeeded needed -> factor.offer(reader, null);
             case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
             case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
             case LoginResult.Gone gone -> {}

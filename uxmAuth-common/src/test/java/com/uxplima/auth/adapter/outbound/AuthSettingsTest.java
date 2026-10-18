@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
+import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.factor.SetUpTotp;
 import com.uxplima.auth.domain.factor.Totp;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
@@ -294,6 +295,8 @@ final class AuthSettingsTest {
 
         assertThat(settings.effects().of(AuthSettings.Moment.LOGGED_IN)).isEmpty();
         assertThat(settings.effects().of(AuthSettings.Moment.REGISTERED)).isNotEmpty();
+        assertThat(settings.effects().of(AuthSettings.Moment.REMINDER_CODE))
+                .containsExactly("[actionbar] @reminder.code");
     }
 
     @Test
@@ -608,6 +611,12 @@ final class AuthSettingsTest {
                         .setup())
                 .isEqualTo(new SetUpTotp.Settings(
                         "Uxplima", "mc {player}", new Totp(8, Duration.ofSeconds(60), 2), Duration.ofMinutes(3)));
+        assertThat(settingsFrom(folder, "").secondFactor().step()).isEqualTo(new SecondStep.Settings(true, false, 3));
+        assertThat(settingsFrom(folder, """
+                                second-factor { premium-skips = false }
+                                sessions { skip-second-factor = true }
+                                passwords { max-attempts = 5 }
+                                """).secondFactor().step()).isEqualTo(new SecondStep.Settings(false, true, 5));
         assertThatThrownBy(() -> settingsFrom(folder, "second-factor { digits = 5 }\n"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("second-factor");

@@ -17,6 +17,7 @@ import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
 import com.uxplima.auth.paper.adapter.inbound.screen.CaptchaOffer;
+import com.uxplima.auth.paper.adapter.inbound.screen.FactorOffer;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
@@ -41,6 +42,7 @@ public final class LoginCommand {
     private final Replies replies;
     private final TimeWords times;
     private final CaptchaOffer captcha;
+    private final FactorOffer factor;
 
     /** @param openings the opening of the session each player stands in the world under */
     public LoginCommand(
@@ -62,6 +64,19 @@ public final class LoginCommand {
             Messages messages,
             Replies replies,
             CaptchaOffer captcha) {
+        this(logIn, door, openings, moments, messages, replies, captcha, FactorOffer.NONE);
+    }
+
+    /** @param factor what asks the code of the second step once the password was right */
+    public LoginCommand(
+            LogIn logIn,
+            Door door,
+            Function<Player, OptionalLong> openings,
+            MomentRunner moments,
+            Messages messages,
+            Replies replies,
+            CaptchaOffer captcha,
+            FactorOffer factor) {
         this.logIn = Objects.requireNonNull(logIn, "logIn");
         this.door = Objects.requireNonNull(door, "door");
         this.openings = Objects.requireNonNull(openings, "openings");
@@ -70,6 +85,7 @@ public final class LoginCommand {
         this.replies = Objects.requireNonNull(replies, "replies");
         this.times = new TimeWords(messages);
         this.captcha = Objects.requireNonNull(captcha, "captcha");
+        this.factor = Objects.requireNonNull(factor, "factor");
     }
 
     @Subcommand("")
@@ -110,6 +126,10 @@ public final class LoginCommand {
             }
             case LoginResult.CaptchaNeeded needed ->
                 captcha.offer(player, player.getUniqueId(), messages.render(player, Keys.CAPTCHA_NEEDED));
+            case LoginResult.CodeNeeded needed -> {
+                messages.send(player, Keys.FACTOR_CODE_NEEDED);
+                factor.offer(player, null);
+            }
             case LoginResult.NotRegistered notRegistered -> messages.send(player, Keys.LOGIN_NOT_REGISTERED);
             case LoginResult.AlreadyLoggedIn already -> messages.send(player, Keys.LOGIN_ALREADY);
             case LoginResult.Gone gone -> {}

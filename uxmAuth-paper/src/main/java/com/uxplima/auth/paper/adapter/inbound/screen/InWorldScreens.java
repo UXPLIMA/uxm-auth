@@ -28,6 +28,7 @@ public final class InWorldScreens implements ScreenOffer {
     private final Predicate<Player> stillWaiting;
     private final ScreenShower shower;
     private final CaptchaScreen captcha;
+    private final FactorOffer factor;
 
     /**
      * @param later runs the showing a moment after the join, when the client can draw a screen: a Bedrock client
@@ -42,6 +43,19 @@ public final class InWorldScreens implements ScreenOffer {
             Predicate<Player> stillWaiting,
             ScreenShower shower,
             CaptchaScreen captcha) {
+        this(settings, screens, sentToTheWorld, later, stillWaiting, shower, captcha, FactorOffer.NONE);
+    }
+
+    /** @param factor the code screen of the second step, for a player who gave the password already */
+    public InWorldScreens(
+            Supplier<ScreenSettings> settings,
+            AuthScreens screens,
+            Predicate<UUID> sentToTheWorld,
+            BiConsumer<Player, Runnable> later,
+            Predicate<Player> stillWaiting,
+            ScreenShower shower,
+            CaptchaScreen captcha,
+            FactorOffer factor) {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.screens = Objects.requireNonNull(screens, "screens");
         this.sentToTheWorld = Objects.requireNonNull(sentToTheWorld, "sentToTheWorld");
@@ -49,6 +63,7 @@ public final class InWorldScreens implements ScreenOffer {
         this.stillWaiting = Objects.requireNonNull(stillWaiting, "stillWaiting");
         this.shower = Objects.requireNonNull(shower, "shower");
         this.captcha = Objects.requireNonNull(captcha, "captcha");
+        this.factor = Objects.requireNonNull(factor, "factor");
     }
 
     @Override
@@ -73,6 +88,7 @@ public final class InWorldScreens implements ScreenOffer {
                 case AuthState.Unregistered unregistered -> shower.show(player, screens.register(player, null));
                 case AuthState.Registered registered -> shower.show(player, screens.login(player, null));
                 case AuthState.Replacing replacing -> shower.show(player, screens.replace(player, replacing.why()));
+                case AuthState.SecondFactor waiting -> factor.offer(player, null);
                 case AuthState.Authenticated authenticated -> {}
             }
         });

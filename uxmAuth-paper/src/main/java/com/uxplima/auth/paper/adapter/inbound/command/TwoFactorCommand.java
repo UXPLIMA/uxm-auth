@@ -5,6 +5,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.bukkit.entity.Player;
 
+import com.uxplima.auth.paper.adapter.inbound.factor.FactorLogin;
 import com.uxplima.auth.paper.adapter.inbound.factor.FactorSetup;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
@@ -15,7 +16,7 @@ import com.uxplima.uxmlib.command.annotation.annotations.Subcommand;
 
 /**
  * {@code /2fa setup|confirm <code>|off <code>}: a logged-in player turns a code from an authenticator app after
- * the password on, and off again.
+ * the password on, and off again. {@code /2fa <code>} is the code of the second step, after the password.
  */
 @FromConfig(
         value = TwoFactorCommand.KEY,
@@ -29,16 +30,27 @@ public final class TwoFactorCommand {
     private static final String PERMISSION = "uxmauth.2fa";
 
     private final FactorSetup setup;
+    private final FactorLogin login;
 
-    public TwoFactorCommand(FactorSetup setup) {
+    public TwoFactorCommand(FactorSetup setup, FactorLogin login) {
         this.setup = Objects.requireNonNull(setup, "setup");
+        this.login = Objects.requireNonNull(login, "login");
     }
 
     @Subcommand("")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void usage(Sender sender) {
-        setup.usage((Player) sender.bukkit());
+    public void code(Sender sender, @Arg(value = "code", optional = true) String code) {
+        CompletableFuture<Void> unused = answer((Player) sender.bukkit(), code);
+    }
+
+    /** The code of the second step, or what the command does when none is given. */
+    CompletableFuture<Void> answer(Player player, String code) {
+        if (code.isBlank()) {
+            setup.usage(player);
+            return CompletableFuture.completedFuture(null);
+        }
+        return login.answer(player, code);
     }
 
     @FromConfig(value = "setup", fallbackName = "setup", description = "Show the key, the link and the QR code")

@@ -132,6 +132,28 @@ final class WaitingClockTest {
         assertThat(fired).containsExactly(AuthSettings.Moment.REMINDER_LOGIN, AuthSettings.Moment.REMINDER_LOGIN);
     }
 
+    @Test
+    @DisplayName("a player who waits for the app's code is reminded of the code, not the password")
+    void aPlayerWaitingForTheCodeIsRemindedOfTheCode() {
+        PlayerMock steve = server.addPlayer("Steve");
+        sessions.open(
+                steve.getUniqueId(),
+                new AuthState.SecondFactor(
+                        account(steve),
+                        com.uxplima.auth.domain.state.AuthMethod.SESSION,
+                        java.util.Set.of(com.uxplima.auth.domain.factor.FactorKind.APP),
+                        Attempts.fresh(3),
+                        null));
+        waiting.start(steve);
+
+        for (int second = 1; second <= 6; second++) {
+            clock.advance(Duration.ofSeconds(1));
+            scheduler.tick();
+        }
+
+        assertThat(fired).containsExactly(AuthSettings.Moment.REMINDER_CODE);
+    }
+
     private PlayerMock registered(String name) {
         PlayerMock player = server.addPlayer(name);
         sessions.open(player.getUniqueId(), new AuthState.Registered(account(player), Attempts.fresh(3)));

@@ -293,8 +293,10 @@ public final class AuthSettings {
     public enum Moment {
         JOIN_UNREGISTERED("join-unregistered"),
         JOIN_REGISTERED("join-registered"),
+        JOIN_CODE("join-code"),
         REMINDER_REGISTER("reminder-register"),
         REMINDER_LOGIN("reminder-login"),
+        REMINDER_CODE("reminder-code"),
         WRONG_PASSWORD("wrong-password"),
         REGISTERED("registered"),
         LOGGED_IN("logged-in"),

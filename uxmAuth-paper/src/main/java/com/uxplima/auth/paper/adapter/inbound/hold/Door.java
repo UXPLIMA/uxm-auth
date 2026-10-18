@@ -10,6 +10,7 @@ import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Where a player waits and how they are let in: the one place that holds a player, starts their clock and
@@ -67,11 +68,7 @@ public final class Door {
         notices.deliver(player, false);
         clock.start(player);
         screens.offer(player, state);
-        greeter.greet(
-                player,
-                state instanceof AuthState.Unregistered
-                        ? AuthSettings.Moment.JOIN_UNREGISTERED
-                        : AuthSettings.Moment.JOIN_REGISTERED);
+        greeter.greet(player, greeting(state));
     }
 
     /** A player who arrives already let in: told to the proxy, remembered, and greeted. */
@@ -119,5 +116,15 @@ public final class Door {
                 });
         moments.fire(player, moment);
         notices.deliver(player, true);
+    }
+
+    /** The moment a waiting player is greeted with: to register, to log in, or to type the app's code. */
+    private static AuthSettings.Moment greeting(@Nullable AuthState state) {
+        if (state instanceof AuthState.Unregistered) {
+            return AuthSettings.Moment.JOIN_UNREGISTERED;
+        }
+        return state instanceof AuthState.SecondFactor
+                ? AuthSettings.Moment.JOIN_CODE
+                : AuthSettings.Moment.JOIN_REGISTERED;
     }
 }

@@ -101,6 +101,32 @@ final class ConfigurationGateTest {
     }
 
     @Test
+    @DisplayName("a client that arrived by a session and waits for the app's code is shown the code screen first")
+    void aClientWaitingForTheCodeIsShownTheCodeScreen() {
+        world.registered(steve, "hunter22");
+        com.uxplima.auth.domain.account.Account account = ((com.uxplima.auth.domain.state.AuthState.Registered)
+                        world.sessions.state(steve.getUniqueId()).orElseThrow())
+                .account();
+        world.sessions.open(
+                steve.getUniqueId(),
+                new com.uxplima.auth.domain.state.AuthState.SecondFactor(
+                        account,
+                        com.uxplima.auth.domain.state.AuthMethod.SESSION,
+                        java.util.Set.of(com.uxplima.auth.domain.factor.FactorKind.APP),
+                        com.uxplima.auth.domain.state.Attempts.fresh(3),
+                        null));
+
+        CompletableFuture<ConfigurationGate.Outcome> unused =
+                gate().open(connection(steve.getUniqueId())).orElseThrow();
+
+        assertThat(shown)
+                .singleElement()
+                .satisfies(spec -> assertThat(spec.buttons())
+                        .extracting(DialogSpec.Button::action)
+                        .contains(AuthScreens.FACTOR));
+    }
+
+    @Test
     @DisplayName("the close of another connection under the same id, refused at the door, leaves the wait alone")
     void anotherConnectionsCloseLeavesTheWait() {
         world.registered(steve, "hunter22");

@@ -273,7 +273,7 @@ final class PluginModule {
         registerIfEnabled(commands, PremiumCommand.KEY, "premium", graph.premium, resolvers, scheduler);
         registerIfEnabled(commands, SessionCommand.KEY, "session", graph.session, resolvers, scheduler);
         registerIfEnabled(commands, CaptchaCommand.KEY, "captcha", graph.captchaCommand, resolvers, scheduler);
-        registerIfEnabled(commands, TwoFactorCommand.KEY, "2fa", graph.factors.command, resolvers, scheduler);
+        registerIfEnabled(commands, TwoFactorCommand.KEY, "2fa", graph.twoFactor, resolvers, scheduler);
     }
 
     private void registerIfEnabled(
