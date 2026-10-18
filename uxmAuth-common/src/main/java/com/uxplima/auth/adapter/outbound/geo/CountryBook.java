@@ -16,6 +16,9 @@ import org.jspecify.annotations.Nullable;
  */
 public final class CountryBook implements Countries, Closeable {
 
+    /** How often a lookup follows a swap before it gives up; a reload a few times inside one lookup is absurd. */
+    private static final int TRIES = 8;
+
     private final Path folder;
     private final AtomicReference<@Nullable CountryFile> open = new AtomicReference<>();
 
@@ -37,11 +40,22 @@ public final class CountryBook implements Countries, Closeable {
         return open.get() != null;
     }
 
+    /**
+     * A lookup that meets a reload finds the file it asked closed; the newer file is in place by then, so it is
+     * asked instead, and the address is never answered as unknown because of the swap.
+     */
     @Override
     public Optional<String> of(String address) {
         Objects.requireNonNull(address, "address");
         CountryFile file = open.get();
-        return file == null ? Optional.empty() : file.of(address);
+        for (int tried = 0; file != null && tried < TRIES; tried++) {
+            try {
+                return file.of(address);
+            } catch (CountryFile.Closed swapped) {
+                file = open.get();
+            }
+        }
+        return Optional.empty();
     }
 
     @Override

@@ -40,4 +40,48 @@ final class CountryBookTest {
             assertThat(book.of("203.0.113.7")).contains("DE");
         }
     }
+
+    @Test
+    @DisplayName("a lookup that meets a reload is answered by the new file, never as an unknown address")
+    void aLookupDuringAReloadIsAnswered() throws Exception {
+        CountryDatabase.write(folder.resolve(CountryFile.NAME), Map.of("203.0.113.0/24", "TR"));
+        try (CountryBook book = new CountryBook(folder)) {
+            book.reload();
+            java.util.concurrent.atomic.AtomicInteger unanswered = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.atomic.AtomicBoolean running = new java.util.concurrent.atomic.AtomicBoolean(true);
+            java.util.concurrent.ExecutorService lookups = java.util.concurrent.Executors.newFixedThreadPool(4);
+            try {
+                for (int i = 0; i < 4; i++) {
+                    lookups.execute(() -> {
+                        while (running.get()) {
+                            if (book.of("203.0.113.7").isEmpty()) {
+                                unanswered.incrementAndGet();
+                            }
+                        }
+                    });
+                }
+                for (int i = 0; i < 300; i++) {
+                    book.reload();
+                }
+            } finally {
+                running.set(false);
+                lookups.shutdown();
+                assertThat(lookups.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS))
+                        .isTrue();
+            }
+
+            assertThat(unanswered).hasValue(0);
+        }
+    }
+
+    @Test
+    @DisplayName("a closed file says it is closed rather than that it does not know the address")
+    void aClosedFileSaysSo() throws Exception {
+        CountryDatabase.write(folder.resolve(CountryFile.NAME), Map.of("203.0.113.0/24", "TR"));
+        CountryFile file = CountryFile.open(folder.resolve(CountryFile.NAME)).orElseThrow();
+        file.close();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> file.of("203.0.113.7"))
+                .isInstanceOf(CountryFile.Closed.class);
+    }
 }

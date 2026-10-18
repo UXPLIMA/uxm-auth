@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.maxmind.db.ClosedDatabaseException;
 import com.maxmind.db.MaxMindDbConstructor;
 import com.maxmind.db.MaxMindDbParameter;
 import com.maxmind.db.Reader;
@@ -37,6 +38,15 @@ public final class CountryFile implements Closeable {
         }
     }
 
+    /** The file was closed under a lookup, because a newer one took its place. */
+    public static final class Closed extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        Closed(Throwable cause) {
+            super("The country file was closed under the lookup", cause);
+        }
+    }
+
     private final Reader reader;
 
     private CountryFile(Reader reader) {
@@ -56,7 +66,11 @@ public final class CountryFile implements Closeable {
         }
     }
 
-    /** The country of the address, in upper case, or nothing when the file does not know it. */
+    /**
+     * The country of the address, in upper case, or nothing when the file does not know it.
+     *
+     * @throws Closed when the file was closed under the lookup, so the caller can ask the file that replaced it
+     */
     public Optional<String> of(String address) {
         Objects.requireNonNull(address, "address");
         if (!AddressKey.isAddress(address)) {
@@ -68,6 +82,8 @@ public final class CountryFile implements Closeable {
                     .map(Found::country)
                     .map(Country::isoCode)
                     .map(code -> code.toUpperCase(Locale.ROOT));
+        } catch (ClosedDatabaseException swapped) {
+            throw new Closed(swapped);
         } catch (IOException | RuntimeException unknown) {
             return Optional.empty();
         }
