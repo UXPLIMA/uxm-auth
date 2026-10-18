@@ -193,7 +193,7 @@ final class AtTheDoorTest {
     void aKeptDisputeStopsNobody() {
         held("Notch", AccountKind.CRACKED);
         disputes.raise(new PlayerName("Notch"), NOTCH, AuthFixture.NOW);
-        disputes.keep(new PlayerName("Notch"));
+        disputes.keep(new PlayerName("Notch"), UUID.randomUUID());
 
         assertThat(door.decide("Notch", HERE, HOST)).isNotEqualTo(new Decision.Refuse(Refusal.NAME_DISPUTED));
     }

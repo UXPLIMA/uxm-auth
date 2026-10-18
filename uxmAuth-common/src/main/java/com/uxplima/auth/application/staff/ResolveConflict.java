@@ -2,6 +2,7 @@ package com.uxplima.auth.application.staff;
 
 import java.time.Clock;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.AccountRepository;
@@ -59,7 +60,13 @@ public final class ResolveConflict {
             return Resolved.NO_DISPUTE;
         }
         if (side == Side.CRACKED) {
-            disputes.keep(name);
+            Optional<Account> holder = accounts.findByName(name);
+            if (holder.isEmpty()) {
+                // Nobody holds the name any more, so nothing is kept: the paid owner gets it at their next join.
+                disputes.resolve(name);
+                return Resolved.PREMIUM_TAKES;
+            }
+            disputes.keep(name, holder.get().id());
             return Resolved.CRACKED_KEEPS;
         }
         accounts.findByName(name).ifPresent(this::moveAway);

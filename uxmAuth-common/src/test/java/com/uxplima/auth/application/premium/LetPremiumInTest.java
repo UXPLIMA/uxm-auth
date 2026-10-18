@@ -182,7 +182,7 @@ final class LetPremiumInTest {
         conflict = ConflictStrategy.BLOCK;
         Account holder = cracked("Notch");
         disputes.raise(NOTCH, MOJANG, AuthFixture.NOW);
-        disputes.keep(NOTCH);
+        disputes.keep(NOTCH, holder.id());
 
         assertThat(admit(NOTCH, false)).isEqualTo(new PremiumAdmission.Refused(Refusal.NAME_KEPT));
         assertThat(fixture.accounts.findByName(NOTCH).orElseThrow().id()).isEqualTo(holder.id());
@@ -192,6 +192,23 @@ final class LetPremiumInTest {
         assertThat(disputes.of(NOTCH))
                 .as("a settled dispute with nobody left to keep it is gone")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("a dispute settled for one holder does not keep the name for a later account under it")
+    void aKeptDisputeKeepsOnlyItsHolder() {
+        conflict = ConflictStrategy.BLOCK;
+        Account first = cracked("Notch");
+        disputes.raise(NOTCH, MOJANG, AuthFixture.NOW);
+        disputes.keep(NOTCH, first.id());
+        fixture.accounts.delete(first.id());
+        Account later = cracked("Notch");
+
+        assertThat(admit(NOTCH, false)).isEqualTo(new PremiumAdmission.Refused(Refusal.NAME_DISPUTED));
+        assertThat(disputes.of(NOTCH))
+                .as("staff judged the first holder; the later one waits for them like any dispute")
+                .hasValueSatisfying(dispute -> assertThat(dispute.kept()).isFalse());
+        assertThat(fixture.accounts.findByName(NOTCH).orElseThrow().id()).isEqualTo(later.id());
     }
 
     @Test

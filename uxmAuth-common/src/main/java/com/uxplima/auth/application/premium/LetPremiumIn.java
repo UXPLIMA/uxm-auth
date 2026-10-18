@@ -114,18 +114,20 @@ public final class LetPremiumIn {
 
     /**
      * Why a dispute under the name turns the paid owner away: staff have not settled it, or they settled it for the
-     * cracked holder, who still holds the name. A settled dispute with no holder left is gone, and stops nothing.
+     * cracked account that still holds the name. A settled dispute whose account no longer holds it is gone, and the
+     * holder of the moment meets the operator's strategy like any other.
      */
     private Optional<Refusal> disputed(PlayerName name) {
         Optional<Disputes.Dispute> dispute = disputes.of(name);
         if (dispute.isEmpty()) {
             return Optional.empty();
         }
-        if (!dispute.get().kept()) {
+        UUID keptFor = dispute.get().keptFor();
+        if (keptFor == null) {
             return Optional.of(Refusal.NAME_DISPUTED);
         }
         if (accounts.findByName(name)
-                .filter(held -> held.kind() == AccountKind.CRACKED)
+                .filter(held -> held.kind() == AccountKind.CRACKED && held.id().equals(keptFor))
                 .isPresent()) {
             return Optional.of(Refusal.NAME_KEPT);
         }

@@ -45,9 +45,10 @@ final class SqlDisputesTest {
         Instant at = Instant.ofEpochMilli(1_760_000_000_000L);
         disputes.raise(new PlayerName("Notch"), mojang, at);
 
-        disputes.keep(new PlayerName("NOTCH"));
+        UUID holder = UUID.randomUUID();
+        disputes.keep(new PlayerName("NOTCH"), holder);
 
-        assertThat(disputes.of(new PlayerName("notch"))).contains(new Disputes.Dispute(mojang, at, true));
+        assertThat(disputes.of(new PlayerName("notch"))).contains(new Disputes.Dispute(mojang, at, holder));
     }
 
     @Test

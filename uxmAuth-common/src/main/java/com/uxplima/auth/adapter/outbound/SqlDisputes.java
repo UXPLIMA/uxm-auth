@@ -9,14 +9,15 @@ import com.uxplima.auth.application.port.Disputes;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.uxmlib.storage.StorageException;
 import com.uxplima.uxmlib.storage.sql.Database;
+import org.jspecify.annotations.Nullable;
 
 /** Disputes in the {@code uxmauth_dispute} table. The primary key on the name keeps the first one. */
 public final class SqlDisputes implements Disputes {
 
     private static final String RAISE =
             "INSERT INTO uxmauth_dispute (name_key, premium_id, raised_at) VALUES (?, ?, ?)";
-    private static final String READ = "SELECT premium_id, raised_at, kept FROM uxmauth_dispute WHERE name_key = ?";
-    private static final String KEEP = "UPDATE uxmauth_dispute SET kept = ? WHERE name_key = ?";
+    private static final String READ = "SELECT premium_id, raised_at, kept_for FROM uxmauth_dispute WHERE name_key = ?";
+    private static final String KEEP = "UPDATE uxmauth_dispute SET kept_for = ? WHERE name_key = ?";
     private static final String RESOLVE = "DELETE FROM uxmauth_dispute WHERE name_key = ?";
 
     private final Database database;
@@ -52,7 +53,7 @@ public final class SqlDisputes implements Disputes {
                 row -> new Dispute(
                         UUID.fromString(row.getString("premium_id")),
                         Instant.ofEpochMilli(row.getLong("raised_at")),
-                        row.getBoolean("kept"))));
+                        keptFor(row.getString("kept_for")))));
     }
 
     @Override
@@ -62,11 +63,16 @@ public final class SqlDisputes implements Disputes {
     }
 
     @Override
-    public void keep(PlayerName name) {
+    public void keep(PlayerName name, UUID holder) {
         Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(holder, "holder");
         database.inTransaction(sql -> sql.update(KEEP, statement -> {
-            statement.setBoolean(1, true);
+            statement.setString(1, holder.toString());
             statement.setString(2, name.key());
         }));
+    }
+
+    private static @Nullable UUID keptFor(@Nullable String stored) {
+        return stored == null || stored.isEmpty() ? null : UUID.fromString(stored);
     }
 }

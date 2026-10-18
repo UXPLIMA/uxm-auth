@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.uxplima.auth.domain.name.PlayerName;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Names a cracked account holds and a paid owner proved, held for staff to settle, where the operator chose
@@ -22,16 +23,16 @@ public interface Disputes {
     /** Staff settled the name. */
     void resolve(PlayerName name);
 
-    /** Staff settled the dispute under this name for the cracked holder, who keeps the name. */
-    void keep(PlayerName name);
+    /** Staff settled the dispute under this name for the cracked account that holds it now, which keeps it. */
+    void keep(PlayerName name, UUID holder);
 
     /**
      * Who proved the name, and when.
      *
-     * @param kept staff settled it for the cracked holder: it stops nobody, and the paid owner is told to change
-     *     their name
+     * @param keptFor the cracked account staff settled it for, which keeps the name; empty while it is unsettled
      */
-    record Dispute(UUID premiumId, Instant raisedAt, boolean kept) {
+    record Dispute(
+            UUID premiumId, Instant raisedAt, @Nullable UUID keptFor) {
         public Dispute {
             Objects.requireNonNull(premiumId, "premiumId");
             Objects.requireNonNull(raisedAt, "raisedAt");
@@ -39,7 +40,12 @@ public interface Disputes {
 
         /** A dispute nobody has settled. */
         public Dispute(UUID premiumId, Instant raisedAt) {
-            this(premiumId, raisedAt, false);
+            this(premiumId, raisedAt, null);
+        }
+
+        /** Whether staff settled it for a cracked holder. */
+        public boolean kept() {
+            return keptFor != null;
         }
     }
 }

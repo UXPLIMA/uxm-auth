@@ -73,7 +73,7 @@ final class ResolveConflictTest {
 
         assertThat(fixture.accounts.findByName(NOTCH).orElseThrow().id()).isEqualTo(holder);
         assertThat(disputes.of(NOTCH))
-                .hasValueSatisfying(dispute -> assertThat(dispute.kept()).isTrue());
+                .hasValueSatisfying(dispute -> assertThat(dispute.keptFor()).isEqualTo(holder));
         assertThat(published).isEmpty();
     }
 

@@ -30,7 +30,7 @@ public final class InMemoryDisputes implements Disputes {
     }
 
     @Override
-    public void keep(PlayerName name) {
-        byKey.computeIfPresent(name.key(), (key, held) -> new Dispute(held.premiumId(), held.raisedAt(), true));
+    public void keep(PlayerName name, UUID holder) {
+        byKey.computeIfPresent(name.key(), (key, held) -> new Dispute(held.premiumId(), held.raisedAt(), holder));
     }
 }
