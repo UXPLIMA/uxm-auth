@@ -389,6 +389,13 @@ public enum Keys implements MessageKey {
             "staff.no-password",
             "<etag:'ERROR'> <body><value><name><body> has no password to log in with. Set one first."),
     STAFF_REJOIN_KICK("staff.rejoin-kick", "<body>Staff changed how your account logs in. Join again."),
+    STAFF_RESOLVED_PREMIUM(
+            "staff.resolved-premium",
+            "<tag:'AUTH'> <body><value><name><body> goes to its paid owner. The cracked account moved to a marked name with everything it had."),
+    STAFF_RESOLVED_CRACKED(
+            "staff.resolved-cracked",
+            "<tag:'AUTH'> <body><value><name><body> stays with its cracked holder. The paid owner is told to change their name."),
+    STAFF_NO_DISPUTE("staff.no-dispute", "<etag:'ERROR'> <body>No dispute holds <value><name><body>."),
     INFO_HEADER("info.header", "<tag:'AUTH'> <value><name><body>, <value><kind><body>."),
     INFO_KIND_CRACKED("info.kind.cracked", "a password account"),
     INFO_KIND_PREMIUM("info.kind.premium", "a premium account"),

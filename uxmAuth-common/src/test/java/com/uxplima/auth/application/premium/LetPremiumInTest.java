@@ -176,6 +176,25 @@ final class LetPremiumInTest {
     }
 
     @Test
+    @DisplayName("a dispute staff settled for the cracked holder tells the paid owner to change their name; with the"
+            + " holder gone it lets the owner in")
+    void aKeptDisputeIsCrackedKeeps() {
+        conflict = ConflictStrategy.BLOCK;
+        Account holder = cracked("Notch");
+        disputes.raise(NOTCH, MOJANG, AuthFixture.NOW);
+        disputes.keep(NOTCH);
+
+        assertThat(admit(NOTCH, false)).isEqualTo(new PremiumAdmission.Refused(Refusal.NAME_KEPT));
+        assertThat(fixture.accounts.findByName(NOTCH).orElseThrow().id()).isEqualTo(holder.id());
+
+        fixture.accounts.delete(holder.id());
+        assertThat(admit(NOTCH, false)).isInstanceOf(PremiumAdmission.In.class);
+        assertThat(disputes.of(NOTCH))
+                .as("a settled dispute with nobody left to keep it is gone")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("cracked keeps: the paid owner is told to change their name, and nothing moves")
     void crackedKeeps() {
         conflict = ConflictStrategy.CRACKED_KEEPS;

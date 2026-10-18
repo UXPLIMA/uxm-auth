@@ -65,7 +65,7 @@ public final class AtTheDoor {
             return new Decision.Cracked(false, false);
         }
         PlayerName name = accepted.name();
-        if (disputes.of(name).isPresent()) {
+        if (disputes.of(name).filter(dispute -> !dispute.kept()).isPresent()) {
             // Both sides wait for staff: the paid owner and the cracked holder alike.
             return new Decision.Refuse(Refusal.NAME_DISPUTED);
         }

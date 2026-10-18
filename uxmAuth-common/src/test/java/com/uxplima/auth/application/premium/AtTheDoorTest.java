@@ -189,6 +189,16 @@ final class AtTheDoorTest {
     }
 
     @Test
+    @DisplayName("a dispute staff settled for the cracked holder stops nobody at the door")
+    void aKeptDisputeStopsNobody() {
+        held("Notch", AccountKind.CRACKED);
+        disputes.raise(new PlayerName("Notch"), NOTCH, AuthFixture.NOW);
+        disputes.keep(new PlayerName("Notch"));
+
+        assertThat(door.decide("Notch", HERE, HOST)).isNotEqualTo(new Decision.Refuse(Refusal.NAME_DISPUTED));
+    }
+
+    @Test
     @DisplayName("a name the rules refuse, or a registered name in another case, is left to the name check unasked")
     void aNameTheDoorRefusesIsNotAsked() {
         held("Notch", AccountKind.PREMIUM);

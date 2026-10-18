@@ -61,8 +61,9 @@ public final class LetPremiumIn {
         Objects.requireNonNull(mojangId, "mojangId");
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(address, "address");
-        if (disputes.of(name).isPresent()) {
-            return new PremiumAdmission.Refused(Refusal.NAME_DISPUTED);
+        Optional<Refusal> disputed = disputed(name);
+        if (disputed.isPresent()) {
+            return new PremiumAdmission.Refused(disputed.get());
         }
         Optional<Account> mine = accounts.findByPremiumId(mojangId);
         Optional<Account> holder = accounts.findByName(name)
@@ -109,6 +110,27 @@ public final class LetPremiumIn {
                 yield Optional.empty();
             }
         };
+    }
+
+    /**
+     * Why a dispute under the name turns the paid owner away: staff have not settled it, or they settled it for the
+     * cracked holder, who still holds the name. A settled dispute with no holder left is gone, and stops nothing.
+     */
+    private Optional<Refusal> disputed(PlayerName name) {
+        Optional<Disputes.Dispute> dispute = disputes.of(name);
+        if (dispute.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!dispute.get().kept()) {
+            return Optional.of(Refusal.NAME_DISPUTED);
+        }
+        if (accounts.findByName(name)
+                .filter(held -> held.kind() == AccountKind.CRACKED)
+                .isPresent()) {
+            return Optional.of(Refusal.NAME_KEPT);
+        }
+        disputes.resolve(name);
+        return Optional.empty();
     }
 
     /** The account moves to the name and the mark, with everything keyed by its id. */

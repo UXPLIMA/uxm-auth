@@ -20,6 +20,7 @@ import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
 import com.uxplima.auth.application.staff.MarkKind;
+import com.uxplima.auth.application.staff.ResolveConflict;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.application.staff.Unregister;
@@ -57,6 +58,7 @@ final class StaffDeskTest {
     private final List<String> logged = new ArrayList<>();
     private StaffGate gate;
     private StaffDesk desk;
+    private com.uxplima.auth.adapter.outbound.SqlDisputes disputes;
 
     @BeforeEach
     void setUp() {
@@ -64,6 +66,7 @@ final class StaffDeskTest {
         world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords());
         staff = server.addPlayer("Staff");
         LocalEvents events = new LocalEvents();
+        disputes = new com.uxplima.auth.adapter.outbound.SqlDisputes(world.database);
         ForceLogin force = new ForceLogin(world.accounts, world.sessions, events, world.clock);
         events.listen(
                 new ForcedLogins(server::getPlayer, force, world.lane, world.replies, world.door, world.messages));
@@ -100,7 +103,8 @@ final class StaffDeskTest {
                         world.accounts,
                         name -> new PremiumAnswer.Premium(MOJANG, name.value()),
                         UuidScheme.KEEP_FIRST,
-                        events));
+                        events),
+                new ResolveConflict(world.accounts, disputes, () -> "_", events, world.clock));
         StaffDesk.Reach reach = new StaffDesk.Reach(
                 name -> java.util.Optional.ofNullable(server.getPlayerExact(name))
                         .map(org.bukkit.entity.Player::getUniqueId),
@@ -401,5 +405,48 @@ final class StaffDeskTest {
         world.scheduler.settle(desk.markCracked(staff, "Steve"));
         assertThat(staff.nextComponentMessage())
                 .isEqualTo(world.messages.render(staff, Keys.STAFF_MARK_ALREADY, Text.placeholder("name", "Steve")));
+    }
+
+    @Test
+    @DisplayName("settling a dispute is refused in game unless opened; for the paid owner the holder moves and rejoins")
+    void aDisputeIsSettled() {
+        PlayerMock steve = server.addPlayer("Steve");
+        world.registered(steve, "hunter22");
+        java.util.UUID holder =
+                world.accounts.findByName(new PlayerName("Steve")).orElseThrow().id();
+        disputes.raise(new PlayerName("Steve"), MOJANG, world.clock.instant());
+
+        world.scheduler.settle(desk.resolve(staff, "Steve", ResolveConflict.Side.PREMIUM));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(
+                        world.messages.render(staff, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", "resolve")));
+
+        world.scheduler.settle(desk.resolve(server.getConsoleSender(), "Steve", ResolveConflict.Side.PREMIUM));
+        until(() -> !steve.isOnline());
+
+        assertThat(world.accounts.findById(holder).orElseThrow().name().value()).isEqualTo("Steve_");
+        assertThat(disputes.of(new PlayerName("Steve"))).isEmpty();
+        assertThat(steve.isOnline()).isFalse();
+        assertThat(logged).singleElement().asString().contains("Steve");
+        opened.add(StaffAction.RESOLVE);
+        world.scheduler.settle(desk.resolve(staff, "Steve", ResolveConflict.Side.CRACKED));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(staff, Keys.STAFF_NO_DISPUTE, Text.placeholder("name", "Steve")));
+    }
+
+    @Test
+    @DisplayName("for the cracked holder the name stays, and the paid owner will be told to change theirs")
+    void aDisputeIsSettledForTheHolder() {
+        opened.add(StaffAction.RESOLVE);
+        world.registered(server.addPlayer("Steve"), "hunter22");
+        disputes.raise(new PlayerName("Steve"), MOJANG, world.clock.instant());
+
+        world.scheduler.settle(desk.resolve(staff, "Steve", ResolveConflict.Side.CRACKED));
+
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(
+                        world.messages.render(staff, Keys.STAFF_RESOLVED_CRACKED, Text.placeholder("name", "Steve")));
+        assertThat(disputes.of(new PlayerName("Steve")))
+                .hasValueSatisfying(dispute -> assertThat(dispute.kept()).isTrue());
     }
 }

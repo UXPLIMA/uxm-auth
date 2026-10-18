@@ -121,6 +121,9 @@ permissions:
   uxmauth.admin.markcracked:
     description: Turn a premium account cracked; from the console only unless staff.in-game opens it
     default: op
+  uxmauth.admin.resolve:
+    description: Settle a name a cracked holder and a paid owner both want; from the console only unless staff.in-game opens it
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

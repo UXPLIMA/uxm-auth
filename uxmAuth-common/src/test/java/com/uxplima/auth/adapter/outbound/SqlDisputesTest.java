@@ -39,6 +39,18 @@ final class SqlDisputesTest {
     }
 
     @Test
+    @DisplayName("a dispute staff settle for the cracked holder is kept, and reads as kept")
+    void aDisputeIsKept() {
+        UUID mojang = UUID.randomUUID();
+        Instant at = Instant.ofEpochMilli(1_760_000_000_000L);
+        disputes.raise(new PlayerName("Notch"), mojang, at);
+
+        disputes.keep(new PlayerName("NOTCH"));
+
+        assertThat(disputes.of(new PlayerName("notch"))).contains(new Disputes.Dispute(mojang, at, true));
+    }
+
+    @Test
     @DisplayName("a dispute is raised once per name, read in any case, and gone once resolved")
     void aDisputeIsRaisedReadAndResolved() {
         UUID mojang = UUID.randomUUID();

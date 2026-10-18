@@ -15,7 +15,8 @@ public final class SqlDisputes implements Disputes {
 
     private static final String RAISE =
             "INSERT INTO uxmauth_dispute (name_key, premium_id, raised_at) VALUES (?, ?, ?)";
-    private static final String READ = "SELECT premium_id, raised_at FROM uxmauth_dispute WHERE name_key = ?";
+    private static final String READ = "SELECT premium_id, raised_at, kept FROM uxmauth_dispute WHERE name_key = ?";
+    private static final String KEEP = "UPDATE uxmauth_dispute SET kept = ? WHERE name_key = ?";
     private static final String RESOLVE = "DELETE FROM uxmauth_dispute WHERE name_key = ?";
 
     private final Database database;
@@ -49,12 +50,23 @@ public final class SqlDisputes implements Disputes {
                 READ,
                 statement -> statement.setString(1, name.key()),
                 row -> new Dispute(
-                        UUID.fromString(row.getString("premium_id")), Instant.ofEpochMilli(row.getLong("raised_at")))));
+                        UUID.fromString(row.getString("premium_id")),
+                        Instant.ofEpochMilli(row.getLong("raised_at")),
+                        row.getBoolean("kept"))));
     }
 
     @Override
     public void resolve(PlayerName name) {
         Objects.requireNonNull(name, "name");
         database.inTransaction(sql -> sql.update(RESOLVE, statement -> statement.setString(1, name.key())));
+    }
+
+    @Override
+    public void keep(PlayerName name) {
+        Objects.requireNonNull(name, "name");
+        database.inTransaction(sql -> sql.update(KEEP, statement -> {
+            statement.setBoolean(1, true);
+            statement.setString(2, name.key());
+        }));
     }
 }

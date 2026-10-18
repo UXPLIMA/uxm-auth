@@ -19,6 +19,7 @@ import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
 import com.uxplima.auth.application.staff.MarkKind;
+import com.uxplima.auth.application.staff.ResolveConflict;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.StaffAction;
 import com.uxplima.auth.application.staff.Unregister;
@@ -43,7 +44,8 @@ public final class StaffDesk implements StaffActions {
             SetPassword setPassword,
             ForceRegister register,
             FactorOff factorOff,
-            MarkKind marks) {
+            MarkKind marks,
+            ResolveConflict conflicts) {
         public Cases {
             Objects.requireNonNull(force, "force");
             Objects.requireNonNull(bans, "bans");
@@ -52,6 +54,7 @@ public final class StaffDesk implements StaffActions {
             Objects.requireNonNull(register, "register");
             Objects.requireNonNull(factorOff, "factorOff");
             Objects.requireNonNull(marks, "marks");
+            Objects.requireNonNull(conflicts, "conflicts");
         }
     }
 
@@ -256,5 +259,27 @@ public final class StaffDesk implements StaffActions {
             case NO_PASSWORD -> Keys.STAFF_NO_PASSWORD;
             case UNKNOWN -> Keys.STAFF_UNKNOWN;
         };
+    }
+
+    @Override
+    public CompletableFuture<Void> resolve(CommandSender sender, String name, ResolveConflict.Side side) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(side, "side");
+        if (!gate.allows(Objects.requireNonNull(sender, "sender"), StaffAction.RESOLVE)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        PlayerName disputed = new PlayerName(name);
+        return replies.on(sender, lane.submit(() -> cases.conflicts().resolve(disputed, side)), resolved -> {
+            TagResolver who = Text.placeholder("name", name);
+            switch (resolved) {
+                case PREMIUM_TAKES -> messages.send(sender, Keys.STAFF_RESOLVED_PREMIUM, who);
+                case CRACKED_KEEPS -> messages.send(sender, Keys.STAFF_RESOLVED_CRACKED, who);
+                case NO_DISPUTE -> messages.send(sender, Keys.STAFF_NO_DISPUTE, who);
+            }
+            if (resolved != ResolveConflict.Resolved.NO_DISPUTE) {
+                log.accept(sender.getName() + " settled the dispute over " + name + " for the "
+                        + side.name().toLowerCase(java.util.Locale.ROOT) + " side.");
+            }
+        });
     }
 }

@@ -4,6 +4,8 @@ import java.util.concurrent.CompletableFuture;
 
 import org.bukkit.command.CommandSender;
 
+import com.uxplima.auth.application.staff.ResolveConflict;
+
 /** What the admin command hands staff to act on an account: each answers once the sender has been told. */
 public interface StaffActions {
 
@@ -48,6 +50,11 @@ public interface StaffActions {
         public CompletableFuture<Void> markCracked(CommandSender sender, String name) {
             return CompletableFuture.completedFuture(null);
         }
+
+        @Override
+        public CompletableFuture<Void> resolve(CommandSender sender, String name, ResolveConflict.Side side) {
+            return CompletableFuture.completedFuture(null);
+        }
     };
 
     /** Lets the waiting player of the account under this name in, on whichever server they wait. */
@@ -73,4 +80,7 @@ public interface StaffActions {
 
     /** Turns the premium account under this name cracked; it logs in with its password then. */
     CompletableFuture<Void> markCracked(CommandSender sender, String name);
+
+    /** Settles the dispute over this name for the paid owner or for the cracked holder. */
+    CompletableFuture<Void> resolve(CommandSender sender, String name, ResolveConflict.Side side);
 }

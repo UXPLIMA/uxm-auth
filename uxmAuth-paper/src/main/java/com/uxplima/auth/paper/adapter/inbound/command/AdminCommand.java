@@ -14,6 +14,7 @@ import net.kyori.adventure.text.JoinConfiguration;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.staff.ResolveConflict;
 import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffActions;
 import com.uxplima.uxmlib.command.Sender;
@@ -210,6 +211,16 @@ public final class AdminCommand {
     @Permission("uxmauth.admin.markcracked")
     public void markCracked(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
         CompletableFuture<Void> unused = actions.markCracked(sender.bukkit(), player);
+    }
+
+    /** Settles a name a cracked holder and a paid owner both want, for one of the two: premium or cracked. */
+    @FromConfig(value = "resolve", fallbackName = "resolve", description = "Settle a name two players want")
+    @Permission("uxmauth.admin.resolve")
+    public void resolve(
+            Sender sender,
+            @Arg("player") @SuggestUsing(PlayerNames.KEY) String player,
+            @Arg("side") ResolveConflict.Side side) {
+        CompletableFuture<Void> unused = actions.resolve(sender.bukkit(), player, side);
     }
 
     /** Everything staff read of one account: its dates, logins, factors, address and the other accounts. */

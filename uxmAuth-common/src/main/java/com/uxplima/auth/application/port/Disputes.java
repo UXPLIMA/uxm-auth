@@ -22,11 +22,24 @@ public interface Disputes {
     /** Staff settled the name. */
     void resolve(PlayerName name);
 
-    /** Who proved the name, and when. */
-    record Dispute(UUID premiumId, Instant raisedAt) {
+    /** Staff settled the dispute under this name for the cracked holder, who keeps the name. */
+    void keep(PlayerName name);
+
+    /**
+     * Who proved the name, and when.
+     *
+     * @param kept staff settled it for the cracked holder: it stops nobody, and the paid owner is told to change
+     *     their name
+     */
+    record Dispute(UUID premiumId, Instant raisedAt, boolean kept) {
         public Dispute {
             Objects.requireNonNull(premiumId, "premiumId");
             Objects.requireNonNull(raisedAt, "raisedAt");
+        }
+
+        /** A dispute nobody has settled. */
+        public Dispute(UUID premiumId, Instant raisedAt) {
+            this(premiumId, raisedAt, false);
         }
     }
 }

@@ -62,6 +62,7 @@ import com.uxplima.auth.application.staff.FactorOff;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.application.staff.ForceRegister;
 import com.uxplima.auth.application.staff.MarkKind;
+import com.uxplima.auth.application.staff.ResolveConflict;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.hash.Hashing;
@@ -518,7 +519,13 @@ final class AuthGraph implements AutoCloseable {
                                 breaches,
                                 clock),
                         new FactorOff(accounts, factors.factors, mail.emails),
-                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events)),
+                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events),
+                        new ResolveConflict(
+                                accounts,
+                                disputes,
+                                () -> settings.current().ownership().renameMark(),
+                                events,
+                                clock)),
                 new StaffDesk.Reach(
                         name -> Optional.ofNullable(plugin.getServer().getPlayerExact(name))
                                 .map(Player::getUniqueId),

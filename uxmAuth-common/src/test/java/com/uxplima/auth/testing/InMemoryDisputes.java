@@ -28,4 +28,9 @@ public final class InMemoryDisputes implements Disputes {
     public void resolve(PlayerName name) {
         byKey.remove(name.key());
     }
+
+    @Override
+    public void keep(PlayerName name) {
+        byKey.computeIfPresent(name.key(), (key, held) -> new Dispute(held.premiumId(), held.raisedAt(), true));
+    }
 }
