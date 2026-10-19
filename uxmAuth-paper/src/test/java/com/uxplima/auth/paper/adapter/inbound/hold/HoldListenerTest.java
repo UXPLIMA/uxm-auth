@@ -121,6 +121,57 @@ final class HoldListenerTest {
     }
 
     @Test
+    @DisplayName("a held player is sent only the commands they may run, so their client offers nothing else")
+    void aHeldPlayerIsSentOnlyItsOwnCommands() {
+        java.util.Collection<String> sent = new java.util.ArrayList<>(
+                List.of("login", "l", "uxmauth:login", "spawn", "home", "essentials:home", "essentials:login"));
+
+        server.getPluginManager().callEvent(new org.bukkit.event.player.PlayerCommandSendEvent(steve, sent));
+
+        assertThat(sent).containsExactlyInAnyOrder("login", "l", "uxmauth:login");
+    }
+
+    @Test
+    @DisplayName("a logged-in player is sent every command")
+    void aLoggedInPlayerIsSentEverything() {
+        sessions.update(steve.getUniqueId(), state -> new AuthState.Authenticated(account(steve), AuthMethod.PASSWORD));
+        java.util.Collection<String> sent = new java.util.ArrayList<>(List.of("login", "spawn", "home"));
+
+        server.getPluginManager().callEvent(new org.bukkit.event.player.PlayerCommandSendEvent(steve, sent));
+
+        assertThat(sent).containsExactlyInAnyOrder("login", "spawn", "home");
+    }
+
+    @Test
+    @DisplayName("a held player is suggested nothing another plugin would work out for the account they claim")
+    void aHeldPlayerIsSuggestedNothingElse() throws Exception {
+        assertThat(tab("/home ").isCancelled()).isTrue();
+        assertThat(tab("/essentials:home ").isCancelled()).isTrue();
+        assertThat(tab("hello Al").isCancelled()).as("a chat line's names").isTrue();
+        assertThat(tab("login Al").isCancelled())
+                .as("a chat line that starts with a login word is still chat")
+                .isTrue();
+        assertThat(tab("/login ").isCancelled()).isFalse();
+        assertThat(fire(new org.bukkit.event.server.TabCompleteEvent(steve, "/home ", new java.util.ArrayList<>()))
+                        .isCancelled())
+                .as("the older event, which Paper fires for a command written against it")
+                .isTrue();
+
+        sessions.update(steve.getUniqueId(), state -> new AuthState.Authenticated(account(steve), AuthMethod.PASSWORD));
+        assertThat(tab("/home ").isCancelled()).isFalse();
+    }
+
+    @SuppressWarnings("removal")
+    private com.destroystokyo.paper.event.server.AsyncTabCompleteEvent tab(String buffer) throws Exception {
+        var event = new com.destroystokyo.paper.event.server.AsyncTabCompleteEvent(
+                steve, buffer, buffer.startsWith("/"), steve.getLocation());
+        java.util.concurrent.CompletableFuture.runAsync(
+                        () -> server.getPluginManager().callEvent(event))
+                .get();
+        return event;
+    }
+
+    @Test
     @DisplayName("each hold is its own switch")
     void eachHoldCanBeSwitchedOff() {
         hold.set(holding(false));

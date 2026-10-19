@@ -24,6 +24,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -31,10 +32,12 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.server.TabCompleteEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
 
+import com.destroystokyo.paper.event.server.AsyncTabCompleteEvent;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.domain.state.AuthState;
@@ -128,6 +131,40 @@ public final class HoldListener implements Listener {
         if (!allowed(labelOf(event.getMessage()))) {
             stop(event, event.getPlayer(), AuthSettings.Hold::commands);
         }
+    }
+
+    /**
+     * A held player's client is sent only the commands they may run, so it offers nothing else. The tree goes
+     * again in full when the hold gives back what it took.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onCommandsSent(PlayerCommandSendEvent event) {
+        if (hold.get().commands() && isHeld(event.getPlayer())) {
+            event.getCommands().removeIf(label -> !allowed(label.toLowerCase(Locale.ROOT)));
+        }
+    }
+
+    /**
+     * Another plugin's suggestions are worked out as the account a held player claims, and a home or a warp
+     * list is that account's own: a stranger under the name would read it by pressing tab.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onTabComplete(AsyncTabCompleteEvent event) {
+        if (event.getSender() instanceof Player player && !ownCompletion(event.isCommand(), event.getBuffer())) {
+            stop(event, player, AuthSettings.Hold::commands);
+        }
+    }
+
+    /** The older event, which Paper still fires for a command written against it. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onLegacyTabComplete(TabCompleteEvent event) {
+        if (event.getSender() instanceof Player player && !ownCompletion(true, event.getBuffer())) {
+            stop(event, player, AuthSettings.Hold::commands);
+        }
+    }
+
+    private boolean ownCompletion(boolean command, String buffer) {
+        return command && allowed(labelOf(buffer));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)

@@ -81,6 +81,28 @@ final class HoldKeeperTest {
     }
 
     @Test
+    @DisplayName("the login sends the whole command tree again, which the hold cut down to the login commands")
+    void theLoginSendsTheCommandsAgain() {
+        int[] sent = {0};
+        PlayerMock steve = new PlayerMock(server, "Steve") {
+            @Override
+            public void updateCommands() {
+                sent[0]++;
+            }
+        };
+        server.addPlayer(steve);
+        held.add(steve.getUniqueId());
+        keeper.arrive(steve);
+
+        held.remove(steve.getUniqueId());
+        keeper.giveBack(steve);
+
+        assertThat(sent[0]).isEqualTo(1);
+        keeper.leave(steve);
+        assertThat(sent[0]).as("a player who leaves needs no tree").isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("a held player may not fall, so flight is allowed while held: the server never kicks them for"
             + " floating, they fly nowhere, and their own flight comes back")
     void heldInTheAirIsNeverKickedForFloating() {

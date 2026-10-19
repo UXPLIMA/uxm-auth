@@ -246,6 +246,10 @@ public final class HoldKeeper {
                 scheduler.entity(other, () -> other.showPlayer(plugin, player));
             }
         }
+        if (!leaving) {
+            // The hold sent the client only the login commands; the full tree goes once the player is in.
+            player.updateCommands();
+        }
         HeldPlace place = state == null ? null : state.place();
         if (leaving && place != null) {
             // Only the place outlives the quit; everything else came back just now.
