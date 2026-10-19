@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Logger;
 
+import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.handshake.Handshake;
 import com.uxplima.auth.handshake.HandshakeResults;
 import com.uxplima.auth.handshake.HelloDoor;
@@ -29,6 +30,12 @@ public final class ServerHellos implements Hellos, AutoCloseable {
 
     /** Installs the handshake if this server can run it, and says in the console why not if it cannot. */
     public static ServerHellos startOn(HelloDoor door, Logger logger) {
+        return startOn(door, logger, NameRule.AUTOMATIC);
+    }
+
+    /** Installs the handshake as above, and names in the console who it proves under {@code rule}. */
+    public static ServerHellos startOn(HelloDoor door, Logger logger, NameRule rule) {
+        Objects.requireNonNull(rule, "rule");
         Objects.requireNonNull(door, "door");
         Objects.requireNonNull(logger, "logger");
         ServerHellos hellos;
@@ -45,8 +52,18 @@ public final class ServerHellos implements Hellos, AutoCloseable {
                     + notThisServer.getMessage() + ")");
             return new ServerHellos(false);
         }
-        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the door.");
+        logger.info(onLine(rule));
         return hellos;
+    }
+
+    /**
+     * What the start says once the handshake is installed. Under opt-in nobody is proved until they ask, and an
+     * operator who turned premium off by that rule read "on" and could not tell.
+     */
+    static String onLine(NameRule rule) {
+        return rule == NameRule.OPT_IN
+                ? "Premium login is ready: Mojang proves at the door only a player who typed /premium."
+                : "Premium auto-login is on: paid accounts are proved by Mojang at the door.";
     }
 
     @Override

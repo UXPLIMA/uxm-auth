@@ -360,7 +360,10 @@ final class AuthGraph implements AutoCloseable {
                 clock,
                 timings);
         AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
-        this.hellos = ServerHellos.startOn(new PremiumHelloDoor(atTheDoor, scheduler), plugin.getLogger());
+        this.hellos = ServerHellos.startOn(
+                new PremiumHelloDoor(atTheDoor, scheduler),
+                plugin.getLogger(),
+                settings.current().ownership().rule());
         ClaimName claims = new ClaimName(
                 sessions, atTheDoor, () -> settings.current().ownership().rule());
         AuthScreens screens = new AuthScreens(
