@@ -49,7 +49,7 @@ public final class CaptchaCommand {
     @Subcommand("")
     @Permission("uxmauth.captcha")
     @PlayerOnly
-    public void answer(Sender sender, @Arg("code") String code) {
+    public void answer(Sender sender, @Arg(value = "code", optional = true) String code) {
         answer((Player) sender.bukkit(), code);
     }
 
@@ -58,6 +58,11 @@ public final class CaptchaCommand {
         UUID id = player.getUniqueId();
         if (!captcha.waiting(id)) {
             messages.send(player, Keys.CAPTCHA_NOTHING);
+            return;
+        }
+        // Any answer spends the code, and a bare label is a question rather than an answer.
+        if (code.isEmpty()) {
+            messages.send(player, Keys.CAPTCHA_USAGE);
             return;
         }
         if (!captcha.solve(id, code)) {

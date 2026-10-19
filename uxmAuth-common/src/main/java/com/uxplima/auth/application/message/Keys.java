@@ -565,6 +565,7 @@ public enum Keys implements MessageKey {
     CAPTCHA_SOLVED("captcha.solved", "<good>Captcha solved. Go on."),
     CAPTCHA_MAP("captcha.map", "<body>Read the code on the map in your hand and type <value>/captcha <code><body>."),
     CAPTCHA_MAP_CHAT("captcha.map-chat", "<body>Read the code on the map in your hand and type it in chat."),
+    CAPTCHA_USAGE("captcha.usage", "<tag:'AUTH'> <body>Type the code after the command: <value>/captcha <code>"),
     CAPTCHA_NOTHING("captcha.nothing", "<etag:'ERROR'> <body>There is no captcha to answer."),
     LOGIN_MUST_REPLACE(
             "login.must-replace",

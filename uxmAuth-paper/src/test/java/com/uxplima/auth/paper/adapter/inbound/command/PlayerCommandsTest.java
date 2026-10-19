@@ -407,6 +407,25 @@ final class PlayerCommandsTest {
     }
 
     @Test
+    @DisplayName("/captcha alone reaches the command and says how to answer, and the code it shows stays good")
+    void aBareCaptchaSaysHow() {
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        world.unregistered(steve);
+        java.util.List<String> handed = new java.util.ArrayList<>();
+        CaptchaCommand command = captchaCommand((player, code) -> handed.add(code), (player, state) -> {});
+        assertThat(node(command).getCommand()).isNotNull();
+        captchaScreen((player, code) -> handed.add(code)).offer(steve, steve.getUniqueId(), null);
+        drain();
+
+        command.answer(steve, "");
+
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_USAGE));
+        assertThat(handed).as("no new code is drawn").hasSize(1);
+        command.answer(steve, handed.getFirst());
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_SOLVED));
+    }
+
+    @Test
     @DisplayName("/captcha with no code waiting says so, a wrong code shows a new one, the right one the next screen")
     void theCaptchaCommandAnswers() {
         world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
