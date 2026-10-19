@@ -292,6 +292,26 @@ final class ScreenAnswersTest {
     }
 
     @Test
+    @DisplayName("with chat answering, the line under the map says to type the code in chat")
+    void aCaptchaOnTheMapAnsweredInChat() throws java.io.IOException {
+        java.nio.file.Path file = folder.resolve("chat-screens.conf");
+        java.nio.file.Files.writeString(file, "chat-input = true\n", java.nio.charset.StandardCharsets.UTF_8);
+        settings = new com.uxplima.auth.adapter.outbound.ScreenFile(file).current();
+        world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);
+        hand = (player, code) -> true;
+        world.unregistered(steve);
+        while (steve.nextComponentMessage() != null) {
+            // Only what the captcha says counts.
+        }
+
+        world.scheduler.settle(answers()
+                .answer(guest(), AuthScreens.REGISTER, answer(Map.of("password", "hunter22", "confirm", "hunter22"))));
+
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_NEEDED));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CAPTCHA_MAP_CHAT));
+    }
+
+    @Test
     @DisplayName("a connection that ends takes its captcha with it: the next one is shown a new code and must solve it")
     void aReconnectStartsTheCaptchaOver() {
         world.captchaSettings = captcha(com.uxplima.auth.application.protection.Captchas.When.REGISTER);

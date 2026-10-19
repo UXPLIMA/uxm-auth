@@ -289,6 +289,11 @@ public final class AuthScreens {
         return buttons;
     }
 
+    /** Whether a player in the world answers in chat, as {@code chat-input} in screens.conf chooses. */
+    public boolean answersInChat() {
+        return screens.get().chatInput();
+    }
+
     /**
      * The rules as lines of chat, for a client that cannot show the register screen, and the line that says
      * registering with the command accepts them. Empty while the rules are off.

@@ -71,7 +71,7 @@ public final class CaptchaScreen implements CaptchaOffer {
             if (reason != null) {
                 player.sendMessage(reason);
             }
-            messages.send(player, Keys.CAPTCHA_MAP);
+            messages.send(player, screens.answersInChat() ? Keys.CAPTCHA_MAP_CHAT : Keys.CAPTCHA_MAP);
             return;
         }
         shower.show(reader, screens.captcha(reader, code, reason));
