@@ -1,5 +1,6 @@
 package com.uxplima.auth.paper.adapter.inbound.command;
 
+import java.sql.SQLException;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -75,6 +76,16 @@ public final class Replies {
             return;
         }
         logger.log(Level.WARNING, "A command of " + sender.getName() + " failed", cause);
-        messages.send(sender, Keys.COMMAND_INTERNAL_ERROR);
+        messages.send(sender, reachesTheDatabase(cause) ? Keys.COMMAND_STORAGE : Keys.COMMAND_INTERNAL_ERROR);
+    }
+
+    /** Whether the failure came from the database, which the player can wait out; anything else is a defect. */
+    private static boolean reachesTheDatabase(Throwable failure) {
+        for (Throwable each = failure; each != null; each = each.getCause()) {
+            if (each instanceof SQLException) {
+                return true;
+            }
+        }
+        return false;
     }
 }

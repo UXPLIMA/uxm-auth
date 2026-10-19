@@ -56,6 +56,9 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body><value><input><body> is not a valid <value><argument><body>. Try one of <value><allowed><body>."),
     COMMAND_INVALID_ARGUMENT("command.invalid-argument", "<etag:'ERROR'> <body><detail>"),
     COMMAND_BAD_ARGUMENT("command.bad-argument", "<etag:'ERROR'> <body>That argument is not valid."),
+    COMMAND_STORAGE(
+            "command.storage",
+            "<etag:'ERROR'> <body>This server cannot reach its accounts right now. Try again in a minute."),
     COMMAND_INTERNAL_ERROR(
             "command.internal-error",
             "<etag:'ERROR'> <body>Something went wrong while running this command. The console holds the reason."),
