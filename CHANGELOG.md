@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 0.0.1
 
 The first release. It carries everything below, on Paper, Folia and Velocity.
 
