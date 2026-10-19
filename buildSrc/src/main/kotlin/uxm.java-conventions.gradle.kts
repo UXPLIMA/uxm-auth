@@ -152,7 +152,7 @@ tasks.withType<Test>().configureEach {
     // The whole repository's text is declared, because a guard in one module may read another.
     inputs.files(
             rootProject.fileTree(rootProject.projectDir) {
-                include("**/src/main/java/**", "**/src/test/java/**", "docs/**", "gradle/libs.versions.toml")
+                include("**/src/main/java/**", "**/src/test/java/**", "docs/**", "README.md", "gradle/libs.versions.toml")
                 exclude("**/build/**", ".gradle/**", "buildSrc/**")
             })
         .withPathSensitivity(PathSensitivity.RELATIVE)

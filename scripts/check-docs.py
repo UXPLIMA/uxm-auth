@@ -12,7 +12,7 @@ twelve GLOSSARY.md files, and none of them had ever been written. Nothing failed
 so nobody saw it.
 
 Exit codes:
-  0  the index and the directory agree
+  0  the index and the directory agree, or this checkout has no docs/ (the public one)
   1  they disagree
   2  the check could not run
 """
@@ -26,6 +26,10 @@ INDEX = DOCS / "00-README.md"
 
 
 def main() -> int:
+    if not DOCS.exists():
+        # The internal documents live in the private briefs and are not part of a public checkout.
+        print("check-docs: no docs/ in this checkout, nothing to check")
+        return 0
     if not INDEX.is_file():
         print(f"check-docs: {INDEX} not found", file=sys.stderr)
         return 2

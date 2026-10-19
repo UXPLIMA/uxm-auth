@@ -1,7 +1,7 @@
 // The login handshake of a lone Paper or Folia server, written against the server's own login classes.
 // The Paper API has no hook into the login phase, so this module is compiled against the Mojang-mapped
 // server through paperweight-userdev, and nothing else of the plugin is. A Minecraft update that moves a
-// login class breaks this module's build, not a player's login. See docs/adr/0006.
+// login class breaks this module's build, not a player's login. See uxm-briefs/repos/uxm-auth/docs/adr/0006.
 
 plugins {
     id("uxm.java-conventions")

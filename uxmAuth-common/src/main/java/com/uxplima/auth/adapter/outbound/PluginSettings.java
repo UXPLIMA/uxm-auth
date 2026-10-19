@@ -293,7 +293,7 @@ public final class PluginSettings {
      * How a player's language is answered.
      *
      * <p>The three keys are the same in every plugin of ours, and uxmLib holds the order they are read in.
-     * See {@code docs/04-i18n.md}.
+     * See {@code uxm-briefs/repos/uxm-auth/docs/04-i18n.md}.
      */
     private static LanguageSettings language(HoconConfig config) {
         return new LanguageSettings(

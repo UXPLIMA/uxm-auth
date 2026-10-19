@@ -44,9 +44,9 @@ final class EveryPlaceholderIsWrittenDownTest {
     }
 
     @Test
-    @DisplayName("every key the provider answers is in the subject document, written as a placeholder")
+    @DisplayName("every key the provider answers is in the README, written as a placeholder")
     void everyKeyIsInTheDocument() throws IOException {
-        String document = Files.readString(Modules.repositoryRoot().resolve("docs/08-auth.md"), StandardCharsets.UTF_8);
+        String document = Files.readString(Modules.repositoryRoot().resolve("README.md"), StandardCharsets.UTF_8);
 
         for (String key : answered()) {
             assertThat(document).as(key).contains("%uxmauth_" + key + "%");

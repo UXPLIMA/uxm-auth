@@ -26,10 +26,15 @@ replay_pid*
 
 # Local working files
 /CLAUDE.local.md
+
+# The assistant rules and the internal documents: architecture, decisions, notes and research. They live in
+# the private briefs, uxm-briefs/repos/uxm-auth/, and are copied here to work with, never committed.
+/CLAUDE.md
+/docs/
 /scratch/
 
 # Competitor source. It belongs in /home/references/, outside every repository.
-# These entries are a safety net, not a permission. See docs/07-research.md.
+# These entries are a safety net, not a permission. See uxm-briefs/repos/uxm-auth/docs/07-research.md.
 /references/
 /rakipler/
 /competitors/

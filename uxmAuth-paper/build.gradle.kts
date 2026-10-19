@@ -23,9 +23,9 @@ dependencies {
     compileOnly(libs.paper.api)
 
     // uxmLib is our foundation, and it is shaded into the jar. The plugin must run as a
-    // standalone jar, without another plugin on the server. See docs/02-build.md.
+    // standalone jar, without another plugin on the server. See uxm-briefs/repos/uxm-auth/docs/02-build.md.
     // The bundle is a starting point, not a rule. A plugin with no menu takes the four
-    // modules one by one and leaves uxmlib-gui out. See docs/02-build.md.
+    // modules one by one and leaves uxmlib-gui out. See uxm-briefs/repos/uxm-auth/docs/02-build.md.
     // The common module is shaded in, not depended on at runtime: an operator installs one
     // jar, and the two platform jars must not have to agree on a third file.
     implementation(project(":uxmAuth-common"))

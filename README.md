@@ -8,10 +8,59 @@ theirs. One product, with no second plugin needed for any part of it.
 
 ## Which jar goes where
 
-- A lone Paper or Folia server: `uxmAuth-paper`.
-- A Velocity network: `uxmAuth-velocity` on the proxy, and `uxmAuth-paper` on every backend.
+- A lone Paper or Folia server: the Paper jar.
+- A Velocity network: the Velocity jar on the proxy, and the Paper jar on every backend.
 
-`docs/08-auth.md` describes what the plugin does. `uxm-briefs/uxm-auth.md` is the product it is built to.
+## Placeholders
+
+Published through PlaceholderAPI under the identifier `uxmauth`, when PlaceholderAPI is on the server; the
+doctor says whether it is. Each answers for the player it is asked about, from memory, on whatever thread
+asks. A player who has not logged in reads `false` for `authenticated` and nothing for the rest. The same
+list is in the comment above the `placeholders` block of `config.conf`.
+
+| Placeholder | Answers |
+|-------------|---------|
+| `%uxmauth_authenticated%` | `true` or `false` |
+| `%uxmauth_method%` | how this session got in: `password`, `registered`, `premium`, `bedrock`, `session`, `forced` or `network` |
+| `%uxmauth_premium%` | `true` or `false` |
+| `%uxmauth_kind%` | `premium`, `cracked` or `bedrock` |
+| `%uxmauth_2fa%` | `true` or `false`: an app, or a code by mail |
+| `%uxmauth_registered%` | when the account was made, in `placeholders.date-format` |
+| `%uxmauth_last_login%` | when this session logged in, in `placeholders.date-format` |
+
+The second factor is read when the player logs in on this server and again whenever it changes here; a
+change made on another server of a network shows at the player's next login.
+
+## The developer API
+
+Another plugin compiles against `com.uxplima:uxmauth-api` and finds the API through
+`AuthApiProvider.get()`, on Paper and Velocity alike, or on Paper through the services manager. It answers
+`isAuthenticated`, `method` and `kind` from memory. Both platform jars carry the module unrelocated.
+
+On Paper, `PreLoginEvent` and `PreRegisterEvent` fire off the server's threads before a password is checked or
+an account is made; `refuse(reason)` refuses with that reason, and a refused login spends no attempt.
+`LoginEvent` and `RegisterEvent` fire on the player's thread; `FailedLoginEvent`, `BanEvent`,
+`PasswordChangeEvent`, `UnregisterEvent` and `KindSwitchEvent` fire off the server's threads. On Velocity the
+same names fire for what happens at the proxy: the two before, a login, a registration, a wrong password and a
+ban.
+
+## A website's login table
+
+`website-table` in `config.conf` keeps a website's login table beside the plugin's own, in the shape many
+website panels read. The website's row holds the password of a password account, so a change on either side
+works on the other. An account the website made is adopted on its first lookup, with the offline UUID of its
+name, and unverified, so the next connection asks whether a paid player owns the name. A row counts as an
+account's only once the plugin wrote it, adopted it, or found the account's own hash in it. A row somebody made
+on the website under the name of an account the plugin held first opens nothing and is never written. Premium
+and Bedrock accounts never read or write a row, and a registration in game never writes over one. The plugin's
+own row is still kept, so turning the table off loses only what the website changed since.
+
+## Moving from another login plugin
+
+`import { }` in `config.conf` names a source and where its database is. The files in the plugin's `imports/`
+folder say how each source keeps its accounts; the plugin writes one for every source it knows, and a file of
+your own describes any other table. Passwords keep their hash and move to the current algorithm at the next
+login, authenticator secrets and premium ids come across, the source is only read, and an import runs once.
 
 ## Build
 
@@ -23,9 +72,9 @@ theirs. One product, with no second plugin needed for any part of it.
 
 ## Layout
 
+- `uxmAuth-api`: what another plugin compiles against.
 - `uxmAuth-common`: the domain, the use cases, the hashing, the settings and the catalogue. No Bukkit,
   no Velocity.
+- `uxmAuth-handshake`: the part of a lone server's premium handshake that reaches into the server.
 - `uxmAuth-paper`: the Paper and Folia plugin.
 - `uxmAuth-velocity`: the Velocity plugin.
-
-`docs/adr/0003-three-gradle-modules.md` records why.
