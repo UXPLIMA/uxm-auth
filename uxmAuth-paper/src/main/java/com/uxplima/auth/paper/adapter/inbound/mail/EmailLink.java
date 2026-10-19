@@ -118,12 +118,19 @@ public final class EmailLink {
     /** {@code /email add <address>}: a code goes to it. */
     public CompletableFuture<Void> add(Player player, String typed) {
         Objects.requireNonNull(typed, "typed");
+        if (typed.isEmpty()) {
+            return usage(player);
+        }
         return run(player, account -> link.add(account.id(), account.name(), typed, messages.localeOf(player)));
     }
 
     /** {@code /email confirm <code>}: the code that went to the address links it; a wrong one counts against it. */
     public CompletableFuture<Void> confirm(Player player, String code) {
         Objects.requireNonNull(code, "code");
+        // A bare label is a question: as an answer it would spend one of the code's tries.
+        if (code.isEmpty()) {
+            return usage(player);
+        }
         String address = Addresses.of(player);
         String host =
                 sessions.held(player.getUniqueId()).map(Sessions.Held::host).orElse("");

@@ -120,6 +120,37 @@ final class EmailLinkTest {
     }
 
     @Test
+    @DisplayName("/email add or confirm alone reaches the command, says how, mails nothing and spends no try")
+    void aBareAddOrConfirmSaysHow() throws java.io.IOException {
+        loggedIn();
+        Path file = folder.resolve("commands.conf");
+        try (java.io.InputStream shipped = Objects.requireNonNull(getClass().getResourceAsStream("/commands.conf"))) {
+            java.nio.file.Files.copy(shipped, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        var node = com.uxplima.uxmlib.command.annotation.AnnotatedCommands.buildNode(
+                new com.uxplima.auth.paper.adapter.inbound.command.EmailCommand(email),
+                com.uxplima.uxmlib.command.annotation.ParamResolvers.withDefaults()
+                        .replacer(
+                                com.uxplima.uxmlib.command.annotation.annotations.FromConfig.class,
+                                com.uxplima.uxmlib.command.annotation.ConfiguredCommands.load(file)
+                                        .replacer()));
+        assertThat(node.getChild("add").getCommand()).isNotNull();
+        assertThat(node.getChild("confirm").getCommand()).isNotNull();
+
+        world.scheduler.settle(email.add(steve, ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.EMAIL_USAGE));
+        assertThat(world.mailed).isEmpty();
+        world.scheduler.settle(email.add(steve, "berke@example.com"));
+        steve.nextComponentMessage();
+        world.scheduler.settle(email.confirm(steve, ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.EMAIL_USAGE));
+        world.scheduler.settle(email.confirm(steve, "000000"));
+        assertThat(steve.nextComponentMessage())
+                .as("the bare line spent none of the five tries")
+                .isEqualTo(world.messages.render(steve, Keys.EMAIL_WRONG, Text.placeholder("left", "4")));
+    }
+
+    @Test
     @DisplayName("a wrong code says the tries left; a second address inside the cooldown says the seconds to wait")
     void wrongCodeAndCooldown() {
         loggedIn();

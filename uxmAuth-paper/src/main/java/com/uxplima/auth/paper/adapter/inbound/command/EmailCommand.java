@@ -38,14 +38,14 @@ public final class EmailCommand {
     @FromConfig(value = "add", fallbackName = "add", description = "Send a code to an address")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void add(Sender sender, @Arg("address") String address) {
+    public void add(Sender sender, @Arg(value = "address", optional = true) String address) {
         CompletableFuture<Void> unused = email.add((Player) sender.bukkit(), address);
     }
 
     @FromConfig(value = "confirm", fallbackName = "confirm", description = "Link the address with its code")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void confirm(Sender sender, @Arg("code") String code) {
+    public void confirm(Sender sender, @Arg(value = "code", optional = true) String code) {
         CompletableFuture<Void> unused = email.confirm((Player) sender.bukkit(), code);
     }
 
