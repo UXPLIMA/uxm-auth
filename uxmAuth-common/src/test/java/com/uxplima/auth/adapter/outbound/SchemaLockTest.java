@@ -2,7 +2,10 @@ package com.uxplima.auth.adapter.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.Test;
 final class SchemaLockTest {
 
     private final List<String> done = new CopyOnWriteArrayList<>();
+    private final List<String> names = new CopyOnWriteArrayList<>();
 
     /** A database that records each statement it is sent, and answers a lock with {@code granted}. */
     private Database recording(Dialect dialect, int granted) throws SQLException {
@@ -36,6 +40,10 @@ final class SchemaLockTest {
         when(connection.prepareStatement(anyString())).thenAnswer(asked -> {
             String sql = asked.getArgument(0);
             PreparedStatement statement = mock(PreparedStatement.class);
+            doAnswer(named -> names.add(named.getArgument(1))).when(statement).setString(anyInt(), anyString());
+            doAnswer(keyed -> names.add(Long.toHexString(keyed.getArgument(1))))
+                    .when(statement)
+                    .setLong(anyInt(), anyLong());
             ResultSet answer = mock(ResultSet.class);
             when(answer.next()).thenReturn(true);
             when(answer.getInt(1)).thenReturn(granted);
@@ -93,6 +101,31 @@ final class SchemaLockTest {
         SchemaLock.holding(recording(Dialect.H2, 1), () -> done.add("again"));
 
         assertThat(done).containsExactly("migrations", "again");
+    }
+
+    @Test
+    @DisplayName("an import takes a lock of its own, so it never waits on another server's migrations")
+    void anImportHasItsOwnLock() throws SQLException {
+        SchemaLock.holding(recording(Dialect.MYSQL, 1), SchemaLock.IMPORT, () -> done.add("import"));
+        SchemaLock.holding(recording(Dialect.POSTGRES, 1), SchemaLock.IMPORT, () -> done.add("import"));
+        SchemaLock.holding(recording(Dialect.MYSQL, 1), () -> done.add("migrations"));
+        SchemaLock.holding(recording(Dialect.POSTGRES, 1), () -> done.add("migrations"));
+
+        assertThat(names)
+                .containsExactly(
+                        "uxmauth_import", "uxmauth_import",
+                        "75786d6175746802", "75786d6175746802",
+                        "uxmauth_schema", "uxmauth_schema",
+                        "75786d6175746801", "75786d6175746801");
+    }
+
+    @Test
+    @DisplayName("a lock another server keeps names what it was waiting for")
+    void aLockNotGrantedNamesItsWork() throws SQLException {
+        Database database = recording(Dialect.MYSQL, 0);
+
+        assertThatThrownBy(() -> SchemaLock.holding(database, SchemaLock.IMPORT, () -> done.add("import")))
+                .hasMessageContaining("import lock");
     }
 
     @Test

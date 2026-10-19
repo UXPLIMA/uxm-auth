@@ -198,4 +198,17 @@ final class TableImportTest {
         }
         assertThat(ImportLayout.shipped(folder.resolve("imports"))).isNotEmpty();
     }
+
+    @Test
+    @DisplayName("a source address this jar has no driver for is refused under the import's own key")
+    void anUnknownDriverNamesTheImportKey() throws IOException {
+        ImportLayout layout = layout("table = t\nhash-style = plain\ncolumns { name = n, password = p }\n");
+
+        assertThatThrownBy(() -> TableImport.open(
+                        layout, new TableImport.Address("jdbc:oracle:thin:@db", "", ""), id -> Optional.empty()))
+                .hasMessageStartingWith("import.jdbc-url starts with jdbc:oracle");
+        assertThatThrownBy(() -> TableImport.open(
+                        layout, new TableImport.Address("accounts.db", "", ""), id -> Optional.empty()))
+                .hasMessageStartingWith("import.jdbc-url is not a JDBC address");
+    }
 }

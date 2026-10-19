@@ -79,6 +79,12 @@ final class ProxyModule {
         }
         this.database = opened;
         warnOfAFileDatabase(settings.current().storage());
+        if (!settings.current().importing().source().isEmpty()) {
+            // A server behind the proxy imports: it shares this database, and it knows the names a source
+            // without names needs.
+            logger.warn("import.source is set, and the proxy imports nothing. Set it in config.conf on a server"
+                    + " behind the proxy instead.");
+        }
         settings.current().protection().problems().forEach(logger::warn);
         Messages words = new Messages(
                 catalog(settings), new ProxyLocales(() -> settings.current().language()));

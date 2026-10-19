@@ -30,7 +30,7 @@ public final class AuthDatabase {
     public static Database open(PluginSettings.Storage storage, String poolName) {
         Objects.requireNonNull(storage, "storage");
         Objects.requireNonNull(poolName, "poolName");
-        load(driverOf(storage.jdbcUrl()));
+        load(driverOf(storage.jdbcUrl(), "storage.jdbc-url"));
         Database database = pool(storage, poolName, storage.poolSize());
         if (!SchemaLock.shared(database.dialect())) {
             return AuthSchema.migrate(database);
@@ -40,6 +40,23 @@ public final class AuthDatabase {
             SchemaLock.holding(lock, () -> AuthSchema.migrate(database));
         }
         return database;
+    }
+
+    /**
+     * Runs the work while this server holds the import lock, on a pool of its own. A database only one server
+     * opens needs no lock.
+     */
+    public static void importing(Database database, PluginSettings.Storage storage, String poolName, Runnable work) {
+        Objects.requireNonNull(database, "database");
+        Objects.requireNonNull(storage, "storage");
+        Objects.requireNonNull(work, "work");
+        if (!SchemaLock.shared(database.dialect())) {
+            work.run();
+            return;
+        }
+        try (Database lock = pool(storage, Objects.requireNonNull(poolName, "poolName") + "-import", 1)) {
+            SchemaLock.holding(lock, SchemaLock.IMPORT, work);
+        }
     }
 
     private static Database pool(PluginSettings.Storage storage, String poolName, int size) {
@@ -54,10 +71,15 @@ public final class AuthDatabase {
 
     /** The driver class this jar carries for the address. */
     static String driverOf(String jdbcUrl) {
-        String scheme = schemeOf(jdbcUrl);
+        return driverOf(jdbcUrl, "storage.jdbc-url");
+    }
+
+    /** The driver class this jar carries for the address, refused under the configuration key it was read from. */
+    static String driverOf(String jdbcUrl, String key) {
+        String scheme = schemeOf(jdbcUrl, key);
         String driver = DRIVERS.get(scheme);
         if (driver == null) {
-            throw new IllegalArgumentException("storage.jdbc-url starts with jdbc:" + scheme
+            throw new IllegalArgumentException(key + " starts with jdbc:" + scheme
                     + ", and this plugin speaks sqlite, mysql, mariadb, postgresql and h2");
         }
         return driver;
@@ -69,17 +91,17 @@ public final class AuthDatabase {
      */
     static String addressOf(String jdbcUrl) {
         Objects.requireNonNull(jdbcUrl, "jdbcUrl");
-        return schemeOf(jdbcUrl).equals("mysql")
+        return schemeOf(jdbcUrl, "storage.jdbc-url").equals("mysql")
                 ? "jdbc:mariadb:" + jdbcUrl.substring("jdbc:mysql:".length())
                 : jdbcUrl;
     }
 
-    private static String schemeOf(String jdbcUrl) {
+    private static String schemeOf(String jdbcUrl, String key) {
         Objects.requireNonNull(jdbcUrl, "jdbcUrl");
         String lower = jdbcUrl.toLowerCase(Locale.ROOT);
         int colon = lower.indexOf(':', "jdbc:".length());
         if (!lower.startsWith("jdbc:") || colon < 0) {
-            throw new IllegalArgumentException("storage.jdbc-url is not a JDBC address: " + jdbcUrl);
+            throw new IllegalArgumentException(key + " is not a JDBC address: " + jdbcUrl);
         }
         return lower.substring("jdbc:".length(), colon);
     }

@@ -19,10 +19,20 @@ import com.uxplima.uxmlib.storage.sql.Dialect;
  */
 final class SchemaLock {
 
-    private static final String NAME = "uxmauth_schema";
+    /**
+     * One lock the servers of a database take turns at.
+     *
+     * @param work what the lock guards, as a console line names it
+     * @param name the name MySQL and MariaDB key the lock by
+     * @param key the advisory key PostgreSQL keys it by, fixed here so every server agrees
+     */
+    record Lock(String work, String name, long key) {}
 
-    /** The advisory key PostgreSQL keys its lock by: the name's hash, fixed here so every server agrees. */
-    private static final long KEY = 0x7578_6d61_7574_6801L;
+    /** Held while the tables are brought up to date. */
+    static final Lock SCHEMA = new Lock("schema", "uxmauth_schema", 0x7578_6d61_7574_6801L);
+
+    /** Held while another plugin's accounts are imported, so two servers starting together import once. */
+    static final Lock IMPORT = new Lock("import", "uxmauth_import", 0x7578_6d61_7574_6802L);
 
     /** How long a server waits for another server's migrations, in seconds. */
     private static final int WAIT_SECONDS = 300;
@@ -34,46 +44,53 @@ final class SchemaLock {
         return dialect == Dialect.MYSQL || dialect == Dialect.POSTGRES;
     }
 
-    /** Runs the migrations inside the database's lock, and gives the lock back however they end. */
+    /** Runs the migrations inside the schema lock, and gives the lock back however they end. */
     static void holding(Database database, Runnable migrations) {
+        holding(database, SCHEMA, migrations);
+    }
+
+    /** Runs the work inside the lock, and gives the lock back however it ends. */
+    static void holding(Database database, Lock lock, Runnable work) {
         Objects.requireNonNull(database, "database");
-        Objects.requireNonNull(migrations, "migrations");
+        Objects.requireNonNull(lock, "lock");
+        Objects.requireNonNull(work, "work");
         switch (database.dialect()) {
-            case MYSQL -> held(database, migrations, "SELECT GET_LOCK(?, ?)", "SELECT RELEASE_LOCK(?)", true);
+            case MYSQL -> held(database, lock, work, "SELECT GET_LOCK(?, ?)", "SELECT RELEASE_LOCK(?)", true);
             case POSTGRES ->
-                held(database, migrations, "SELECT pg_advisory_lock(?)", "SELECT pg_advisory_unlock(?)", false);
-            case SQLITE, H2, GENERIC -> migrations.run();
+                held(database, lock, work, "SELECT pg_advisory_lock(?)", "SELECT pg_advisory_unlock(?)", false);
+            case SQLITE, H2, GENERIC -> work.run();
         }
     }
 
-    private static void held(Database database, Runnable migrations, String take, String give, boolean named) {
+    private static void held(Database database, Lock lock, Runnable work, String take, String give, boolean named) {
         try (Connection connection = database.connection()) {
-            if (!ask(connection, take, named, true)) {
+            if (!ask(connection, lock, take, named, true)) {
                 throw new StorageException(
-                        "another server kept the schema lock for " + WAIT_SECONDS
+                        "another server kept the " + lock.work() + " lock for " + WAIT_SECONDS
                                 + " seconds; start this one again once that one is up",
-                        new SQLException(NAME));
+                        new SQLException(lock.name()));
             }
             try {
-                migrations.run();
+                work.run();
             } finally {
-                ask(connection, give, named, false);
+                ask(connection, lock, give, named, false);
             }
         } catch (SQLException failure) {
-            throw new StorageException("the schema lock could not be taken", failure);
+            throw new StorageException("the " + lock.work() + " lock could not be taken", failure);
         }
     }
 
     /** Sends one lock statement and answers whether the database granted it. */
-    private static boolean ask(Connection connection, String sql, boolean named, boolean waiting) throws SQLException {
+    private static boolean ask(Connection connection, Lock lock, String sql, boolean named, boolean waiting)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             if (named) {
-                statement.setString(1, NAME);
+                statement.setString(1, lock.name());
                 if (waiting) {
                     statement.setInt(2, WAIT_SECONDS);
                 }
             } else {
-                statement.setLong(1, KEY);
+                statement.setLong(1, lock.key());
             }
             try (ResultSet answer = statement.executeQuery()) {
                 // PostgreSQL's pg_advisory_lock answers void once it holds the lock; only GET_LOCK can say no.

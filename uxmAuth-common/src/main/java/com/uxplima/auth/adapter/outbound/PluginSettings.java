@@ -76,6 +76,7 @@ public final class PluginSettings {
             PlaceholderSettings placeholders,
             DiscordSettings discord,
             WebsiteTable websiteTable,
+            Importing importing,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
 
@@ -96,6 +97,7 @@ public final class PluginSettings {
             Objects.requireNonNull(placeholders, "placeholders");
             Objects.requireNonNull(discord, "discord");
             Objects.requireNonNull(websiteTable, "websiteTable");
+            Objects.requireNonNull(importing, "importing");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
             Objects.requireNonNull(premium, "premium");
@@ -202,6 +204,21 @@ public final class PluginSettings {
         }
     }
 
+    /**
+     * The login plugin whose accounts come over at the start, and where they are.
+     *
+     * @param source the name of a layout in the imports folder, or empty for no import
+     * @param table the table to read in place of the layout's, or empty for the layout's own
+     */
+    public record Importing(String source, TableImport.Address address, String table) {
+
+        public Importing {
+            Objects.requireNonNull(source, "source");
+            Objects.requireNonNull(address, "address");
+            Objects.requireNonNull(table, "table");
+        }
+    }
+
     /** The file the accounts are kept in when the operator names no database. */
     private static final String SQLITE_FILE = "auth.db";
 
@@ -271,6 +288,7 @@ public final class PluginSettings {
                 PlaceholderSettings.read(config),
                 DiscordSettings.read(config),
                 WebsiteTable.read(config),
+                importing(config),
                 lists,
                 common(lists));
     }
@@ -314,6 +332,16 @@ public final class PluginSettings {
                 config.getString("storage.username", ""),
                 config.getString("storage.password", ""),
                 config.getInt("storage.pool-size", 4));
+    }
+
+    private static Importing importing(HoconConfig config) {
+        return new Importing(
+                config.getString("import.source", "").trim(),
+                new TableImport.Address(
+                        config.getString("import.jdbc-url", "").trim(),
+                        config.getString("import.username", ""),
+                        config.getString("import.password", "")),
+                config.getString("import.table", "").trim());
     }
 
     private static @Nullable Locale forcedLocale(String tag) {

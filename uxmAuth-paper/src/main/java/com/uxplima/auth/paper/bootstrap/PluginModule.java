@@ -253,12 +253,14 @@ final class PluginModule {
      *
      * <p>Done at enable, before anything that reads an account is registered, so the first join finds the
      * tables. The migrations are read from the jar, and an operator never runs SQL by hand. The UUID scheme is
-     * written down on the first start and held against every later one.
+     * written down on the first start and held against every later one, and the import config.conf names runs
+     * before any player can reach an account.
      */
     private Database openDatabase() {
         Database opened = AuthDatabase.open(settings.current().storage(), plugin.getName());
         try {
             new RecordedScheme(opened).check(settings.current().ownership().uuidScheme());
+            ImportGraph.run(plugin, settings, opened);
         } catch (RuntimeException refused) {
             opened.close();
             throw refused;

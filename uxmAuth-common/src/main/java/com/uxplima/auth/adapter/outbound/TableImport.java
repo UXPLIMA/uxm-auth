@@ -68,7 +68,7 @@ public final class TableImport implements ImportSource {
 
     /** A reader over the source at this address, its driver loaded from the ones the jar carries. */
     public static TableImport open(ImportLayout layout, Address address, Function<UUID, Optional<String>> names) {
-        AuthDatabase.load(AuthDatabase.driverOf(address.jdbcUrl()));
+        AuthDatabase.load(AuthDatabase.driverOf(address.jdbcUrl(), "import.jdbc-url"));
         return new TableImport(layout, () -> connect(address), names);
     }
 
