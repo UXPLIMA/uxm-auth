@@ -293,6 +293,14 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("the join message waits for the login unless the operator says it should not")
+    void theJoinMessageWaitsByDefault(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").joinMessageWaits()).isTrue();
+        assertThat(settingsFrom(folder, "hold { join-message-waits = false }\n").joinMessageWaits())
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("a server named under network.server-name runs its own lines after the lists every server runs")
     void aServerRunsItsOwnLines(@TempDir Path folder) throws IOException {
         String servers = """

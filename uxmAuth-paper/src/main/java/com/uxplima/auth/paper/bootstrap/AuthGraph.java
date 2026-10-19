@@ -46,6 +46,7 @@ import com.uxplima.auth.application.LogOut;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
+import com.uxplima.auth.application.SessionsAuthApi;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
@@ -111,6 +112,7 @@ import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
 import com.uxplima.auth.paper.adapter.inbound.listener.ClosedDoor;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
 import com.uxplima.auth.paper.adapter.inbound.listener.HelloAtTheDoor;
+import com.uxplima.auth.paper.adapter.inbound.listener.JoinMessages;
 import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
 import com.uxplima.auth.paper.adapter.inbound.listener.NetworkDoor;
 import com.uxplima.auth.paper.adapter.inbound.mail.AddressDuty;
@@ -196,6 +198,7 @@ final class AuthGraph implements AutoCloseable {
     final StaffDesk desk;
     final DatabaseDesk databases;
     private final ClosedDoor closedDoor;
+    private final JoinMessages joinMessages;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -570,6 +573,9 @@ final class AuthGraph implements AutoCloseable {
         events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
         this.databases = databaseDesk(plugin, scheduler, settings, database, replies, messages);
         this.closedDoor = new ClosedDoor(databases::busy, messages);
+        SessionsAuthApi standing = new SessionsAuthApi(sessions::state);
+        this.joinMessages = new JoinMessages(
+                () -> settings.current().joinMessageWaits(), standing::isAuthenticated, plugin.getServer());
         this.desk = staffing.desk(
                 new StaffDesk.Cases(
                         force,
@@ -648,6 +654,7 @@ final class AuthGraph implements AutoCloseable {
         // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(closedDoor, plugin);
+        plugin.getServer().getPluginManager().registerEvents(joinMessages, plugin);
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
