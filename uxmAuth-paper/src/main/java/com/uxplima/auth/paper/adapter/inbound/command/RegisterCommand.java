@@ -77,13 +77,20 @@ public final class RegisterCommand {
     @Permission("uxmauth.register")
     @PlayerOnly
     public void register(
-            Sender sender, @Arg("password") String password, @Arg(value = "confirm", optional = true) String confirm) {
+            Sender sender,
+            @Arg(value = "password", optional = true) String password,
+            @Arg(value = "confirm", optional = true) String confirm) {
         CompletableFuture<Void> unused = attempt((Player) sender.bukkit(), password, confirm);
     }
 
     /** The whole command, answering when the player has been told. */
     CompletableFuture<Void> attempt(Player player, String password, String confirm) {
         boolean asksTwice = passwords.get().confirmOnRegister();
+        // A bare label is how a newcomer asks; the game's own incomplete-command line tells them nothing.
+        if (password.isEmpty()) {
+            messages.send(player, asksTwice ? Keys.REGISTER_USAGE : Keys.REGISTER_USAGE_ONCE);
+            return CompletableFuture.completedFuture(null);
+        }
         if (asksTwice && confirm.isEmpty()) {
             messages.send(player, Keys.REGISTER_CONFIRM_NEEDED);
             return CompletableFuture.completedFuture(null);

@@ -11,6 +11,10 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.paper.testing.AuthWorld;
+import com.uxplima.uxmlib.command.annotation.AnnotatedCommands;
+import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
+import com.uxplima.uxmlib.command.annotation.ParamResolvers;
+import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 import com.uxplima.uxmlib.text.Text;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -200,6 +204,39 @@ final class PlayerCommandsTest {
         assertThat(world.accounts.findByName(new PlayerName("Steve"))).isEmpty();
         assertThat(steve.nextComponentMessage())
                 .isEqualTo(world.messages.render(steve, Keys.REGISTER_TOO_MANY_ACCOUNTS));
+    }
+
+    @Test
+    @DisplayName("/register alone reaches the command and says how to register, once or twice as the server asks")
+    void aBareRegisterSaysHow() {
+        world.unregistered(steve);
+        AuthSettings.Passwords once = new AuthSettings.Passwords(6, 64, "\\S+", Set.of(), false, true, 3);
+
+        assertThat(node(register(AuthWorld.shippedPasswords())).getCommand())
+                .as("the bare label runs, rather than the game's own incomplete-command line")
+                .isNotNull();
+        world.scheduler.settle(register(AuthWorld.shippedPasswords()).attempt(steve, "", ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.REGISTER_USAGE));
+        world.scheduler.settle(register(once).attempt(steve, "", ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.REGISTER_USAGE_ONCE));
+        assertThat(world.accounts.findByName(new PlayerName("Steve"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("/login alone reaches the command, says how to log in and spends no try")
+    void aBareLoginSaysHow() {
+        world.registered(steve, "hunter22");
+        world.door.hold(steve);
+        world.scheduler.drain();
+
+        assertThat(node(login()).getCommand()).isNotNull();
+        // Three bare lines against three tries: a bare line that spent one would kick before the password.
+        for (int bare = 0; bare < 3; bare++) {
+            world.scheduler.settle(login().attempt(steve, ""));
+            assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.LOGIN_USAGE));
+        }
+        world.scheduler.settle(login().attempt(steve, "hunter22"));
+        assertThat(world.isAuthenticated(steve)).isTrue();
     }
 
     @Test
@@ -452,6 +489,20 @@ final class PlayerCommandsTest {
         while (steve.nextComponentMessage() != null) {
             // Throw away what came before the part under test.
         }
+    }
+
+    /** The node the server would register for this handler, named by the shipped commands.conf. */
+    private com.mojang.brigadier.tree.LiteralCommandNode<?> node(Object handler) {
+        Path file = folder.resolve("commands.conf");
+        try (java.io.InputStream shipped =
+                java.util.Objects.requireNonNull(getClass().getResourceAsStream("/commands.conf"))) {
+            java.nio.file.Files.copy(shipped, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException unreadable) {
+            throw new java.io.UncheckedIOException(unreadable);
+        }
+        ParamResolvers resolvers = ParamResolvers.withDefaults()
+                .replacer(FromConfig.class, ConfiguredCommands.load(file).replacer());
+        return AnnotatedCommands.buildNode(handler, resolvers);
     }
 
     private LoginCommand login() {

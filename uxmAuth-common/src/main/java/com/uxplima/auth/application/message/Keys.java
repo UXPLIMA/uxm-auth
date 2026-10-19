@@ -168,6 +168,7 @@ public enum Keys implements MessageKey {
     LOGIN_NOT_REGISTERED(
             "login.not-registered",
             "<etag:'ERROR'> <body>You have no password here yet. Register with <value>/register<body>."),
+    LOGIN_USAGE("login.usage", "<tag:'AUTH'> <body>Type your password after the command: <value>/login <password>"),
     LOGIN_ALREADY("login.already", "<tag:'AUTH'> <body>You are already logged in."),
     LOGIN_REFUSED("login.refused", "<tag:'AUTH'> <body>Your login was refused."),
     CLAIM_UNAVAILABLE(
@@ -196,6 +197,11 @@ public enum Keys implements MessageKey {
                     + " <value><new><body> with everything it had. Join as <value><new><body> from now on."),
 
     REGISTER_MISMATCH("register.mismatch", "<etag:'ERROR'> <body>The two passwords are not the same."),
+    REGISTER_USAGE(
+            "register.usage",
+            "<tag:'AUTH'> <body>Type a password after the command, twice: <value>/register <password> <password>"),
+    REGISTER_USAGE_ONCE(
+            "register.usage-once", "<tag:'AUTH'> <body>Type a password after the command: <value>/register <password>"),
     REGISTER_CONFIRM_NEEDED(
             "register.confirm-needed",
             "<etag:'ERROR'> <body>Write the password twice: <value>/register <password> <password>"),

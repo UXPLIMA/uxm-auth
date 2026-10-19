@@ -92,12 +92,16 @@ public final class LoginCommand {
     @Subcommand("")
     @Permission("uxmauth.login")
     @PlayerOnly
-    public void login(Sender sender, @Arg("password") String password) {
+    public void login(Sender sender, @Arg(value = "password", optional = true) String password) {
         CompletableFuture<Void> unused = attempt((Player) sender.bukkit(), password);
     }
 
     /** The whole command, answering when the player has been told. */
     CompletableFuture<Void> attempt(Player player, String password) {
+        if (password.isEmpty()) {
+            messages.send(player, Keys.LOGIN_USAGE);
+            return CompletableFuture.completedFuture(null);
+        }
         OptionalLong opening = openings.apply(player);
         Password typed = Password.of(password);
         CompletableFuture<LoginResult> work = opening.isPresent()
