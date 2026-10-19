@@ -118,6 +118,21 @@ final class WaitingClockTest {
     }
 
     @Test
+    @DisplayName("a waiting player who left is let go at the next arrival, where no beat of theirs runs again")
+    void aPlayerWhoLeftIsLetGo() {
+        PlayerMock steve = registered("Steve");
+        waiting.start(steve);
+        // Folia runs no task of an entity that is gone, so the beat that would forget them never comes.
+        sessions.close(steve.getUniqueId());
+
+        PlayerMock alex = server.addPlayer("Alex");
+        sessions.open(alex.getUniqueId(), new AuthState.Unregistered(new PlayerName("Alex")));
+        waiting.start(alex);
+
+        assertThat(times.waiting()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("a player who logged in in time is not kicked, and the clock stops")
     void anAuthenticatedPlayerIsNotKicked() {
         PlayerMock steve = registered("Steve");

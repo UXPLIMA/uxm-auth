@@ -33,15 +33,28 @@ public final class WaitingTimes {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** The player started to wait at this moment. */
+    /**
+     * The player started to wait at this moment.
+     *
+     * <p>Every player whose connection closed is let go here too. On Folia the task of an entity that is gone
+     * never runs again, so the beat that forgets a player who left while waiting does not come.
+     */
     void arrived(UUID id, Instant at) {
         Objects.requireNonNull(at, "at");
+        for (UUID other : arrivals.keySet()) {
+            arrivals.compute(other, (key, when) -> sessions.state(key).isPresent() ? when : null);
+        }
         arrivals.compute(Objects.requireNonNull(id, "id"), (key, before) -> at);
     }
 
     /** The player no longer waits: they are in, or gone. */
     void gone(UUID id) {
         arrivals.compute(Objects.requireNonNull(id, "id"), (key, before) -> null);
+    }
+
+    /** How many players are remembered, for a test that proves they are let go. */
+    int waiting() {
+        return arrivals.size();
     }
 
     /** The time this player has left, never below none; empty for a player who does not wait. */
