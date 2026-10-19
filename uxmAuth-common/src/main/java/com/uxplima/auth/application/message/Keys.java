@@ -119,6 +119,7 @@ public enum Keys implements MessageKey {
             "kick.banned", "<body>Too many wrong passwords came from your address. Try again in <value><time><body>."),
     KICK_LOGGED_OUT("kick.logged-out", "<body>You have logged out. Join again to come back in."),
     KICK_TIMEOUT("kick.timeout", "<body>You took too long to log in. Join again to try once more."),
+    KICK_TIMEOUT_REGISTER("kick.timeout-register", "<body>You took too long to register. Join again to try once more."),
     KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
     KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),

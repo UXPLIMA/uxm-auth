@@ -90,7 +90,7 @@ public final class WaitingClock {
             handle.cancel();
             times.gone(player.getUniqueId());
             moments.fire(player, AuthSettings.Moment.TIMEOUT);
-            player.kick(messages.render(player, Keys.KICK_TIMEOUT));
+            player.kick(messages.render(player, registering ? Keys.KICK_TIMEOUT_REGISTER : Keys.KICK_TIMEOUT));
             return;
         }
         if (Duration.between(reminded.get(), now).compareTo(limits.reminder()) >= 0) {

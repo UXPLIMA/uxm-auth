@@ -48,6 +48,7 @@ final class WaitingClockTest {
     private List<AuthSettings.Moment> fired;
     private WaitingClock waiting;
     private WaitingTimes times;
+    private Messages messages;
 
     @BeforeEach
     void setUp() {
@@ -56,7 +57,7 @@ final class WaitingClockTest {
         sessions = new Sessions();
         clock = new MovableClock(START);
         fired = new ArrayList<>();
-        Messages messages = new Messages(
+        messages = new Messages(
                 new MessageCatalog(Map.of(Locale.ENGLISH, MessageCatalog.defaults(Keys.class)), Locale.ENGLISH),
                 LocaleSource.ofDefault(Locale.ENGLISH));
         times = new WaitingTimes(
@@ -93,6 +94,25 @@ final class WaitingClockTest {
 
         assertThat(fired).contains(AuthSettings.Moment.TIMEOUT);
         assertThat(steve.isOnline()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a player with no account is told at the timeout that registering took too long, not logging in")
+    void theRegisterTimeoutSaysRegister() {
+        Player newcomer = org.mockito.Mockito.mock(Player.class);
+        UUID id = UUID.randomUUID();
+        org.mockito.Mockito.when(newcomer.getUniqueId()).thenReturn(id);
+        org.mockito.Mockito.when(newcomer.isOnline()).thenReturn(true);
+        sessions.open(id, new AuthState.Unregistered(new PlayerName("Newcomer")));
+        waiting.start(newcomer);
+
+        clock.advance(Duration.ofSeconds(91));
+        scheduler.tick();
+
+        // Rendered before the verify: a render inside it calls the mock's locale(), which Mockito then verifies.
+        net.kyori.adventure.text.Component told = messages.render(newcomer, Keys.KICK_TIMEOUT_REGISTER);
+        assertThat(told).isNotEqualTo(messages.render(newcomer, Keys.KICK_TIMEOUT));
+        org.mockito.Mockito.verify(newcomer).kick(told);
     }
 
     @Test
