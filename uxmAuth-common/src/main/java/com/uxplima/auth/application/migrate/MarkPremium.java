@@ -28,8 +28,9 @@ import com.uxplima.auth.domain.premium.UuidScheme;
  * Reads another plugin's list of premium names, once, after the accounts came over, and turns each cracked account
  * it names premium. It creates no account: a list of names holds no password to log in with.
  *
- * <p>A premium id the list gives two names is a player who changed their name; the web is asked which name holds it
- * now, and only that one is turned. No answer leaves both as they were.
+ * <p>Every name is asked of the web, because a list can be years old and a name changes hands. A premium id the
+ * list gives two names is a player who changed their name; only the name the web gives that id now is turned. No
+ * answer leaves the account as it was, and the door asks again when its player joins.
  */
 public final class MarkPremium {
 
@@ -67,7 +68,7 @@ public final class MarkPremium {
         try (Stream<ImportedAccount> rows = source.read()) {
             rows.forEach(row -> collect(row, byId, tally));
         }
-        byId.forEach((id, holders) -> owner(id, holders, tally).ifPresent(name -> turn(name, id, tally)));
+        byId.forEach((id, holders) -> mark(id, holders, tally));
         marks.complete(key, clock.instant());
         return tally.report(key);
     }
@@ -87,41 +88,52 @@ public final class MarkPremium {
         }
     }
 
-    /** The one name that holds the id: the only one listed, or the one the web gives it. */
-    private Optional<PlayerName> owner(UUID id, List<PlayerName> holders, Tally tally) {
-        if (holders.size() == 1) {
-            return Optional.of(holders.getFirst());
+    /**
+     * Turns the one cracked account the web gives the id, and none when it gives it to nobody listed. A flag the
+     * list kept is never trusted alone: the name may have changed hands since it was written.
+     */
+    private void mark(UUID id, List<PlayerName> holders, Tally tally) {
+        List<Account> cracked = cracked(holders, tally);
+        if (cracked.isEmpty()) {
+            return;
+        }
+        if (accounts.findByPremiumId(id).isPresent()) {
+            tally.taken += cracked.size();
+            return;
         }
         int unknown = 0;
-        for (PlayerName name : holders) {
-            PremiumAnswer answer = lookup.apply(name);
+        for (Account account : cracked) {
+            PremiumAnswer answer = lookup.apply(account.name());
             if (answer instanceof PremiumAnswer.Premium paid && paid.mojangId().equals(id)) {
-                tally.notOwner += holders.size() - 1 - unknown;
+                turn(account, id);
+                tally.marked++;
+                tally.notOwner += cracked.size() - 1 - unknown;
                 tally.unanswered += unknown;
-                return Optional.of(name);
+                return;
             }
             unknown += answer instanceof PremiumAnswer.Unknown ? 1 : 0;
         }
         tally.unanswered += unknown;
-        tally.notOwner += holders.size() - unknown;
-        return Optional.empty();
+        tally.notOwner += cracked.size() - unknown;
     }
 
-    private void turn(PlayerName name, UUID premiumId, Tally tally) {
-        Optional<Account> found = accounts.findByName(name);
-        if (found.isEmpty()) {
-            tally.unknownNames++;
-            return;
+    /** The cracked accounts under the names, counting the names with no account and those of another kind. */
+    private List<Account> cracked(List<PlayerName> holders, Tally tally) {
+        List<Account> cracked = new ArrayList<>();
+        for (PlayerName name : holders) {
+            Optional<Account> found = accounts.findByName(name);
+            if (found.isEmpty()) {
+                tally.unknownNames++;
+            } else if (found.get().kind() != AccountKind.CRACKED) {
+                tally.already++;
+            } else {
+                cracked.add(found.get());
+            }
         }
-        Account account = found.get();
-        if (account.kind() != AccountKind.CRACKED) {
-            tally.already++;
-            return;
-        }
-        if (accounts.findByPremiumId(premiumId).isPresent()) {
-            tally.taken++;
-            return;
-        }
+        return cracked;
+    }
+
+    private void turn(Account account, UUID premiumId) {
         UUID id = scheme.idFor(account.name(), Optional.of(premiumId), Optional.of(account));
         if (!id.equals(account.id())) {
             accounts.moveId(account.id(), id);
@@ -136,7 +148,6 @@ public final class MarkPremium {
                 account.registrationAddress(),
                 account.lastLoginAt(),
                 account.lastAddress()));
-        tally.marked++;
     }
 
     /** The counts of one run, kept on the one thread that runs it. */

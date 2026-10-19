@@ -68,8 +68,8 @@ final class StartupImportTest {
     private final Supplier<NamePolicy> names = this::policy;
     private final ImportAccounts importer =
             new ImportAccounts(accounts, new InMemoryFactors(), marked, names, UuidScheme.OFFLINE, clock);
-    private final MarkPremium marker =
-            new MarkPremium(accounts, marked, names, name -> new PremiumAnswer.Unknown(), UuidScheme.OFFLINE, clock);
+    private final MarkPremium marker = new MarkPremium(
+            accounts, marked, names, name -> new PremiumAnswer.Premium(PAID, "Steve"), UuidScheme.OFFLINE, clock);
 
     private NamePolicy policy() {
         return policy;

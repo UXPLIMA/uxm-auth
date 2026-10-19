@@ -371,7 +371,7 @@ final class ShippedLayoutsTest {
                         accounts,
                         marksOf(marks),
                         () -> new NamePolicy(Pattern.compile("[A-Za-z0-9_]+"), 3, 16, List.of()),
-                        name -> new PremiumAnswer.Unknown(),
+                        name -> new PremiumAnswer.Premium(NOTCH, "Notch"),
                         UuidScheme.MOJANG,
                         Clock.fixed(SEEN, ZoneOffset.UTC))
                 .run(TableImport.open(layout, new TableImport.Address(url, "", ""), id -> Optional.empty()));

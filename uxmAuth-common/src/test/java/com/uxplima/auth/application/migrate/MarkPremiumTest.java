@@ -99,6 +99,7 @@ final class MarkPremiumTest {
         fixture.registered("Steve", "hunter22");
         Account before = account("Steve");
         row("Steve", PAID);
+        web.put("steve", new PremiumAnswer.Premium(PAID, "Steve"));
 
         PremiumReport report = marker(UuidScheme.MOJANG).run(source);
 
@@ -109,9 +110,35 @@ final class MarkPremiumTest {
         assertThat(after.password()).isEqualTo(before.password());
         assertThat(fixture.accounts.findById(before.id())).isEmpty();
         assertThat(report.marked()).isEqualTo(1);
-        assertThat(asked)
-                .as("a premium id only one name holds is not asked of the web")
-                .isEmpty();
+        assertThat(asked).containsExactly("steve");
+    }
+
+    @Test
+    @DisplayName("a listed name the web gives another id, or no answer, stays cracked, counted")
+    void aStaleFlagIsNotTrusted() {
+        fixture.registered("Steve", "hunter22");
+        fixture.registered("Alex", "hunter22");
+        row("Steve", PAID);
+        row("Alex", OTHER);
+        web.put("steve", new PremiumAnswer.Premium(OTHER, "Steve"));
+
+        PremiumReport report = marker(UuidScheme.OFFLINE).run(source);
+
+        assertThat(account("Steve").kind()).isEqualTo(AccountKind.CRACKED);
+        assertThat(account("Alex").kind()).isEqualTo(AccountKind.CRACKED);
+        assertThat(report.notOwner()).isEqualTo(1);
+        assertThat(report.unanswered()).isEqualTo(1);
+        assertThat(report.marked()).isZero();
+    }
+
+    @Test
+    @DisplayName("a name with no account is never asked of the web")
+    void onlyAccountsAreAsked() {
+        row("Nobody", PAID);
+
+        marker(UuidScheme.OFFLINE).run(source);
+
+        assertThat(asked).isEmpty();
     }
 
     @Test
@@ -120,6 +147,7 @@ final class MarkPremiumTest {
         fixture.registered("Steve", "hunter22");
         UUID id = account("Steve").id();
         row("Steve", PAID);
+        web.put("steve", new PremiumAnswer.Premium(PAID, "Steve"));
 
         marker(UuidScheme.KEEP_FIRST).run(source);
 
@@ -201,14 +229,17 @@ final class MarkPremiumTest {
     void aPremiumAccountIsLeft() {
         fixture.registered("Steve", "hunter22");
         row("Steve", PAID);
+        web.put("steve", new PremiumAnswer.Premium(PAID, "Steve"));
         marker(UuidScheme.OFFLINE).run(source);
         marks.clear();
         rows.clear();
+        asked.clear();
         row("Steve", OTHER);
 
         PremiumReport report = marker(UuidScheme.OFFLINE).run(source);
 
         assertThat(account("Steve").premiumId()).isEqualTo(PAID);
+        assertThat(asked).as("a premium account is not asked of the web").isEmpty();
         assertThat(report.already()).isEqualTo(1);
         assertThat(report.marked()).isZero();
     }
