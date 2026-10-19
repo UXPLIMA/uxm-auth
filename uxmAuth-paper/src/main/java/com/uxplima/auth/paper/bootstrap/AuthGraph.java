@@ -123,6 +123,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.MomentsByMethod;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.inbound.hold.Remembering;
 import com.uxplima.auth.paper.adapter.inbound.hold.Rescue;
+import com.uxplima.auth.paper.adapter.inbound.hold.WaitingBars;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingTimes;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
@@ -332,15 +333,19 @@ final class AuthGraph implements AutoCloseable {
                 Player::teleportAsync,
                 rescue::safe);
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
-        MomentRunner moments = MomentsByMethod.of(
-                new AuthMoments(
-                        plugin.getServer(),
-                        scheduler,
-                        messages,
-                        styler,
-                        () -> settings.current().effects(),
-                        times::left),
-                sessions);
+        WaitingBars bars = new WaitingBars(sessions);
+        MomentRunner moments = WaitingBars.endWithTheWait(
+                MomentsByMethod.of(
+                        new AuthMoments(
+                                plugin.getServer(),
+                                scheduler,
+                                messages,
+                                styler,
+                                () -> settings.current().effects(),
+                                times::left,
+                                bars::shown),
+                        sessions),
+                bars);
         WaitingClock waiting = new WaitingClock(
                 scheduler, sessions, () -> settings.current().timeouts(), clock, moments, messages, times);
         // A second is enough for a client to report its language; an English one may never report it.

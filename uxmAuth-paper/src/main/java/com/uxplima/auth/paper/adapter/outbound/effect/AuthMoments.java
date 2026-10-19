@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -12,6 +13,7 @@ import org.bukkit.Server;
 import org.bukkit.entity.Player;
 
 import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
@@ -52,6 +54,7 @@ public final class AuthMoments implements MomentRunner {
     private final Supplier<AuthSettings.Effects> effects;
     private final Wallet wallet;
     private final Function<UUID, Optional<Duration>> timeLeft;
+    private final BiConsumer<Player, BossBar> barShown;
 
     public AuthMoments(
             Server server,
@@ -70,6 +73,19 @@ public final class AuthMoments implements MomentRunner {
             Styler styler,
             Supplier<AuthSettings.Effects> effects,
             Function<UUID, Optional<Duration>> timeLeft) {
+        this(server, scheduler, messages, styler, effects, timeLeft, (player, bar) -> {});
+    }
+
+    /** @param barShown who keeps a bar a line puts up, so the wait that showed it can take it down */
+    public AuthMoments(
+            Server server,
+            Scheduler scheduler,
+            Messages messages,
+            Styler styler,
+            Supplier<AuthSettings.Effects> effects,
+            Function<UUID, Optional<Duration>> timeLeft,
+            BiConsumer<Player, BossBar> barShown) {
+        this.barShown = Objects.requireNonNull(barShown, "barShown");
         this.timeLeft = Objects.requireNonNull(timeLeft, "timeLeft");
         this.server = Objects.requireNonNull(server, "server");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
@@ -158,6 +174,7 @@ public final class AuthMoments implements MomentRunner {
                 .playerSink(line -> server.dispatchCommand(player, line))
                 // [bossbar] puts a bar up and asks the caller to take it down again later.
                 .later((delay, what) -> scheduler.entityLater(player, delay, what))
+                .barShown(barShown)
                 .build();
     }
 }

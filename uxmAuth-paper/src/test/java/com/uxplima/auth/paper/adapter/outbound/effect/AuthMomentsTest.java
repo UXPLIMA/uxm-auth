@@ -113,6 +113,30 @@ final class AuthMomentsTest {
         assertThat(plain(steve.nextComponentMessage())).isEqualTo("42 seconds to log in");
     }
 
+    @Test
+    @DisplayName("a bar a line puts up is handed over with its player, so the wait can take it down")
+    void aBarIsHandedOver() {
+        PlayerMock steve = server.addPlayer("Steve");
+        AuthSettings.Effects effects = new AuthSettings.Effects(
+                new EnumMap<>(Map.of(AuthSettings.Moment.REMINDER_LOGIN, List.of("[bossbar] 5 red drain | Waiting"))));
+        List<net.kyori.adventure.bossbar.BossBar> handed = new java.util.ArrayList<>();
+        AuthMoments withBars = new AuthMoments(
+                server,
+                new DirectScheduler(),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> effects,
+                id -> java.util.Optional.empty(),
+                (player, bar) -> {
+                    assertThat(player).isSameAs(steve);
+                    handed.add(bar);
+                });
+
+        withBars.fire(steve, AuthSettings.Moment.REMINDER_LOGIN);
+
+        assertThat(handed).hasSize(1);
+    }
+
     private static @Nullable String plain(@Nullable Component line) {
         return line == null ? null : PlainTextComponentSerializer.plainText().serialize(line);
     }
