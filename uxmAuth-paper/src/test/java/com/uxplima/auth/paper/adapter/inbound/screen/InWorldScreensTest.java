@@ -190,6 +190,20 @@ final class InWorldScreensTest {
     }
 
     @Test
+    @DisplayName("with chat answering, the rules say that registering in chat accepts them, not /register")
+    void theRulesNoteFollowsChatAnswers() {
+        rules = true;
+        chat = true;
+        PlayerMock steve = server.addPlayer("Steve");
+
+        offer(ScreenSettings.WaitingRoom.FROZEN).offer(steve, new AuthState.Unregistered(new PlayerName("Steve")));
+
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RULES_LINE_1));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RULES_LINE_2));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.RULES_ACCEPTED_BY_CHAT));
+    }
+
+    @Test
     @DisplayName("with the rules on, a player who must register reads them in chat, and how /register accepts them")
     void theRulesAreReadInChatBeforeRegistering() {
         rules = true;

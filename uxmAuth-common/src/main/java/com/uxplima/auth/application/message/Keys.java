@@ -704,7 +704,8 @@ public enum Keys implements MessageKey {
     RULES_LINE_2("rules.line-2", "<body>No cheating and no griefing."),
     RULES_ACCEPTED_BY_REGISTERING(
             "rules.accepted-by-registering",
-            "<body>Registering with <value>/register<body> means you accept these rules.");
+            "<body>Registering with <value>/register<body> means you accept these rules."),
+    RULES_ACCEPTED_BY_CHAT("rules.accepted-by-chat", "<body>Choosing a password in chat means you accept these rules.");
     private final String path;
     private final String defaultTemplate;
 

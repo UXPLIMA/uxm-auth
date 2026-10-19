@@ -301,7 +301,8 @@ public final class AuthScreens {
         }
         List<Component> lines = new ArrayList<>();
         rules.lines().forEach(line -> lines.add(text(reader, line)));
-        lines.add(messages.render(reader, Keys.RULES_ACCEPTED_BY_REGISTERING));
+        lines.add(messages.render(
+                reader, screens.get().chatInput() ? Keys.RULES_ACCEPTED_BY_CHAT : Keys.RULES_ACCEPTED_BY_REGISTERING));
         return lines;
     }
 
