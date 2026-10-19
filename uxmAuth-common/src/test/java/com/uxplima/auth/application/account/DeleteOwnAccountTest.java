@@ -117,6 +117,19 @@ final class DeleteOwnAccountTest {
     }
 
     @Test
+    @DisplayName("an ask nobody confirmed is let go at the next ask once its window has closed")
+    void anUnconfirmedAskIsLetGo() {
+        UUID steve = loggedIn("Steve", "hunter22");
+        UUID alex = loggedIn("Alex", "hunter33");
+        delete.ask(steve);
+        clock.turn(Duration.ofSeconds(61));
+
+        delete.ask(alex);
+
+        assertThat(delete.open()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("an account with the app confirms by its code, and its password is no proof then")
     void anAppAccountConfirmsByCode() {
         UUID steve = loggedIn("Steve", "hunter22");

@@ -104,8 +104,17 @@ public final class DeleteOwnAccount {
             return new Deleted.NoProof();
         }
         Instant now = clock.instant();
+        letGoClosed(now);
         asked.compute(connection, (key, before) -> now);
         return new Deleted.Asked(window.get(), byCode);
+    }
+
+    // An ask nobody confirms would stay for good: the player may leave, and nothing else visits the map.
+    private void letGoClosed(Instant now) {
+        Duration open = window.get();
+        for (UUID key : asked.keySet()) {
+            asked.compute(key, (id, at) -> at == null || now.isAfter(at.plus(open)) ? null : at);
+        }
     }
 
     /** Removes the account when the window is open and the proof is right. Hashing runs on the lane. */
@@ -121,6 +130,11 @@ public final class DeleteOwnAccount {
         }
         Account owner = account.get();
         return lane.submit(() -> proves(owner, proof) ? remove(owner) : new Deleted.WrongProof());
+    }
+
+    /** How many asks are held, for the test that proves a closed one is let go. */
+    int open() {
+        return asked.size();
     }
 
     private Deleted remove(Account owner) {
