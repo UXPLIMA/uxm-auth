@@ -218,6 +218,12 @@ public enum Keys implements MessageKey {
     CHANGE_DONE("change.done", "<good>Your password is changed. Every remembered session of it has ended."),
     CHANGE_WRONG_OLD("change.wrong-old", "<etag:'ERROR'> <body>The old password is wrong."),
     CHANGE_NOT_LOGGED_IN("change.not-logged-in", "<etag:'ERROR'> <body>Log in first."),
+    CHANGE_USAGE(
+            "change.usage",
+            "<tag:'AUTH'> <body>Type the old password and then the new one: <value>/changepassword <old> <new>"),
+    CHANGE_USAGE_ONCE(
+            "change.usage-once",
+            "<tag:'AUTH'> <body>Type the new password after the command: <value>/changepassword <new>"),
     CHANGE_NEEDS_BOTH("change.needs-both", "<etag:'ERROR'> <body>Write the old password, then the new one."),
 
     SESSION_USAGE(

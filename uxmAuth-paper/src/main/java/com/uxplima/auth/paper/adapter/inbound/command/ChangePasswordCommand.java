@@ -58,16 +58,23 @@ public final class ChangePasswordCommand {
     @Permission("uxmauth.changepassword")
     @PlayerOnly
     public void changePassword(
-            Sender sender, @Arg("first") String first, @Arg(value = "second", optional = true) String second) {
+            Sender sender,
+            @Arg(value = "first", optional = true) String first,
+            @Arg(value = "second", optional = true) String second) {
         CompletableFuture<Void> unused = attempt((Player) sender.bukkit(), first, second);
     }
 
     /** The whole command, answering when the player has been told. */
     CompletableFuture<Void> attempt(Player player, String first, String second) {
+        boolean asksOld = passwords.get().oldOnChange();
+        if (first.isEmpty()) {
+            messages.send(player, asksOld ? Keys.CHANGE_USAGE : Keys.CHANGE_USAGE_ONCE);
+            return CompletableFuture.completedFuture(null);
+        }
         CompletableFuture<ChangeResult> answer;
         if (!second.isEmpty()) {
             answer = change.run(player.getUniqueId(), Password.of(first), Password.of(second));
-        } else if (passwords.get().oldOnChange()) {
+        } else if (asksOld) {
             messages.send(player, Keys.CHANGE_NEEDS_BOTH);
             return CompletableFuture.completedFuture(null);
         } else {

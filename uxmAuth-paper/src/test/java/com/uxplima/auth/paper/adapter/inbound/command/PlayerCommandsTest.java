@@ -285,6 +285,21 @@ final class PlayerCommandsTest {
     }
 
     @Test
+    @DisplayName("/changepassword alone reaches the command and says how, with the old password or without as asked")
+    void aBareChangeSaysHow() {
+        loggedIn("hunter22");
+        AuthSettings.Passwords noOld = new AuthSettings.Passwords(6, 64, "\\S+", Set.of(), true, false, 3);
+
+        assertThat(node(changePassword(AuthWorld.shippedPasswords())).getCommand())
+                .isNotNull();
+        world.scheduler.settle(changePassword(AuthWorld.shippedPasswords()).attempt(steve, "", ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CHANGE_USAGE));
+        world.scheduler.settle(changePassword(noOld).attempt(steve, "", ""));
+        assertThat(steve.nextComponentMessage()).isEqualTo(world.messages.render(steve, Keys.CHANGE_USAGE_ONCE));
+        assertThat(world.fired).doesNotContain(AuthSettings.Moment.PASSWORD_CHANGED);
+    }
+
+    @Test
     @DisplayName("a logout puts the player back at the door")
     void logoutHoldsThePlayerAgain() {
         loggedIn("hunter22");
