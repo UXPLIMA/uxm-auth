@@ -169,6 +169,7 @@ import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordMask;
 import com.uxplima.auth.paper.adapter.outbound.network.ChannelReports;
 import com.uxplima.auth.paper.adapter.outbound.world.LoginWorld;
+import com.uxplima.auth.paper.adapter.outbound.world.NameMarkCheck;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.scheduler.Scheduler;
@@ -224,6 +225,8 @@ final class AuthGraph implements AutoCloseable {
     final ConfigurationGate gate;
     private final LoginWorld loginWorld;
     private final BedrockLink bedrock;
+    /** What the start says of a name mark Paper refuses, read once with the settings of the start. */
+    private final Optional<String> nameMarks;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -309,6 +312,9 @@ final class AuthGraph implements AutoCloseable {
                 () -> labels,
                 plugin.getName().toLowerCase(Locale.ROOT),
                 passes::isPassing);
+        // Paper reads config/ under the directory it was started in.
+        this.nameMarks =
+                NameMarkCheck.warning(NameMarkCheck.paperChecksNames(Path.of("").toAbsolutePath()), boot.ownership());
         this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
         HoldKeeper keeper = new HoldKeeper(
                 plugin,
@@ -721,6 +727,7 @@ final class AuthGraph implements AutoCloseable {
                                 + "\". A Bedrock name with it can be a Java"
                                 + " name too, and an unlinked Bedrock player could then reach a Java player's account."
                                 + " Set it in Floodgate's config.yml to a character no Java name has, such as a dot."));
+        nameMarks.ifPresent(plugin.getLogger()::warning);
         // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(closedDoor, plugin);
