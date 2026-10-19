@@ -47,6 +47,7 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.SessionsAuthApi;
+import com.uxplima.auth.application.account.BackupPassword;
 import com.uxplima.auth.application.account.DeleteOwnAccount;
 import com.uxplima.auth.application.account.SwitchToCracked;
 import com.uxplima.auth.application.factor.FactorStates;
@@ -58,6 +59,7 @@ import com.uxplima.auth.application.perf.TimedAccounts;
 import com.uxplima.auth.application.perf.Timings;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.AuthNotices;
+import com.uxplima.auth.application.port.LoginHistory;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
@@ -82,12 +84,16 @@ import com.uxplima.auth.application.staff.ResolveConflict;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.hash.Hashing;
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.inbound.account.BackupPasswordNotice;
+import com.uxplima.auth.paper.adapter.inbound.account.BedrockBackupForm;
 import com.uxplima.auth.paper.adapter.inbound.account.BedrockProofForm;
 import com.uxplima.auth.paper.adapter.inbound.account.CrackedCommand;
+import com.uxplima.auth.paper.adapter.inbound.account.LastLoginNotice;
 import com.uxplima.auth.paper.adapter.inbound.account.ProofForm;
 import com.uxplima.auth.paper.adapter.inbound.account.UnregisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
@@ -469,12 +475,17 @@ final class AuthGraph implements AutoCloseable {
         MailGraph.Email email = mail.email(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         this.email = email.command();
         this.addressDuty = email.duty();
+        LoginRecords.Landed afterLogin =
+                afterLogin(plugin, settings, history, accounts, hashing, lane, scheduler, messages);
         LoginRecords records = new LoginRecords(
                 history,
                 task -> scheduler.async(task),
                 clock,
                 plugin.getLogger()::warning,
-                alerts::landed,
+                (account, name, address, method) -> {
+                    alerts.landed(account, name, address, method);
+                    afterLogin.landed(account, name, address, method);
+                },
                 factorStates,
                 fired::loggedIn);
         // At start, and once a day after, a login older than the window goes.
@@ -774,6 +785,45 @@ final class AuthGraph implements AutoCloseable {
         return network.enabled()
                 ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor()))
                 : Optional.empty();
+    }
+
+    /** What a player reads after a login: the previous one, and a premium player's backup password, once. */
+    private LoginRecords.Landed afterLogin(
+            Plugin plugin,
+            PluginSettings settings,
+            LoginHistory history,
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Scheduler scheduler,
+            Messages messages) {
+        Function<PlayerName, @Nullable Player> online =
+                name -> plugin.getServer().getPlayerExact(name.value());
+        LastLoginNotice last = new LastLoginNotice(
+                history,
+                () -> settings.current().lastLoginNotice(),
+                online,
+                scheduler,
+                messages,
+                () -> settings.current().placeholders().dates().withZone(ZoneId.systemDefault()));
+        BackupPassword backup = new BackupPassword(
+                accounts,
+                hashing,
+                () -> settings.current().passwordPolicy(),
+                () -> settings.current().backupPassword(),
+                new SecureRandom());
+        BackupPasswordNotice shown = new BackupPasswordNotice(
+                backup,
+                lane,
+                online,
+                scheduler,
+                messages,
+                new BedrockBackupForm(BedrockScreen.forServer(plugin.getServer()), messages),
+                id -> bedrock.player(id).isPresent());
+        return (account, name, address, method) -> {
+            last.landed(account, name, address, method);
+            shown.landed(account, name, address, method);
+        };
     }
 
     /** The bulletins of this server: on Redis while it is on a network that names one, and on itself otherwise. */

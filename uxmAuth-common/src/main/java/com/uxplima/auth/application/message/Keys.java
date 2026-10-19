@@ -587,6 +587,16 @@ public enum Keys implements MessageKey {
     ACCOUNT_CRACKED_FORM_TITLE("account.cracked-form-title", "Switch to cracked"),
     ACCOUNT_CRACKED_FORM_PASSWORD(
             "account.cracked-form-password", "Your password. If your account has none yet, this becomes it."),
+    ACCOUNT_LAST_LOGIN(
+            "account.last-login",
+            "<tag:'AUTH'> <body>Your last login was on <value><date><body> from <value><address><body>. If that was not you, change your password."),
+    ACCOUNT_BACKUP_PASSWORD(
+            "account.backup-password",
+            "<tag:'AUTH'> <body>Your backup password, for a day Mojang cannot confirm you: <value><password><body>. Click it to copy and keep it safe, it is not shown again."),
+    ACCOUNT_BACKUP_FORM_TITLE("account.backup-form-title", "Your backup password"),
+    ACCOUNT_BACKUP_FORM_FIELD(
+            "account.backup-form-field",
+            "For a day Mojang cannot confirm you. Copy it and keep it safe, it is not shown again."),
     ACCOUNT_CRACKED_KICK(
             "account.cracked-kick", "<body>Your account is cracked now. Join again and log in with your password."),
 

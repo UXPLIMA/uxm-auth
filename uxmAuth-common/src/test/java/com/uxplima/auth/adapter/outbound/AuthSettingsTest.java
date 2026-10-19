@@ -328,6 +328,19 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("the backup password and the last-login line are on unless the operator turns them off")
+    void theAfterLoginNoticesAreRead(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot shipped = settingsFrom(folder, "");
+        assertThat(shipped.backupPassword()).isTrue();
+        assertThat(shipped.lastLoginNotice()).isTrue();
+
+        PluginSettings.Snapshot off =
+                settingsFrom(folder, "premium { backup-password = false }\nnotices { last-login = false }\n");
+        assertThat(off.backupPassword()).isFalse();
+        assertThat(off.lastLoginNotice()).isFalse();
+    }
+
+    @Test
     @DisplayName("a deletion waits a minute for its confirmation unless the operator says otherwise, and never none")
     void theDeleteConfirmationWindowIsRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").deleteConfirm()).isEqualTo(java.time.Duration.ofSeconds(60));
