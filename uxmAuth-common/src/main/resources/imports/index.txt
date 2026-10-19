@@ -9,3 +9,4 @@ authy.conf
 dynamicbungeeauth.conf
 loginsecurity.conf
 authplus.conf
+fastlogin.conf

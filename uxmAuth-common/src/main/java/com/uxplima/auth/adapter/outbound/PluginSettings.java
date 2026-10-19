@@ -205,17 +205,31 @@ public final class PluginSettings {
     }
 
     /**
-     * The login plugin whose accounts come over at the start, and where they are.
+     * What comes over at the start: another login plugin's accounts, then a list of premium names.
      *
-     * @param source the name of a layout in the imports folder, or empty for no import
-     * @param table the table to read in place of the layout's, or empty for the layout's own
+     * @param accounts the accounts, read first
+     * @param premium the premium names, read after the accounts
      */
-    public record Importing(String source, TableImport.Address address, String table) {
+    public record Importing(From accounts, From premium) {
 
         public Importing {
-            Objects.requireNonNull(source, "source");
-            Objects.requireNonNull(address, "address");
-            Objects.requireNonNull(table, "table");
+            Objects.requireNonNull(accounts, "accounts");
+            Objects.requireNonNull(premium, "premium");
+        }
+
+        /**
+         * One source and where it is.
+         *
+         * @param source the name of a layout in the imports folder, or empty for none
+         * @param table the table to read in place of the layout's, or empty for the layout's own
+         */
+        public record From(String source, TableImport.Address address, String table) {
+
+            public From {
+                Objects.requireNonNull(source, "source");
+                Objects.requireNonNull(address, "address");
+                Objects.requireNonNull(table, "table");
+            }
         }
     }
 
@@ -335,13 +349,17 @@ public final class PluginSettings {
     }
 
     private static Importing importing(HoconConfig config) {
-        return new Importing(
-                config.getString("import.source", "").trim(),
+        return new Importing(from(config, "import."), from(config, "import.premium."));
+    }
+
+    private static Importing.From from(HoconConfig config, String prefix) {
+        return new Importing.From(
+                config.getString(prefix + "source", "").trim(),
                 new TableImport.Address(
-                        config.getString("import.jdbc-url", "").trim(),
-                        config.getString("import.username", ""),
-                        config.getString("import.password", "")),
-                config.getString("import.table", "").trim());
+                        config.getString(prefix + "jdbc-url", "").trim(),
+                        config.getString(prefix + "username", ""),
+                        config.getString(prefix + "password", "")),
+                config.getString(prefix + "table", "").trim());
     }
 
     private static @Nullable Locale forcedLocale(String tag) {

@@ -2,6 +2,7 @@ package com.uxplima.auth.adapter.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.io.IOException;
 import java.lang.reflect.Proxy;
@@ -210,5 +211,29 @@ final class TableImportTest {
         assertThatThrownBy(() -> TableImport.open(
                         layout, new TableImport.Address("accounts.db", "", ""), id -> Optional.empty()))
                 .hasMessageStartingWith("import.jdbc-url is not a JDBC address");
+    }
+
+    @Test
+    @DisplayName("a premium list names a premium column, and is read from a table like any other source")
+    void aPremiumListNamesAPremiumColumn() throws IOException, SQLException {
+        assertThatThrownBy(() -> layout("kind = premium\ntable = t\ncolumns { name = n }\n"))
+                .hasMessageContaining("premium-flag");
+        ImportLayout layout = layout("""
+                kind = premium
+                table = premium
+                id-style = undashed
+                columns { name = Name, id = UUID, premium-flag = Premium }
+                """);
+        String url = url("sqlite");
+        source(
+                url,
+                "CREATE TABLE premium (UserID INTEGER, UUID CHAR(36), Name VARCHAR(16), Premium BOOLEAN)",
+                "INSERT INTO premium VALUES (1, '069a79f444e94726a5befca90e38aaf5', 'Notch', 1)",
+                "INSERT INTO premium VALUES (2, NULL, 'Steve', 0)");
+
+        assertThat(read(layout, url))
+                .extracting(ImportedAccount::name, ImportedAccount::premiumId)
+                .containsExactlyInAnyOrder(
+                        tuple("Notch", UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5")), tuple("Steve", null));
     }
 }

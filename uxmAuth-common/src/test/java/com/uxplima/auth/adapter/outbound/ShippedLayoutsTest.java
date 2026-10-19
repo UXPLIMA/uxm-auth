@@ -24,6 +24,8 @@ import java.util.stream.Stream;
 
 import com.uxplima.auth.application.migrate.ImportAccounts;
 import com.uxplima.auth.application.migrate.ImportReport;
+import com.uxplima.auth.application.migrate.MarkPremium;
+import com.uxplima.auth.application.migrate.PremiumReport;
 import com.uxplima.auth.application.port.ImportMarks;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
@@ -36,9 +38,12 @@ import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.testing.AuthFixture;
 import com.uxplima.auth.testing.InMemoryAccounts;
 import com.uxplima.auth.testing.InMemoryFactors;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -338,6 +343,60 @@ final class ShippedLayoutsTest {
                 .as("the authenticator secret")
                 .isEqualTo(source.totp());
         assertThat(factors.app(steve.id())).isEmpty();
+    }
+
+    @Test
+    void thePremiumListReadsItsSourceTable(@TempDir Path shippedTo) throws SQLException {
+        ImportLayout layout =
+                Objects.requireNonNull(ImportLayout.shipped(shippedTo).get("fastlogin"));
+        String url = "jdbc:sqlite:" + folder.resolve("premium.db");
+        try (Connection connection = DriverManager.getConnection(url);
+                Statement statement = connection.createStatement()) {
+            // The table as the source makes it on SQLite, with a cracked row, a premium row and a renamed one.
+            statement.execute("CREATE TABLE premium (UserID INTEGER PRIMARY KEY AUTOINCREMENT, UUID CHAR(36),"
+                    + " Name VARCHAR(16) NOT NULL, Premium BOOLEAN NOT NULL, LastIp VARCHAR(255) NOT NULL,"
+                    + " LastLogin TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, Floodgate INTEGER(3), UNIQUE (Name))");
+            statement.execute("INSERT INTO premium (UUID, Name, Premium, LastIp) VALUES (NULL, 'Steve', 0, '')");
+            statement.execute("INSERT INTO premium (UUID, Name, Premium, LastIp) VALUES ('"
+                    + NOTCH.toString().replace("-", "") + "', 'Notch', 1, '203.0.113.7')");
+        }
+        InMemoryAccounts accounts = new InMemoryAccounts();
+        InMemoryFactors factors = new InMemoryFactors();
+        Map<String, Instant> marks = new ConcurrentHashMap<>();
+        for (String name : List.of("Steve", "Notch")) {
+            accounts.seed(AuthFixture.account(name, HASHING.hash(Password.of("hunter22"))));
+        }
+
+        PremiumReport report = new MarkPremium(
+                        accounts,
+                        marksOf(marks),
+                        () -> new NamePolicy(Pattern.compile("[A-Za-z0-9_]+"), 3, 16, List.of()),
+                        name -> new PremiumAnswer.Unknown(),
+                        UuidScheme.MOJANG,
+                        Clock.fixed(SEEN, ZoneOffset.UTC))
+                .run(TableImport.open(layout, new TableImport.Address(url, "", ""), id -> Optional.empty()));
+
+        assertThat(report.marked()).isEqualTo(1);
+        Account notch = accounts.findByName(new PlayerName("Notch")).orElseThrow();
+        assertThat(notch.kind()).isEqualTo(AccountKind.PREMIUM);
+        assertThat(notch.premiumId()).isEqualTo(NOTCH);
+        assertThat(accounts.findByName(new PlayerName("Steve")).orElseThrow().kind())
+                .isEqualTo(AccountKind.CRACKED);
+        assertThat(factors.app(notch.id())).isEmpty();
+    }
+
+    private static ImportMarks marksOf(Map<String, Instant> marks) {
+        return new ImportMarks() {
+            @Override
+            public Optional<Instant> completed(String key) {
+                return Optional.ofNullable(marks.get(key));
+            }
+
+            @Override
+            public void complete(String key, Instant at) {
+                marks.put(key, at);
+            }
+        };
     }
 
     private static ImportAccounts importer(InMemoryAccounts accounts, InMemoryFactors factors) {

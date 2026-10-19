@@ -61,7 +61,7 @@ public final class TableImport implements ImportSource {
         this.layout = Objects.requireNonNull(layout, "layout");
         this.opener = Objects.requireNonNull(opener, "opener");
         this.names = Objects.requireNonNull(names, "names");
-        if (layout.kind() != ImportLayout.Kind.TABLE || layout.table().isEmpty()) {
+        if (layout.kind() == ImportLayout.Kind.YAML || layout.table().isEmpty()) {
             throw new IllegalArgumentException(layout.display() + " is read from a table, and import.table names none");
         }
     }

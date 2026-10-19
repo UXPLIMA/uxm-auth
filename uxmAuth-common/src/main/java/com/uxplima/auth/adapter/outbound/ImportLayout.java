@@ -53,7 +53,9 @@ public record ImportLayout(
     /** Where the accounts are. */
     public enum Kind {
         TABLE,
-        YAML
+        YAML,
+        /** A table of premium names, read after the accounts to turn the cracked ones it names premium. */
+        PREMIUM
     }
 
     /** How a source writes an id. */
@@ -128,9 +130,15 @@ public record ImportLayout(
         Objects.requireNonNull(config, "config");
         Kind kind = choice(Kind.class, config, "kind", "table");
         String table = config.getString("table", "").trim();
-        if (kind == Kind.TABLE && !table.isEmpty() && !SQL_NAME.matcher(table).matches()) {
+        if (kind != Kind.YAML && !table.isEmpty() && !SQL_NAME.matcher(table).matches()) {
             throw new IllegalArgumentException(
                     "table is " + table + ", and a table is letters, digits and underscores");
+        }
+        Columns columns = columns(config);
+        if (kind == Kind.PREMIUM
+                && columns.premiumId().isEmpty()
+                && columns.premiumFlag().isEmpty()) {
+            throw new IllegalArgumentException("a premium list names its premium-flag or premium-id column");
         }
         return new ImportLayout(
                 Objects.requireNonNull(key, "key"),
@@ -140,7 +148,7 @@ public record ImportLayout(
                 choice(IdStyle.class, config, "id-style", "none"),
                 choice(TimeStyle.class, config, "time-style", "none"),
                 hashStyle(config.getString("hash-style", "as-is")),
-                columns(config));
+                columns);
     }
 
     /** This layout reading another table, for a source the operator renamed. */

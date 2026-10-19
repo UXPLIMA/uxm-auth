@@ -10,18 +10,24 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import com.uxplima.auth.application.migrate.ImportAccounts;
 import com.uxplima.auth.application.migrate.ImportReport;
+import com.uxplima.auth.application.migrate.MarkPremium;
 import com.uxplima.auth.application.port.ImportMarks;
 import com.uxplima.auth.application.port.ImportSource;
 import com.uxplima.auth.application.port.ImportedAccount;
+import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.LegacyHashes;
 import com.uxplima.auth.domain.name.NamePolicy;
+import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.testing.InMemoryAccounts;
 import com.uxplima.auth.testing.InMemoryFactors;
@@ -32,6 +38,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** The import config.conf names runs at the start, once, inside the lock every member of a network shares. */
 final class StartupImportTest {
 
+    private static final UUID PAID = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
     private static final String PLAIN_256 = "20d2fe5e369db54ec7090639a9dc30ec4d608604936239d39e2de07fda09eb0b";
 
     @TempDir
@@ -55,13 +62,18 @@ final class StartupImportTest {
         }
     };
 
-    private final ImportAccounts importer = new ImportAccounts(
-            new InMemoryAccounts(),
-            new InMemoryFactors(),
-            marked,
-            () -> new NamePolicy(Pattern.compile("[A-Za-z0-9_]+"), 3, 16, List.of()),
-            UuidScheme.OFFLINE,
-            Clock.fixed(Instant.parse("2026-10-19T08:00:00Z"), ZoneOffset.UTC));
+    private final InMemoryAccounts accounts = new InMemoryAccounts();
+    private final Clock clock = Clock.fixed(Instant.parse("2026-10-19T08:00:00Z"), ZoneOffset.UTC);
+    private final NamePolicy policy = new NamePolicy(Pattern.compile("[A-Za-z0-9_]+"), 3, 16, List.of());
+    private final Supplier<NamePolicy> names = this::policy;
+    private final ImportAccounts importer =
+            new ImportAccounts(accounts, new InMemoryFactors(), marked, names, UuidScheme.OFFLINE, clock);
+    private final MarkPremium marker =
+            new MarkPremium(accounts, marked, names, name -> new PremiumAnswer.Unknown(), UuidScheme.OFFLINE, clock);
+
+    private NamePolicy policy() {
+        return policy;
+    }
 
     private ImportSource source(ImportLayout layout) {
         opened.add(layout);
@@ -75,6 +87,9 @@ final class StartupImportTest {
             public Stream<ImportedAccount> read() {
                 if (failing) {
                     throw new IllegalStateException("the source database refused the connection");
+                }
+                if (layout.kind() == ImportLayout.Kind.PREMIUM) {
+                    return Stream.of(new ImportedAccount("Steve", PAID, PAID, null, null, null, null, null));
                 }
                 return Stream.of(new ImportedAccount(
                         "Steve",
@@ -97,11 +112,21 @@ final class StartupImportTest {
     }
 
     private Optional<ImportReport> start(String source, String table, String jdbcUrl) {
+        return start(from(source, table, jdbcUrl), from("", "", "")).accounts();
+    }
+
+    private static PluginSettings.Importing.From from(String source, String table, String jdbcUrl) {
+        return new PluginSettings.Importing.From(source, new TableImport.Address(jdbcUrl, "", ""), table);
+    }
+
+    private StartupImport.Imported start(
+            PluginSettings.Importing.From accounts, PluginSettings.Importing.From premium) {
         return StartupImport.run(
-                new PluginSettings.Importing(source, new TableImport.Address(jdbcUrl, "", ""), table),
+                new PluginSettings.Importing(accounts, premium),
                 folder.resolve("imports"),
-                this::source,
+                named -> source(named.layout()),
                 importer,
+                marker,
                 work -> {
                     locked.add("taken");
                     work.run();
@@ -185,5 +210,48 @@ final class StartupImportTest {
                 .hasMessageContaining("half-imported");
         assertThat(marks).isEmpty();
         assertThat(locked).containsExactly("taken", "given back");
+    }
+
+    @Test
+    @DisplayName("a premium list is read after the accounts, inside the same lock, and turns what they brought premium")
+    void thePremiumListComesLast() {
+        StartupImport.Imported ran =
+                start(from("authme", "", "jdbc:sqlite:a.db"), from("fastlogin", "", "jdbc:sqlite:f.db"));
+
+        assertThat(opened).extracting(ImportLayout::key).containsExactly("authme", "fastlogin");
+        assertThat(locked).containsExactly("taken", "given back");
+        assertThat(ran.premium())
+                .hasValueSatisfying(report -> assertThat(report.marked()).isEqualTo(1));
+        assertThat(accounts.findByName(new PlayerName("Steve")).orElseThrow().kind())
+                .isEqualTo(AccountKind.PREMIUM);
+        assertThat(console).hasSize(2);
+        assertThat(console.get(1)).contains("FastLogin").contains("1 turned premium");
+    }
+
+    @Test
+    @DisplayName("an account import that fails reads no premium list")
+    void aFailureReadsNoPremiumList() {
+        failing = true;
+
+        assertThatThrownBy(
+                        () -> start(from("authme", "", "jdbc:sqlite:a.db"), from("fastlogin", "", "jdbc:sqlite:f.db")))
+                .isInstanceOf(ImportFailed.class);
+        assertThat(opened).extracting(ImportLayout::key).containsExactly("authme");
+        assertThat(marks).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a premium list alone reads the accounts there are, and each half refuses the other's layouts")
+    void eachHalfTakesItsOwnLayouts() {
+        StartupImport.Imported ran = start(from("", "", ""), from("fastlogin", "", "jdbc:sqlite:f.db"));
+        assertThat(ran.accounts()).isEmpty();
+        assertThat(ran.premium())
+                .hasValueSatisfying(report -> assertThat(report.unknownNames()).isEqualTo(1));
+
+        assertThatThrownBy(() -> start(from("fastlogin", "", "jdbc:sqlite:f.db"), from("", "", "")))
+                .hasMessageContaining("import.premium.source");
+        assertThatThrownBy(() -> start(from("", "", ""), from("authme", "", "jdbc:sqlite:a.db")))
+                .hasMessageContaining("import.premium.source")
+                .hasMessageContaining("fastlogin");
     }
 }
