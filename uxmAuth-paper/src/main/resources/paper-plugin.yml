@@ -58,6 +58,12 @@ permissions:
   uxmauth.premium:
     description: Prove your name on the next connection and log in without a password from then on
     default: true
+  uxmauth.unregister:
+    description: Delete your own account, confirmed by your password or 2FA code
+    default: true
+  uxmauth.cracked:
+    description: Turn your premium account cracked and log in with a password from now on
+    default: true
   uxmauth.captcha:
     description: Answer the captcha with the code you were shown
     default: true

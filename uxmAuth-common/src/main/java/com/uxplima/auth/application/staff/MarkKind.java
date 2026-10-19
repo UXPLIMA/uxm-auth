@@ -87,8 +87,14 @@ public final class MarkKind {
         };
     }
 
-    /** Turns the premium account under this name cracked. Writes the table. */
+    /** Turns the premium account under this name cracked, for staff. Writes the table. */
     public Marked cracked(PlayerName name) {
+        return cracked(name, Bulletin.By.STAFF);
+    }
+
+    /** Turns the premium account under this name cracked, for whoever {@code by} names. Writes the table. */
+    public Marked cracked(PlayerName name, Bulletin.By by) {
+        Objects.requireNonNull(by, "by");
         Optional<Account> found = accounts.findByName(Objects.requireNonNull(name, "name"));
         if (found.isEmpty()) {
             return Marked.UNKNOWN;
@@ -101,7 +107,7 @@ public final class MarkKind {
             return Marked.NO_PASSWORD;
         }
         accounts.update(withKind(account, account.id(), AccountKind.CRACKED, null));
-        events.publish(new Bulletin.Rejoin(account.id()));
+        events.publish(new Bulletin.Rejoin(account.id(), by));
         listeners.kindSwitched(account.id(), account.name(), AccountKind.CRACKED);
         return Marked.DONE;
     }

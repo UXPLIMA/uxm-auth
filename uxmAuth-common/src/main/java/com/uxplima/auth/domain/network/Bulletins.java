@@ -36,6 +36,7 @@ public final class Bulletins {
     private static final String UNREGISTERED = "U";
     private static final String REJOIN = "R";
     private static final String ALERT = "A";
+    private static final String OWNER = "owner";
     /** An alert is about no one account, so it fills the account part with the nil id. */
     private static final UUID NOBODY = new UUID(0, 0);
 
@@ -55,8 +56,9 @@ public final class Bulletins {
                     case Bulletin.SessionsEnded ended ->
                         text(sent, SESSIONS_ENDED, ended.account(), ended.keep().orElse(""));
                     case Bulletin.LetIn letIn -> text(sent, LET_IN, letIn.account(), letIn.nonce());
-                    case Bulletin.Unregistered removed -> text(sent, UNREGISTERED, removed.account(), "");
-                    case Bulletin.Rejoin rejoin -> text(sent, REJOIN, rejoin.account(), "");
+                    case Bulletin.Unregistered removed ->
+                        text(sent, UNREGISTERED, removed.account(), byText(removed.by()));
+                    case Bulletin.Rejoin rejoin -> text(sent, REJOIN, rejoin.account(), byText(rejoin.by()));
                     case Bulletin.Alert alert -> text(sent, ALERT, NOBODY, AlertText.write(alert));
                 });
     }
@@ -101,6 +103,18 @@ public final class Bulletins {
         return first.get();
     }
 
+    /** Staff travel as nothing after the account, the player as their word. */
+    private static String byText(Bulletin.By by) {
+        return by == Bulletin.By.OWNER ? OWNER : "";
+    }
+
+    private static Optional<Bulletin.By> byOf(String more) {
+        if (more.isEmpty()) {
+            return Optional.of(Bulletin.By.STAFF);
+        }
+        return more.equals(OWNER) ? Optional.of(Bulletin.By.OWNER) : Optional.empty();
+    }
+
     private static Optional<Sent> parse(String text) {
         List<String> parts = List.of(text.split("\\|", -1));
         if (parts.size() != PARTS || !parts.get(0).equals(VERSION)) {
@@ -116,9 +130,8 @@ public final class Bulletins {
                                     account, more.isEmpty() ? Optional.empty() : Optional.of(more)));
                         case LET_IN ->
                             more.isEmpty() ? Optional.empty() : Optional.of(new Bulletin.LetIn(account, more));
-                        case UNREGISTERED ->
-                            more.isEmpty() ? Optional.of(new Bulletin.Unregistered(account)) : Optional.empty();
-                        case REJOIN -> more.isEmpty() ? Optional.of(new Bulletin.Rejoin(account)) : Optional.empty();
+                        case UNREGISTERED -> byOf(more).<Bulletin>map(by -> new Bulletin.Unregistered(account, by));
+                        case REJOIN -> byOf(more).<Bulletin>map(by -> new Bulletin.Rejoin(account, by));
                         case ALERT -> account.equals(NOBODY) ? AlertText.read(more) : Optional.empty();
                         default -> Optional.empty();
                     };

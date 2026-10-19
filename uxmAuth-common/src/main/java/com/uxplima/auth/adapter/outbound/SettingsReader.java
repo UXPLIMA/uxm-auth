@@ -283,6 +283,15 @@ final class SettingsReader {
         return value;
     }
 
+    /** How long a player's own deletion waits for its confirmation. */
+    static Duration deleteConfirm(HoconConfig config) {
+        int seconds = config.getInt("account.delete-confirm-seconds", 60);
+        if (seconds < 1) {
+            throw new IllegalArgumentException("account.delete-confirm-seconds must be at least 1, not " + seconds);
+        }
+        return Duration.ofSeconds(seconds);
+    }
+
     /** The login spot and the rescue. A login spot with no world is none. */
     static AuthSettings.Spots spots(HoconConfig config) {
         String world = config.getString("location.login-spot.world", "").trim();

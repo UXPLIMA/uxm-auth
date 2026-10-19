@@ -47,6 +47,8 @@ import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.SessionsAuthApi;
+import com.uxplima.auth.application.account.DeleteOwnAccount;
+import com.uxplima.auth.application.account.SwitchToCracked;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
@@ -84,6 +86,10 @@ import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.inbound.account.BedrockProofForm;
+import com.uxplima.auth.paper.adapter.inbound.account.CrackedCommand;
+import com.uxplima.auth.paper.adapter.inbound.account.ProofForm;
+import com.uxplima.auth.paper.adapter.inbound.account.UnregisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
@@ -189,6 +195,8 @@ final class AuthGraph implements AutoCloseable {
     final LogoutCommand logout;
     final ClaimCommand claim;
     final PremiumCommand premium;
+    final UnregisterCommand unregister;
+    final CrackedCommand cracked;
     final SessionCommand session;
     final FactorGraph factors;
     final TwoFactorCommand twoFactor;
@@ -546,6 +554,34 @@ final class AuthGraph implements AutoCloseable {
                 new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
+        ProofForm proofForm = new BedrockProofForm(BedrockScreen.forServer(plugin.getServer()), messages);
+        this.unregister = new UnregisterCommand(
+                new DeleteOwnAccount(
+                        sessions,
+                        accounts,
+                        factors.factors,
+                        factors.check,
+                        hashing,
+                        lane,
+                        new Unregister(accounts, events, fired),
+                        () -> settings.current().deleteConfirm(),
+                        clock),
+                proofForm,
+                id -> bedrock.player(id).isPresent(),
+                replies,
+                messages);
+        this.cracked = new CrackedCommand(
+                new SwitchToCracked(
+                        sessions,
+                        accounts,
+                        hashing,
+                        lane,
+                        change,
+                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events, fired)),
+                proofForm,
+                id -> bedrock.player(id).isPresent(),
+                replies,
+                messages);
         this.session = new SessionCommand(
                 remember,
                 remembering,

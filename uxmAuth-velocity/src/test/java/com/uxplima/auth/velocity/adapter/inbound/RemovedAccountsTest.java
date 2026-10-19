@@ -66,6 +66,21 @@ final class RemovedAccountsTest {
     }
 
     @Test
+    @DisplayName("a player who deleted or switched their own account leaves with their own reason, not staff's")
+    void theOwnersOwnReason() {
+        Player steve = mock(Player.class);
+        Component deleted = messages.render(steve, Keys.ACCOUNT_DELETED_KICK);
+        Component cracked = messages.render(steve, Keys.ACCOUNT_CRACKED_KICK);
+        RemovedAccounts removed = new RemovedAccounts(id -> Optional.of(steve), sessions, messages);
+
+        removed.accept(new Bulletin.Unregistered(STEVE, Bulletin.By.OWNER));
+        removed.accept(new Bulletin.Rejoin(STEVE, Bulletin.By.OWNER));
+
+        verify(steve).disconnect(deleted);
+        verify(steve).disconnect(cracked);
+    }
+
+    @Test
     @DisplayName("any other bulletin sends nobody away")
     void otherBulletinsSendNobody() {
         Player steve = mock(Player.class);

@@ -56,6 +56,20 @@ final class BulletinsTest {
     }
 
     @Test
+    @DisplayName("who removed or switched the account travels with it, so every member sends its player away in"
+            + " the right words")
+    void whoActedTravels() {
+        for (Bulletin bulletin : java.util.List.of(
+                new Bulletin.Unregistered(STEVE, Bulletin.By.OWNER),
+                new Bulletin.Rejoin(STEVE, Bulletin.By.OWNER),
+                new Bulletin.Unregistered(STEVE, Bulletin.By.STAFF))) {
+            Bulletins.Sent sent = new Bulletins.Sent(bulletin, ORIGIN, NOW);
+            assertThat(bulletins.open(bulletins.seal(sent), NOW)).contains(sent);
+        }
+        assertThat(new Bulletin.Rejoin(STEVE)).isEqualTo(new Bulletin.Rejoin(STEVE, Bulletin.By.STAFF));
+    }
+
+    @Test
     @DisplayName("an account whose player must join again travels whole too")
     void aRejoinOpens() {
         Bulletins.Sent rejoin = new Bulletins.Sent(new Bulletin.Rejoin(STEVE), ORIGIN, NOW);

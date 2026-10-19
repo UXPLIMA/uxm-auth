@@ -31,8 +31,14 @@ public final class RemovedAccounts implements Consumer<Bulletin> {
     @Override
     public void accept(Bulletin bulletin) {
         switch (Objects.requireNonNull(bulletin, "bulletin")) {
-            case Bulletin.Unregistered removed -> sendAway(removed.account(), Keys.STAFF_REMOVED_KICK);
-            case Bulletin.Rejoin rejoin -> sendAway(rejoin.account(), Keys.STAFF_REJOIN_KICK);
+            case Bulletin.Unregistered removed ->
+                sendAway(
+                        removed.account(),
+                        removed.by() == Bulletin.By.OWNER ? Keys.ACCOUNT_DELETED_KICK : Keys.STAFF_REMOVED_KICK);
+            case Bulletin.Rejoin rejoin ->
+                sendAway(
+                        rejoin.account(),
+                        rejoin.by() == Bulletin.By.OWNER ? Keys.ACCOUNT_CRACKED_KICK : Keys.STAFF_REJOIN_KICK);
             case Bulletin.SessionsEnded ended -> {}
             case Bulletin.LetIn letIn -> {}
             case Bulletin.Alert alert -> {}

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +67,7 @@ public final class PluginSettings {
             AuthSettings.Hold hold,
             boolean joinMessageWaits,
             AuthSettings.Spots spots,
+            Duration deleteConfirm,
             AuthSettings.Timeouts timeouts,
             AuthSettings.Effects effects,
             AuthSettings.Bedrock bedrock,
@@ -89,6 +91,7 @@ public final class PluginSettings {
             Objects.requireNonNull(storage, "storage");
             Objects.requireNonNull(moveTo, "moveTo");
             Objects.requireNonNull(spots, "spots");
+            Objects.requireNonNull(deleteConfirm, "deleteConfirm");
             Objects.requireNonNull(names, "names");
             Objects.requireNonNull(passwords, "passwords");
             Objects.requireNonNull(hashing, "hashing");
@@ -297,6 +300,7 @@ public final class PluginSettings {
                 SettingsReader.hold(config),
                 config.getBoolean("hold.join-message-waits", true),
                 SettingsReader.spots(config),
+                SettingsReader.deleteConfirm(config),
                 SettingsReader.timeouts(config),
                 SettingsReader.effects(config),
                 SettingsReader.bedrock(config),

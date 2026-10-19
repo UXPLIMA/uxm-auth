@@ -39,14 +39,20 @@ public final class Unregister {
         this.events = Objects.requireNonNull(events, "events");
     }
 
-    /** Removes the account under this name. Writes the tables. */
+    /** Removes the account under this name, for staff. Writes the tables. */
     public Removed remove(PlayerName name) {
+        return remove(name, Bulletin.By.STAFF);
+    }
+
+    /** Removes the account under this name, for whoever {@code by} names. Writes the tables. */
+    public Removed remove(PlayerName name, Bulletin.By by) {
+        Objects.requireNonNull(by, "by");
         Optional<Account> account = accounts.findByName(Objects.requireNonNull(name, "name"));
         if (account.isEmpty()) {
             return Removed.UNKNOWN;
         }
         accounts.delete(account.get().id());
-        events.publish(new Bulletin.Unregistered(account.get().id()));
+        events.publish(new Bulletin.Unregistered(account.get().id(), by));
         listeners.unregistered(account.get().id(), account.get().name());
         return Removed.REMOVED;
     }

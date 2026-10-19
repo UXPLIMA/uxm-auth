@@ -554,6 +554,41 @@ public enum Keys implements MessageKey {
     LOGOUT_SESSIONS_ENDED(
             "logout.sessions-ended",
             "<body>Your password was changed, so you were logged out. Log in with the new one."),
+    ACCOUNT_LOG_IN_FIRST("account.log-in-first", "<etag:'ERROR'> <body>Log in first."),
+    ACCOUNT_DELETE_ASK_PASSWORD(
+            "account.delete-ask-password",
+            "<tag:'AUTH'> <body>This deletes your account and everything kept under it. To go on, type <value>/unregister<body> and your password within <value><seconds><body> seconds."),
+    ACCOUNT_DELETE_ASK_CODE(
+            "account.delete-ask-code",
+            "<tag:'AUTH'> <body>This deletes your account and everything kept under it. To go on, type <value>/unregister<body> and a code from your app within <value><seconds><body> seconds."),
+    ACCOUNT_DELETE_WRONG(
+            "account.delete-wrong",
+            "<etag:'ERROR'> <body>That does not prove the account is yours. Nothing was deleted. Ask again to try once more."),
+    ACCOUNT_DELETE_NOT_ASKED(
+            "account.delete-not-asked",
+            "<etag:'ERROR'> <body>There is nothing to confirm. Type <value>/unregister<body> alone first, then confirm in time."),
+    ACCOUNT_DELETE_NO_PROOF(
+            "account.delete-no-proof",
+            "<etag:'ERROR'> <body>Your account has no password and no app to prove it is yours. Ask staff to delete it."),
+    ACCOUNT_DELETED_KICK("account.deleted-kick", "<body>Your account is deleted. Join again to register a new one."),
+    ACCOUNT_CRACKED_NOT_PREMIUM(
+            "account.cracked-not-premium",
+            "<etag:'ERROR'> <body>Your account is not premium, so there is nothing to switch."),
+    ACCOUNT_CRACKED_WRONG("account.cracked-wrong", "<etag:'ERROR'> <body>That is not your password. Nothing changed."),
+    ACCOUNT_DELETE_FORM_TITLE("account.delete-form-title", "Delete your account"),
+    ACCOUNT_DELETE_FORM_PASSWORD(
+            "account.delete-form-password", "Your password. This deletes your account and everything kept under it."),
+    ACCOUNT_DELETE_FORM_CODE(
+            "account.delete-form-code",
+            "A code from your app. This deletes your account and everything kept under it."),
+    ACCOUNT_CRACKED_USAGE(
+            "account.cracked-usage",
+            "<tag:'AUTH'> <body>This turns your account cracked: from your next join you log in with a password. Type <value>/cracked<body> and your password. If your account has none yet, what you type becomes it."),
+    ACCOUNT_CRACKED_FORM_TITLE("account.cracked-form-title", "Switch to cracked"),
+    ACCOUNT_CRACKED_FORM_PASSWORD(
+            "account.cracked-form-password", "Your password. If your account has none yet, this becomes it."),
+    ACCOUNT_CRACKED_KICK(
+            "account.cracked-kick", "<body>Your account is cracked now. Join again and log in with your password."),
 
     PASSWORD_TOO_SHORT(
             "password.too-short", "<etag:'ERROR'> <body>A password needs at least <value><min><body> characters."),

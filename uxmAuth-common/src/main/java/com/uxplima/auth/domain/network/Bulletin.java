@@ -40,17 +40,37 @@ public sealed interface Bulletin {
         }
     }
 
-    /** Staff removed this account: its player is sent away wherever they are. */
-    record Unregistered(UUID account) implements Bulletin {
+    /** Who removed or switched an account, so its player is sent away in the right words. */
+    enum By {
+        /** Staff, from a command or the console. */
+        STAFF,
+        /** The player, from their own account. */
+        OWNER
+    }
+
+    /** This account was removed: its player is sent away wherever they are. */
+    record Unregistered(UUID account, By by) implements Bulletin {
         public Unregistered {
             Objects.requireNonNull(account, "account");
+            Objects.requireNonNull(by, "by");
+        }
+
+        /** Staff removed it. */
+        public Unregistered(UUID account) {
+            this(account, By.STAFF);
         }
     }
 
-    /** Staff changed how this account logs in: its player is sent away to join again under the new way. */
-    record Rejoin(UUID account) implements Bulletin {
+    /** How this account logs in changed: its player is sent away to join again under the new way. */
+    record Rejoin(UUID account, By by) implements Bulletin {
         public Rejoin {
             Objects.requireNonNull(account, "account");
+            Objects.requireNonNull(by, "by");
+        }
+
+        /** Staff changed it. */
+        public Rejoin(UUID account) {
+            this(account, By.STAFF);
         }
     }
 

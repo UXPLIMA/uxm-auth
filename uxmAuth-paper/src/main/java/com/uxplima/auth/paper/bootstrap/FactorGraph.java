@@ -62,6 +62,9 @@ final class FactorGraph {
 
     final Factors factors;
 
+    /** Checks a code from the app or a backup code, for whatever asks the owner to prove it. */
+    final FactorCheck check;
+
     private final FactorSetup setup;
     private final MailToggle mailToggle;
     private final Sessions sessions;
@@ -90,7 +93,7 @@ final class FactorGraph {
         this.factors = factors;
         this.secondStep = new SecondStep(
                 factors, mail.emails, () -> settings.current().secondFactor().step(), mail::loginMailed);
-        FactorCheck check = new FactorCheck(
+        this.check = new FactorCheck(
                 factors,
                 hashing,
                 () -> settings.current().secondFactor().setup().totp(),

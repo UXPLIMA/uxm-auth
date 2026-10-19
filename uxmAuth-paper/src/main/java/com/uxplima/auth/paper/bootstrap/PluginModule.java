@@ -26,6 +26,8 @@ import com.uxplima.auth.api.AuthApi;
 import com.uxplima.auth.api.AuthApiProvider;
 import com.uxplima.auth.application.SessionsAuthApi;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.paper.adapter.inbound.account.CrackedCommand;
+import com.uxplima.auth.paper.adapter.inbound.account.UnregisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.AdminCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
@@ -364,6 +366,8 @@ final class PluginModule {
         registerIfEnabled(commands, LogoutCommand.KEY, "logout", graph.logout, resolvers, scheduler);
         registerIfEnabled(commands, ClaimCommand.KEY, "claim", graph.claim, resolvers, scheduler);
         registerIfEnabled(commands, PremiumCommand.KEY, "premium", graph.premium, resolvers, scheduler);
+        registerIfEnabled(commands, UnregisterCommand.KEY, "unregister", graph.unregister, resolvers, scheduler);
+        registerIfEnabled(commands, CrackedCommand.KEY, "cracked", graph.cracked, resolvers, scheduler);
         registerIfEnabled(commands, SessionCommand.KEY, "session", graph.session, resolvers, scheduler);
         registerIfEnabled(commands, CaptchaCommand.KEY, "captcha", graph.captchaCommand, resolvers, scheduler);
         registerIfEnabled(commands, TwoFactorCommand.KEY, "2fa", graph.twoFactor, resolvers, scheduler);

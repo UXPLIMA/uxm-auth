@@ -313,6 +313,18 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("a deletion waits a minute for its confirmation unless the operator says otherwise, and never none")
+    void theDeleteConfirmationWindowIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").deleteConfirm()).isEqualTo(java.time.Duration.ofSeconds(60));
+        assertThat(settingsFrom(folder, "account { delete-confirm-seconds = 20 }\n")
+                        .deleteConfirm())
+                .isEqualTo(java.time.Duration.ofSeconds(20));
+        assertThatThrownBy(() -> settingsFrom(folder, "account { delete-confirm-seconds = 0 }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("account.delete-confirm-seconds");
+    }
+
+    @Test
     @DisplayName("a rescue reach below one block is refused, naming the line")
     void aReachBelowOneIsRefused(@TempDir Path folder) {
         assertThatThrownBy(() -> settingsFrom(folder, "location { rescue-reach = 0 }\n"))

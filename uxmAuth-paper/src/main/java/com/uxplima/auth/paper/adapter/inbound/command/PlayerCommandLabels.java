@@ -6,6 +6,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
+import com.uxplima.auth.paper.adapter.inbound.account.CrackedCommand;
+import com.uxplima.auth.paper.adapter.inbound.account.UnregisterCommand;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
 
@@ -19,7 +21,8 @@ public final class PlayerCommandLabels {
 
     /**
      * The commands a waiting player uses: the password commands, the claim on a name they cannot log in to, the
-     * answer to a captcha, and the second factor, whose codes the log must not keep either.
+     * answer to a captcha, and the second factor, whose codes the log must not keep either. The commands on a
+     * player's own account carry a password or a code too; a waiting player who runs one is told to log in.
      */
     static final List<Class<?>> COMMANDS = List.of(
             LoginCommand.class,
@@ -30,7 +33,9 @@ public final class PlayerCommandLabels {
             CaptchaCommand.class,
             TwoFactorCommand.class,
             EmailCommand.class,
-            RecoverCommand.class);
+            RecoverCommand.class,
+            UnregisterCommand.class,
+            CrackedCommand.class);
 
     private PlayerCommandLabels() {}
 
