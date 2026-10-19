@@ -1,0 +1,100 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.uxplima",
+    "module": "uxmauth-api",
+    "version": "0.0.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.7.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 25,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "uxmauth-api-0.0.3.jar",
+          "url": "uxmauth-api-0.0.3.jar",
+          "size": 18810,
+          "sha512": "3e39e297ada68dc3ea95eed02bef49321c8b65ef1e44d5af7878fdb2f9d33e7d1fdb5abb5b4ac21d5e166844def79d6286abd68ff470de8ea657098cecef17e6",
+          "sha256": "b1bc0a889c35d8041674e845dbbe69779ec0610bc04376c4ced11fc22d73427c",
+          "sha1": "01a0740ca98b20e3043dbc9a53a4485443ef2027",
+          "md5": "e41630fbe0028bd473f446ded769d844"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 25,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "uxmauth-api-0.0.3.jar",
+          "url": "uxmauth-api-0.0.3.jar",
+          "size": 18810,
+          "sha512": "3e39e297ada68dc3ea95eed02bef49321c8b65ef1e44d5af7878fdb2f9d33e7d1fdb5abb5b4ac21d5e166844def79d6286abd68ff470de8ea657098cecef17e6",
+          "sha256": "b1bc0a889c35d8041674e845dbbe69779ec0610bc04376c4ced11fc22d73427c",
+          "sha1": "01a0740ca98b20e3043dbc9a53a4485443ef2027",
+          "md5": "e41630fbe0028bd473f446ded769d844"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "uxmauth-api-0.0.3-sources.jar",
+          "url": "uxmauth-api-0.0.3-sources.jar",
+          "size": 13067,
+          "sha512": "f2832c8545e66947804ef8f542776b36a35ef56d1ccd2e90d8eca79ce845fa44fee56bc87f3e6974d0e22d92c1b6a151a7a05849e30d12fcbf8262026ec9274f",
+          "sha256": "bc82c82be4d666b96ea7533452f7a7a624fbe284e0a46065e73af9fc894ba212",
+          "sha1": "cbecf60dfe098b5d04430d884d4fa7287549d7b7",
+          "md5": "3e1ef9ad510df84baac522690e5d91a9"
+        }
+      ]
+    },
+    {
+      "name": "javadocElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "uxmauth-api-0.0.3-javadoc.jar",
+          "url": "uxmauth-api-0.0.3-javadoc.jar",
+          "size": 4220543,
+          "sha512": "cba479a0c66561cd019d54016e6a885f6d1d39c66baa99461619a69e0cfd8f5c63b7d78319c27e47a20ec57ced1b62e9a3fe0533404f709cc4a2699b6e4244a3",
+          "sha256": "5cc098378a79f6c3aa2588ec29abf87a7aa726ad8b9f6226908fa867bcdbc7f5",
+          "sha1": "ffc095e76c215bafe3607ab6fad3c156c60135f0",
+          "md5": "b3abdfd52579a2a8de9000b5771fc4bb"
+        }
+      ]
+    }
+  ]
+}
