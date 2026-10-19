@@ -89,6 +89,49 @@ final class TwoFactorCommandTest {
     }
 
     @Test
+    @DisplayName("/2fa confirm, off, backup or email off alone reaches the command, says how and counts nothing")
+    void aBareSubcommandSaysHow() throws java.io.IOException {
+        world.registered(steve, "hunter22");
+        assertThat(world.logIn
+                        .run(steve.getUniqueId(), Password.of("hunter22"), "127.0.0.1")
+                        .join())
+                .isInstanceOf(LoginResult.LoggedIn.class);
+        world.appOn(steve);
+        java.nio.file.Path file = folder.resolve("commands.conf");
+        try (java.io.InputStream shipped =
+                java.util.Objects.requireNonNull(getClass().getResourceAsStream("/commands.conf"))) {
+            java.nio.file.Files.copy(shipped, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        var node = com.uxplima.uxmlib.command.annotation.AnnotatedCommands.buildNode(
+                command,
+                com.uxplima.uxmlib.command.annotation.ParamResolvers.withDefaults()
+                        .replacer(
+                                com.uxplima.uxmlib.command.annotation.annotations.FromConfig.class,
+                                com.uxplima.uxmlib.command.annotation.ConfiguredCommands.load(file)
+                                        .replacer()));
+        for (String word : List.of("confirm", "off", "backup")) {
+            assertThat(node.getChild(word).getCommand()).as(word).isNotNull();
+        }
+        assertThat(node.getChild("email").getChild("off").getCommand()).isNotNull();
+
+        var setup = world.factorSetup();
+        var mail = world.mailToggle();
+        // Twelve rounds of three bare lines: counted as wrong codes they would ban the address many times over.
+        for (int round = 0; round < 12; round++) {
+            world.scheduler.settle(setup.off(steve, ""));
+            world.scheduler.settle(setup.backup(steve, ""));
+            world.scheduler.settle(mail.off(steve, ""));
+        }
+        world.scheduler.settle(setup.confirm(steve, ""));
+
+        Component usage = world.messages.render(steve, Keys.FACTOR_USAGE);
+        for (int line = 0; line < 37; line++) {
+            assertThat(steve.nextComponentMessage()).as("line %d", line).isEqualTo(usage);
+        }
+        assertThat(steve.isOnline()).isTrue();
+    }
+
+    @Test
     @DisplayName("a code from a player no code is asked of is told so, and nothing is answered")
     void nothingIsAsked() {
         world.registered(steve, "hunter22");

@@ -68,21 +68,21 @@ public final class TwoFactorCommand {
     @FromConfig(value = "confirm", fallbackName = "confirm", description = "Turn it on with the app's first code")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void confirm(Sender sender, @Arg("code") String code) {
+    public void confirm(Sender sender, @Arg(value = "code", optional = true) String code) {
         CompletableFuture<Void> unused = setup.confirm((Player) sender.bukkit(), code);
     }
 
     @FromConfig(value = "off", fallbackName = "off", description = "Turn it off with a code from the app")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void off(Sender sender, @Arg("code") String code) {
+    public void off(Sender sender, @Arg(value = "code", optional = true) String code) {
         CompletableFuture<Void> unused = setup.off((Player) sender.bukkit(), code);
     }
 
     @FromConfig(value = "backup", fallbackName = "backup", description = "Get new backup codes for a code")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void backup(Sender sender, @Arg("code") String code) {
+    public void backup(Sender sender, @Arg(value = "code", optional = true) String code) {
         CompletableFuture<Void> unused = setup.backup((Player) sender.bukkit(), code);
     }
 
@@ -96,7 +96,7 @@ public final class TwoFactorCommand {
     @FromConfig(value = "email-off", fallbackName = "email off", description = "Stop the login code by mail")
     @Permission(PERMISSION)
     @PlayerOnly
-    public void mailOff(Sender sender, @Arg("code") String code) {
+    public void mailOff(Sender sender, @Arg(value = "code", optional = true) String code) {
         CompletableFuture<Void> unused = mail.off((Player) sender.bukkit(), code);
     }
 }

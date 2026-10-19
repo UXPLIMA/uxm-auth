@@ -65,6 +65,10 @@ public final class MailToggle {
     public CompletableFuture<Void> off(Player player, String code) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(code, "code");
+        if (code.isEmpty()) {
+            messages.send(player, Keys.FACTOR_USAGE);
+            return CompletableFuture.completedFuture(null);
+        }
         Optional<UUID> account = account(player);
         if (account.isEmpty()) {
             return CompletableFuture.completedFuture(null);

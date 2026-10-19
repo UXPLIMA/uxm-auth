@@ -137,6 +137,10 @@ public final class FactorSetup {
     public CompletableFuture<Void> confirm(Player player, String code) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(code, "code");
+        if (code.isEmpty()) {
+            usage(player);
+            return done();
+        }
         Optional<Account> account = account(player);
         if (account.isEmpty()) {
             return done();
@@ -164,6 +168,11 @@ public final class FactorSetup {
     private CompletableFuture<Void> proven(Player player, String code, Proof proof) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(code, "code");
+        // A bare label is a question: as an answer it would count as a wrong code against the address.
+        if (code.isEmpty()) {
+            usage(player);
+            return done();
+        }
         Optional<Account> account = account(player);
         if (account.isEmpty()) {
             return done();
