@@ -376,6 +376,8 @@ public enum Keys implements MessageKey {
     DATABASE_SCHEME_LEFT(
             "database.scheme-left",
             "<body>Left as they were, because another account takes the same id: <value><names><body>."),
+    DATABASE_DOOR_SHUT(
+            "database.door-shut", "<etag:'ERROR'> <body>The server is moving its accounts. Join again in a minute."),
     STAFF_CONSOLE_ONLY(
             "staff.console-only",
             "<etag:'ERROR'> <body>Run <value><command><body> from the console, or open it to staff in game under <value>staff.in-game<body> in config.conf."),

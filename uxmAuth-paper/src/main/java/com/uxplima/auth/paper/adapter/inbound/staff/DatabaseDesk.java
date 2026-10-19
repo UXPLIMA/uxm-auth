@@ -60,6 +60,11 @@ public final class DatabaseDesk implements DatabaseActions {
         this.log = Objects.requireNonNull(log, "log");
     }
 
+    /** Whether a move or a scheme change runs now; the door stays shut while one does. */
+    public boolean busy() {
+        return busy.get();
+    }
+
     @Override
     public CompletableFuture<Void> move(CommandSender sender) {
         if (!console(Objects.requireNonNull(sender, "sender"), "database move")) {

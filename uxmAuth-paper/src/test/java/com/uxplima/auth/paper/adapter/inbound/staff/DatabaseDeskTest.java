@@ -179,9 +179,13 @@ final class DatabaseDeskTest {
         world.scheduler.settle(desk.move(console));
         assertThat(console.nextComponentMessage())
                 .isEqualTo(world.messages.render(console, Keys.DATABASE_MOVE_RUNNING));
+        assertThat(desk.busy())
+                .as("the door stays shut while the first one runs")
+                .isTrue();
 
         waiting.forEach(Runnable::run);
         world.scheduler.settle(first);
+        assertThat(desk.busy()).isFalse();
         held = false;
         world.scheduler.settle(desk.move(console));
         assertThat(opened).hasValue(2);

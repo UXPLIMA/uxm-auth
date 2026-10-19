@@ -108,6 +108,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
 import com.uxplima.auth.paper.adapter.inbound.listener.Arrivals;
 import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
+import com.uxplima.auth.paper.adapter.inbound.listener.ClosedDoor;
 import com.uxplima.auth.paper.adapter.inbound.listener.ConnectionListener;
 import com.uxplima.auth.paper.adapter.inbound.listener.HelloAtTheDoor;
 import com.uxplima.auth.paper.adapter.inbound.listener.NameHolders;
@@ -194,6 +195,7 @@ final class AuthGraph implements AutoCloseable {
     final StaffGraph staffing;
     final StaffDesk desk;
     final DatabaseDesk databases;
+    private final ClosedDoor closedDoor;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -567,6 +569,7 @@ final class AuthGraph implements AutoCloseable {
         events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
         events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
         this.databases = databaseDesk(plugin, scheduler, settings, database, replies, messages);
+        this.closedDoor = new ClosedDoor(databases::busy, messages);
         this.desk = staffing.desk(
                 new StaffDesk.Cases(
                         force,
@@ -644,6 +647,7 @@ final class AuthGraph implements AutoCloseable {
                                 + " Set it in Floodgate's config.yml to a character no Java name has, such as a dot."));
         // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
+        plugin.getServer().getPluginManager().registerEvents(closedDoor, plugin);
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
