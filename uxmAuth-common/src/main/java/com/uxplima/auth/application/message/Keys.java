@@ -93,7 +93,7 @@ public enum Keys implements MessageKey {
             "chat.register-password", "<body>Type a password for this name in chat. Nobody else reads it."),
     CHAT_REGISTER_REPEAT("chat.register-repeat", "<body>Type the same password again."),
     CHAT_LOGIN_PASSWORD("chat.login-password", "<body>Type your password in chat to log in. Nobody else reads it."),
-    CHAT_CODE("chat.code", "<body>Type the code your app shows, in chat."),
+    CHAT_CODE("chat.code", "<body>Type your login code in chat: the one your app shows, or the one mailed to you."),
     WELCOME_REGISTERED("welcome.registered", "<good>Your account is ready"),
     WELCOME_LOGGED_IN("welcome.logged-in", "<good>Logged in"),
 
