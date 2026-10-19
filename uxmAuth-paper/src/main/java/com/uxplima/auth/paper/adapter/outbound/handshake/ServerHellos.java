@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Logger;
 
+import com.uxplima.auth.adapter.outbound.PremiumStartLine;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.handshake.Handshake;
 import com.uxplima.auth.handshake.HandshakeResults;
@@ -56,14 +57,9 @@ public final class ServerHellos implements Hellos, AutoCloseable {
         return hellos;
     }
 
-    /**
-     * What the start says once the handshake is installed. Under opt-in nobody is proved until they ask, and an
-     * operator who turned premium off by that rule read "on" and could not tell.
-     */
+    /** What the start says once the handshake is installed. See {@link PremiumStartLine}. */
     static String onLine(NameRule rule) {
-        return rule == NameRule.OPT_IN
-                ? "Premium login is ready: Mojang proves at the door only a player who typed /premium."
-                : "Premium auto-login is on: paid accounts are proved by Mojang at the door.";
+        return PremiumStartLine.of(rule, "the door");
     }
 
     @Override

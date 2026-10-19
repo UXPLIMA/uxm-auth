@@ -19,6 +19,7 @@ import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.PremiumStartLine;
 import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.SecretSeal;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
@@ -184,7 +185,7 @@ final class ProxyGraph implements AutoCloseable {
                 words,
                 sessions,
                 guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
-        logger.info("Premium auto-login is on: paid accounts are proved by Mojang at the proxy.");
+        logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
     }
 
     /** The bulletins as they are when one is published: the network's, once the proxy has opened it. */

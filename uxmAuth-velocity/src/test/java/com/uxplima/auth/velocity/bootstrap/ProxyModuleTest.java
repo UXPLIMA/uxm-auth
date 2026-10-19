@@ -94,6 +94,18 @@ final class ProxyModuleTest {
     }
 
     @Test
+    @DisplayName("under opt-in the proxy says only a player who typed /premium is proved")
+    void anOptInProxySaysSo(@TempDir Path folder) throws IOException {
+        Files.writeString(folder.resolve("config.conf"), "ownership { rule = opt-in }\n", StandardCharsets.UTF_8);
+        ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
+
+        module.wire();
+        module.shutdown();
+
+        verify(logger).info(contains("only a player who typed /premium"));
+    }
+
+    @Test
     @DisplayName("the first start makes the network secret, writes it beside the config and says where")
     void theFirstStartMakesTheSecret(@TempDir Path folder) throws IOException {
         ProxyModule module = new ProxyModule(plugin, proxy, logger, folder);
