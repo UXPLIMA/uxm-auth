@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.2
+
+- A player in the world can answer in chat, with no command: the password, a new password and its repeat, or the
+  app's code. Turned on with `chat-input` in `screens.conf`. The line reaches no player and no log.
+- A boss bar an effect line puts up while the player waits comes down at the login or the registration, and a
+  bar line can drain over its own seconds with `drain`.
+
 ## 0.0.1
 
 The first release. It carries everything below, on Paper, Folia and Velocity.
