@@ -1,7 +1,11 @@
 package com.uxplima.auth.paper.adapter.outbound.effect;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.bukkit.Server;
@@ -47,6 +51,7 @@ public final class AuthMoments implements MomentRunner {
     private final Styler styler;
     private final Supplier<AuthSettings.Effects> effects;
     private final Wallet wallet;
+    private final Function<UUID, Optional<Duration>> timeLeft;
 
     public AuthMoments(
             Server server,
@@ -54,6 +59,18 @@ public final class AuthMoments implements MomentRunner {
             Messages messages,
             Styler styler,
             Supplier<AuthSettings.Effects> effects) {
+        this(server, scheduler, messages, styler, effects, id -> Optional.empty());
+    }
+
+    /** @param timeLeft how long a waiting player has left, which {@code %uxmauth_time_left%} reads in seconds */
+    public AuthMoments(
+            Server server,
+            Scheduler scheduler,
+            Messages messages,
+            Styler styler,
+            Supplier<AuthSettings.Effects> effects,
+            Function<UUID, Optional<Duration>> timeLeft) {
+        this.timeLeft = Objects.requireNonNull(timeLeft, "timeLeft");
         this.server = Objects.requireNonNull(server, "server");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -113,17 +130,24 @@ public final class AuthMoments implements MomentRunner {
      * The player's name and id first, which every line may need and which must not wait on PlaceholderAPI and
      * its Player expansion being installed, then everything else the server's placeholders answer.
      */
-    private static String resolve(@Nullable Player player, String template) {
+    private String resolve(@Nullable Player player, String template) {
         String filled = player == null
                 ? template
                 : template.replace("%player_name%", player.getName())
-                        .replace("%player_uuid%", player.getUniqueId().toString());
+                        .replace("%player_uuid%", player.getUniqueId().toString())
+                        .replace("%uxmauth_time_left%", secondsLeft(player.getUniqueId()));
         return Operands.standard().resolve(player, filled);
+    }
+
+    /** The seconds a waiting player has left, rounded up so the last second reads 1; 0 for one who does not wait. */
+    private String secondsLeft(UUID id) {
+        long millis = timeLeft.apply(id).map(Duration::toMillis).orElse(0L);
+        return String.valueOf((millis + 999) / 1000);
     }
 
     /** A context for one moment: who it happened to, who hears a broadcast, and whose language is read. */
     private ActionContext contextFor(Player player, Audience room, Player reader) {
-        return ActionContext.builder(AuthMoments::resolve)
+        return ActionContext.builder(this::resolve)
                 .player(player)
                 .style(line -> styler.tokens(line, messages.localeOf(reader)))
                 .words(path -> MiniMessage.miniMessage().serialize(messages.render(reader, MessageKey.of(path, path))))

@@ -33,6 +33,7 @@ public final class WaitingClock {
     private final Clock clock;
     private final MomentRunner moments;
     private final Messages messages;
+    private final WaitingTimes times;
 
     public WaitingClock(
             Scheduler scheduler,
@@ -41,18 +42,32 @@ public final class WaitingClock {
             Clock clock,
             MomentRunner moments,
             Messages messages) {
+        this(scheduler, sessions, timeouts, clock, moments, messages, new WaitingTimes(sessions, timeouts, clock));
+    }
+
+    /** @param times where the time each waiting player has left is kept, for the effect lines to read */
+    public WaitingClock(
+            Scheduler scheduler,
+            Sessions sessions,
+            Supplier<AuthSettings.Timeouts> timeouts,
+            Clock clock,
+            MomentRunner moments,
+            Messages messages,
+            WaitingTimes times) {
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.moments = Objects.requireNonNull(moments, "moments");
         this.messages = Objects.requireNonNull(messages, "messages");
+        this.times = Objects.requireNonNull(times, "times");
     }
 
     /** Starts the clock for a player who has just arrived and waits. */
     public void start(Player player) {
         Objects.requireNonNull(player, "player");
         Instant arrived = clock.instant();
+        times.arrived(player.getUniqueId(), arrived);
         AtomicReference<Instant> reminded = new AtomicReference<>(arrived);
         scheduler.entityTimer(player, BEAT, BEAT, handle -> beat(player, arrived, reminded, handle));
     }
@@ -65,6 +80,7 @@ public final class WaitingClock {
                 || state instanceof AuthState.Authenticated
                 || state instanceof AuthState.SettingUp) {
             handle.cancel();
+            times.gone(player.getUniqueId());
             return;
         }
         boolean registering = state instanceof AuthState.Unregistered;
@@ -72,6 +88,7 @@ public final class WaitingClock {
         Instant now = clock.instant();
         if (Duration.between(arrived, now).compareTo(registering ? limits.register() : limits.login()) >= 0) {
             handle.cancel();
+            times.gone(player.getUniqueId());
             moments.fire(player, AuthSettings.Moment.TIMEOUT);
             player.kick(messages.render(player, Keys.KICK_TIMEOUT));
             return;

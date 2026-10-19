@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 import org.bukkit.entity.Player;
 
@@ -46,6 +47,7 @@ final class WaitingClockTest {
     private MovableClock clock;
     private List<AuthSettings.Moment> fired;
     private WaitingClock waiting;
+    private WaitingTimes times;
 
     @BeforeEach
     void setUp() {
@@ -57,13 +59,18 @@ final class WaitingClockTest {
         Messages messages = new Messages(
                 new MessageCatalog(Map.of(Locale.ENGLISH, MessageCatalog.defaults(Keys.class)), Locale.ENGLISH),
                 LocaleSource.ofDefault(Locale.ENGLISH));
+        times = new WaitingTimes(
+                sessions,
+                () -> new AuthSettings.Timeouts(Duration.ofSeconds(90), Duration.ofSeconds(60), Duration.ofSeconds(5)),
+                clock);
         waiting = new WaitingClock(
                 scheduler,
                 sessions,
                 () -> new AuthSettings.Timeouts(Duration.ofSeconds(90), Duration.ofSeconds(60), Duration.ofSeconds(5)),
                 clock,
                 (Player player, AuthSettings.Moment moment) -> fired.add(moment),
-                messages);
+                messages,
+                times);
     }
 
     @AfterEach
@@ -86,6 +93,28 @@ final class WaitingClockTest {
 
         assertThat(fired).contains(AuthSettings.Moment.TIMEOUT);
         assertThat(steve.isOnline()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the time left counts down from the limit the player waits under, and is none once they are in")
+    void theTimeLeftCountsDown() {
+        PlayerMock steve = registered("Steve");
+        PlayerMock alex = server.addPlayer("Alex");
+        sessions.open(alex.getUniqueId(), new AuthState.Unregistered(new PlayerName("Alex")));
+        waiting.start(steve);
+        waiting.start(alex);
+
+        clock.advance(Duration.ofSeconds(20));
+        assertThat(times.left(steve.getUniqueId())).contains(Duration.ofSeconds(40));
+        assertThat(times.left(alex.getUniqueId())).contains(Duration.ofSeconds(70));
+
+        sessions.update(steve.getUniqueId(), state -> new AuthState.Authenticated(account(steve), AuthMethod.PASSWORD));
+        assertThat(times.left(steve.getUniqueId()))
+                .as("in, before the clock's next beat")
+                .isEmpty();
+        scheduler.tick();
+        assertThat(times.left(steve.getUniqueId())).isEmpty();
+        assertThat(times.left(UUID.randomUUID())).isEmpty();
     }
 
     @Test

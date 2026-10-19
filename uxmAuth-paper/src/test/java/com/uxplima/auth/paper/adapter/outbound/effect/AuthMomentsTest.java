@@ -94,6 +94,25 @@ final class AuthMomentsTest {
         assertThat(plain(steve.nextComponentMessage())).isEqualTo("Hello Steve (" + steve.getUniqueId() + ")");
     }
 
+    @Test
+    @DisplayName("the time a waiting player has left is filled in a line, for a boss bar or a title")
+    void theTimeLeftIsFilled() {
+        PlayerMock steve = server.addPlayer("Steve");
+        AuthSettings.Effects effects = new AuthSettings.Effects(new EnumMap<>(Map.of(
+                AuthSettings.Moment.REMINDER_LOGIN, List.of("[message] %uxmauth_time_left% seconds to log in"))));
+        AuthMoments timed = new AuthMoments(
+                server,
+                new DirectScheduler(),
+                messages,
+                new Styler(Theme.defaults()),
+                () -> effects,
+                id -> java.util.Optional.of(java.time.Duration.ofMillis(41_200)));
+
+        timed.fire(steve, AuthSettings.Moment.REMINDER_LOGIN);
+
+        assertThat(plain(steve.nextComponentMessage())).isEqualTo("42 seconds to log in");
+    }
+
     private static @Nullable String plain(@Nullable Component line) {
         return line == null ? null : PlainTextComponentSerializer.plainText().serialize(line);
     }
