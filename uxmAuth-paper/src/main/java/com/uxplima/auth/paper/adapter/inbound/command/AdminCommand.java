@@ -301,6 +301,16 @@ public final class AdminCommand {
         CompletableFuture<Void> unused = databases.move(sender.bukkit());
     }
 
+    /** Gives every account the id the named UUID scheme gives it. The console only, checked inside. */
+    @FromConfig(
+            value = "uuidscheme",
+            fallbackName = "uuidscheme",
+            description = "Move the accounts to another UUID scheme")
+    @Permission("uxmauth.admin.database")
+    public void uuidScheme(Sender sender, @Arg("scheme") String scheme) {
+        CompletableFuture<Void> unused = databases.scheme(sender.bukkit(), scheme);
+    }
+
     /** The time spent hashing, querying the database and asking Mojang, over the last minute and since start. */
     @FromConfig(value = "perf", fallbackName = "perf", description = "Read the time spent on each kind of work")
     @Permission("uxmauth.admin.perf")

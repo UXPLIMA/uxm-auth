@@ -345,7 +345,8 @@ public enum Keys implements MessageKey {
             "database.move-started",
             "<tag:'AUTH'> <body>Copying every account to the database <value>storage.move-to<body> names."),
     DATABASE_MOVE_RUNNING(
-            "database.move-running", "<etag:'ERROR'> <body>A move is running already. Wait for its answer."),
+            "database.move-running",
+            "<etag:'ERROR'> <body>A move or a scheme change is running already. Wait for its answer."),
     DATABASE_MOVE_NO_TARGET(
             "database.move-no-target",
             "<etag:'ERROR'> <body><value>storage.move-to<body> names no database. Write the target's address there and run this again."),
@@ -361,6 +362,20 @@ public enum Keys implements MessageKey {
     DATABASE_MOVE_CHANGED(
             "database.move-changed",
             "<etag:'ERROR'> <body>The accounts changed while they were copied, so the target misses something. Empty the target and run this again while nobody plays."),
+    DATABASE_SCHEME_UNKNOWN(
+            "database.scheme-unknown",
+            "<etag:'ERROR'> <body><value><scheme><body> is not a UUID scheme. Choose one of <value><schemes><body>."),
+    DATABASE_SCHEME_STARTED(
+            "database.scheme-started", "<tag:'AUTH'> <body>Moving every account to the <value><scheme><body> scheme."),
+    DATABASE_SCHEME_PLAYERS_ONLINE(
+            "database.scheme-players-online",
+            "<etag:'ERROR'> <body>Players are online. Change the scheme while nobody plays."),
+    DATABASE_SCHEME_DONE(
+            "database.scheme-done",
+            "<tag:'AUTH'> <body><value><moved><body> accounts moved, <value><unchanged><body> were in place and <value><left><body> were left. Write <value><scheme><body> in <value>ownership.uuid-scheme<body> and restart the server."),
+    DATABASE_SCHEME_LEFT(
+            "database.scheme-left",
+            "<body>Left as they were, because another account takes the same id: <value><names><body>."),
     STAFF_CONSOLE_ONLY(
             "staff.console-only",
             "<etag:'ERROR'> <body>Run <value><command><body> from the console, or open it to staff in game under <value>staff.in-game<body> in config.conf."),

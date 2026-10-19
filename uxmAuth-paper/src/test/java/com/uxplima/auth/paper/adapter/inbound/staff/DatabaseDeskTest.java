@@ -3,6 +3,7 @@ package com.uxplima.auth.paper.adapter.inbound.staff;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -11,8 +12,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.application.migrate.ChangeScheme;
 import com.uxplima.auth.application.migrate.MoveDatabase;
 import com.uxplima.auth.application.port.DatabaseCopy;
+import com.uxplima.auth.application.port.SchemeRecord;
+import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.account.AccountKind;
+import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.text.Text;
 import org.junit.jupiter.api.AfterEach;
@@ -63,6 +70,18 @@ final class DatabaseDeskTest {
     };
 
     private DatabaseDesk desk;
+    private final List<String> recorded = new ArrayList<>();
+    private final SchemeRecord record = new SchemeRecord() {
+        @Override
+        public Optional<UuidScheme> recorded() {
+            return Optional.of(UuidScheme.OFFLINE);
+        }
+
+        @Override
+        public void replace(UuidScheme scheme) {
+            recorded.add(scheme.key());
+        }
+    };
 
     @BeforeEach
     void setUp() {
@@ -73,8 +92,10 @@ final class DatabaseDeskTest {
             opened.incrementAndGet();
             return configured ? Optional.of(copy) : Optional.empty();
         });
+        ChangeScheme schemes = new ChangeScheme(world.accounts, world.accounts, record, () -> online);
         desk = new DatabaseDesk(
                 moves,
+                schemes,
                 work -> {
                     if (held) {
                         waiting.add(work);
@@ -164,5 +185,75 @@ final class DatabaseDeskTest {
         held = false;
         world.scheduler.settle(desk.move(console));
         assertThat(opened).hasValue(2);
+    }
+
+    @Test
+    @DisplayName("a scheme change is the console's alone, names the schemes when it is given another word, and reports")
+    void theConsoleChangesTheScheme() {
+        PlayerMock staff = server.addPlayer("Staff");
+        world.scheduler.settle(desk.scheme(staff, "mojang"));
+        assertThat(staff.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        staff, Keys.DATABASE_CONSOLE_ONLY, Text.placeholder("command", "uuidscheme")));
+        assertThat(recorded).isEmpty();
+
+        world.scheduler.settle(desk.scheme(console, "sideways"));
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        console,
+                        Keys.DATABASE_SCHEME_UNKNOWN,
+                        Text.placeholder("scheme", "sideways"),
+                        Text.placeholder("schemes", "keep-first, offline, mojang, random")));
+
+        world.accounts.insert(new Account(
+                UuidScheme.offline(new PlayerName("Alex")),
+                new PlayerName("Bob"),
+                AccountKind.CRACKED,
+                null,
+                null,
+                Instant.EPOCH,
+                "",
+                null,
+                null));
+        world.accounts.insert(new Account(
+                UuidScheme.offline(new PlayerName("Bob")),
+                new PlayerName("Alex"),
+                AccountKind.CRACKED,
+                null,
+                null,
+                Instant.EPOCH,
+                "",
+                null,
+                null));
+        world.scheduler.settle(desk.scheme(console, "OFFLINE"));
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        console, Keys.DATABASE_SCHEME_STARTED, Text.placeholder("scheme", "offline")));
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        console,
+                        Keys.DATABASE_SCHEME_DONE,
+                        Text.placeholder("moved", "0"),
+                        Text.placeholder("unchanged", "0"),
+                        Text.placeholder("left", "2"),
+                        Text.placeholder("scheme", "offline")));
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(world.messages.render(
+                        console, Keys.DATABASE_SCHEME_LEFT, Text.placeholder("names", "Alex, Bob")));
+        assertThat(recorded).containsExactly("offline");
+        assertThat(logged).singleElement().asString().contains("offline").contains("2 left");
+    }
+
+    @Test
+    @DisplayName("a scheme change with a player online is refused in its own words")
+    void aSchemeChangeWaitsForAnEmptyServer() {
+        online = 1;
+
+        world.scheduler.settle(desk.scheme(console, "mojang"));
+        console.nextComponentMessage();
+
+        assertThat(console.nextComponentMessage())
+                .isEqualTo(world.messages.render(console, Keys.DATABASE_SCHEME_PLAYERS_ONLINE));
+        assertThat(recorded).isEmpty();
     }
 }

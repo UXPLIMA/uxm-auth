@@ -24,6 +24,7 @@ import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.PwnedPasswords;
+import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
@@ -48,6 +49,7 @@ import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.migrate.ChangeScheme;
 import com.uxplima.auth.application.migrate.MoveDatabase;
 import com.uxplima.auth.application.perf.TimedAccounts;
 import com.uxplima.auth.application.perf.Timings;
@@ -756,8 +758,15 @@ final class AuthGraph implements AutoCloseable {
                         .moveTo()
                         .map(to ->
                                 TableCopy.open(database, to, settings.current().websiteTable(), plugin.getName())));
+        SqlAccountRepository table = new SqlAccountRepository(database);
+        ChangeScheme schemes = new ChangeScheme(
+                table,
+                table,
+                new RecordedScheme(database),
+                () -> plugin.getServer().getOnlinePlayers().size());
         return new DatabaseDesk(
                 moves,
+                schemes,
                 task -> {
                     TaskHandle unused = scheduler.async(task);
                 },
