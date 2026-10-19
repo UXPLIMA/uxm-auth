@@ -133,6 +133,17 @@ final class AtTheDoorTest {
     }
 
     @Test
+    @DisplayName("a premium account that keeps a backup password logs in with it after a failed handshake")
+    void aPremiumAccountWithAPasswordFallsBackToIt() {
+        Account premium = held("Notch", AccountKind.PREMIUM);
+        fixture.accounts.update(premium.withPassword(fixture.hashing.hash(Password.of("hunter22"))));
+        door.failed(HERE, new PlayerName("Notch"));
+
+        assertThat(door.decide("Notch", HERE, HOST)).isEqualTo(new Decision.Cracked(false, true));
+        assertThat(asked).hasValue(0);
+    }
+
+    @Test
     @DisplayName("a refusal that explains a failed handshake is given once, and the next connection is asked again")
     void anExplainedRefusalIsGivenOnce() {
         held("Notch", AccountKind.PREMIUM);

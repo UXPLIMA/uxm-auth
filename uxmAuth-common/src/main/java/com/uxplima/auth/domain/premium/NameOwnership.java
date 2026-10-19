@@ -42,6 +42,10 @@ public final class NameOwnership {
             // try that failed lately is told why once, rather than shown "Invalid session" again.
             return arrival.failedBefore() ? new Decision.Refuse(Refusal.PAID_NAME) : new Decision.Handshake();
         }
+        if (arrival.holder() == Holder.PREMIUM_WITH_PASSWORD) {
+            // Its password is the way in while Mojang cannot confirm the player, and the player is told why.
+            return arrival.failedBefore() ? new Decision.Cracked(false, true) : new Decision.Handshake();
+        }
         return switch (rule) {
             case AUTOMATIC -> automatic(arrival, lookup);
             case OPT_IN -> optIn(arrival);
@@ -53,7 +57,7 @@ public final class NameOwnership {
     private Decision automatic(Arrival arrival, Supplier<PremiumAnswer> lookup) {
         return switch (arrival.holder()) {
             case CRACKED -> asked(arrival);
-            case NOBODY, CRACKED_UNVERIFIED, PREMIUM, BEDROCK ->
+            case NOBODY, CRACKED_UNVERIFIED, PREMIUM, PREMIUM_WITH_PASSWORD, BEDROCK ->
                 arrival.failedBefore() ? new Decision.Cracked(false, true) : fromTheWeb(lookup.get());
         };
     }
@@ -61,7 +65,7 @@ public final class NameOwnership {
     private static Decision optIn(Arrival arrival) {
         return switch (arrival.holder()) {
             case NOBODY -> new Decision.Cracked(false, false);
-            case CRACKED, CRACKED_UNVERIFIED, PREMIUM, BEDROCK -> asked(arrival);
+            case CRACKED, CRACKED_UNVERIFIED, PREMIUM, PREMIUM_WITH_PASSWORD, BEDROCK -> asked(arrival);
         };
     }
 

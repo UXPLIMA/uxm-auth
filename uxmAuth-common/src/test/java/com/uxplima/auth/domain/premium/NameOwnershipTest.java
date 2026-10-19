@@ -197,6 +197,27 @@ final class NameOwnershipTest {
     }
 
     @Test
+    @DisplayName(
+            "a premium account that keeps a password is asked for the handshake, and after a failed one, as when"
+                    + " Mojang is down, logs in with that password and is told why; by domain the premium address still refuses")
+    void aPremiumAccountWithAPasswordFallsBackToIt() {
+        for (NameRule each : NameRule.values()) {
+            String host = each == NameRule.DOMAIN ? "premium.example.org" : "play.example.org";
+            assertThat(rule(each).decide(new Arrival(Holder.PREMIUM_WITH_PASSWORD, false, false, host), web(UNKNOWN)))
+                    .as(each.name())
+                    .isEqualTo(HANDSHAKE);
+            Decision afterAFailure =
+                    each == NameRule.DOMAIN ? new Decision.Refuse(Refusal.PREMIUM_ADDRESS) : JOINS_EXPLAINED;
+            assertThat(rule(each).decide(new Arrival(Holder.PREMIUM_WITH_PASSWORD, false, true, host), web(UNKNOWN)))
+                    .as(each.name())
+                    .isEqualTo(afterAFailure);
+        }
+        assertThat(asked)
+                .as("the web is never asked about an account that proved itself")
+                .hasValue(0);
+    }
+
+    @Test
     @DisplayName("a premium account whose last try failed is refused once with the reason, under every rule;"
             + " by domain the reason names the other address")
     void aPremiumAccountThatFailedIsToldWhy() {

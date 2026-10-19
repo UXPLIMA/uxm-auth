@@ -53,6 +53,30 @@ final class LogInTest {
     }
 
     @Test
+    @DisplayName("a premium account logs in with its backup password when the door sends it to the password")
+    void aPremiumAccountLogsInWithItsPassword() {
+        UUID connection = fixture.registered("Notch", "hunter22");
+        Account cracked = fixture.accounts.findByName(new PlayerName("Notch")).orElseThrow();
+        Account premium = new Account(
+                cracked.id(),
+                cracked.name(),
+                com.uxplima.auth.domain.account.AccountKind.PREMIUM,
+                UUID.randomUUID(),
+                cracked.password(),
+                cracked.registeredAt(),
+                cracked.registrationAddress(),
+                null,
+                null);
+        fixture.accounts.update(premium);
+        fixture.sessions.open(
+                connection,
+                new AuthState.Registered(
+                        premium, com.uxplima.auth.domain.state.Attempts.fresh(AuthFixture.MAX_ATTEMPTS)));
+
+        assertThat(login(connection, "hunter22")).isInstanceOf(LoginResult.LoggedIn.class);
+    }
+
+    @Test
     @DisplayName("a right password on an account with the app asks the code next, and records no login yet")
     void aRightPasswordAsksTheCode() {
         UUID connection = fixture.registered("Steve", "hunter22");

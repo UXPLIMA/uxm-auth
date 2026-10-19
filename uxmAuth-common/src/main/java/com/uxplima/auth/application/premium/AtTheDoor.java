@@ -136,7 +136,7 @@ public final class AtTheDoor {
             return Holder.NOBODY;
         }
         return switch (account.get().kind()) {
-            case PREMIUM -> Holder.PREMIUM;
+            case PREMIUM -> account.get().password() == null ? Holder.PREMIUM : Holder.PREMIUM_WITH_PASSWORD;
             case BEDROCK -> Holder.BEDROCK;
             case CRACKED -> account.get().unverified() ? Holder.CRACKED_UNVERIFIED : Holder.CRACKED;
         };
