@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   check:
-    runs-on: [self-hosted, uxplima]
+    # GitHub's own machine. The self-hosted runner takes no job from a public repository, so every run here sat
+    # queued until the next push cancelled it. The release job builds on this same image.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
