@@ -309,6 +309,7 @@ final class AuthGraph implements AutoCloseable {
                 () -> labels,
                 plugin.getName().toLowerCase(Locale.ROOT),
                 passes::isPassing);
+        this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
         HoldKeeper keeper = new HoldKeeper(
                 plugin,
                 scheduler,
@@ -316,8 +317,9 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().hold(),
                 hold::isHeld,
                 () -> loginWorld.room().or(loginSpot::where),
-                passes);
-        this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
+                passes,
+                Player::teleportAsync,
+                rescue::safe);
         AuthMoments moments = new AuthMoments(
                 plugin.getServer(),
                 scheduler,

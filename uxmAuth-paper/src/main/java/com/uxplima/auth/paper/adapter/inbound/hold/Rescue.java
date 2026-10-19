@@ -58,17 +58,32 @@ public final class Rescue implements Listener {
     /** Moves the player out when they stand in a wall or a portal and the rescue is on. */
     public void check(Player player) {
         Location here = player.getLocation();
-        World world = here == null ? null : here.getWorld();
-        if (here == null || world == null || !spots.get().rescue() || !trapped(world, here)) {
+        if (here == null) {
             return;
         }
-        Location safe = safeAbove(world, here, spots.get().rescueReach());
+        Location safe = safe(here);
+        if (safe == here) {
+            return;
+        }
         UUID id = player.getUniqueId();
         passes.allow(id);
         CompletableFuture<Void> unused = mover.apply(player, safe).handle((moved, failure) -> {
             passes.done(id);
             return null;
         });
+    }
+
+    /**
+     * Where a player at this place should stand: the safe spot above when the place is a wall or a portal and the
+     * rescue is on, the place itself otherwise. The hold takes the way back after the login through this, so a
+     * player is never returned into the wall they were moved out of.
+     */
+    public Location safe(Location here) {
+        World world = here.getWorld();
+        if (world == null || !spots.get().rescue() || !trapped(world, here)) {
+            return here;
+        }
+        return safeAbove(world, here, spots.get().rescueReach());
     }
 
     /**

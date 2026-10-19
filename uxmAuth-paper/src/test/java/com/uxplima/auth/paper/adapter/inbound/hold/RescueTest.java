@@ -79,6 +79,21 @@ final class RescueTest {
     }
 
     @Test
+    @DisplayName("the safe spot is answered for any place: the spot above a wall, or the place itself when open")
+    void theSafeSpotIsAnswered() {
+        world.getBlockAt(0, 63, 0).setType(Material.STONE);
+        world.getBlockAt(0, 64, 0).setType(Material.STONE);
+        world.getBlockAt(0, 65, 0).setType(Material.STONE);
+        Location wall = new Location(world, 0.5, 64, 0.5, 45, 5);
+
+        assertThat(rescue.safe(wall).getY()).isEqualTo(66.0);
+        Location open = new Location(world, 0.5, 66, 0.5);
+        assertThat(rescue.safe(open)).isEqualTo(open);
+        on = false;
+        assertThat(rescue.safe(wall)).isEqualTo(wall);
+    }
+
+    @Test
     @DisplayName("in a portal, the player is moved out of it")
     void outOfAPortal() {
         world.getBlockAt(0, 63, 0).setType(Material.OBSIDIAN);

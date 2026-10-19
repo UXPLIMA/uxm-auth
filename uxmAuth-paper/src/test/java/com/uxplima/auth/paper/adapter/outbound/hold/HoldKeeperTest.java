@@ -44,6 +44,7 @@ final class HoldKeeperTest {
     private final List<Boolean> moves = new ArrayList<>();
     private final List<Runnable> later = new ArrayList<>();
     private boolean slowMoves;
+    private java.util.function.UnaryOperator<Location> safe = java.util.function.UnaryOperator.identity();
 
     @BeforeEach
     void setUp() {
@@ -281,6 +282,25 @@ final class HoldKeeperTest {
     }
 
     @Test
+    @DisplayName("a player who joined inside a wall is brought back after the login to the safe spot, never the wall")
+    void theWayBackIsTheSafeSpot() {
+        World room = server.addSimpleWorld("uxmauth_login");
+        Location wall = new Location(server.getWorlds().get(0), 10.5, 70, -3.5, 90, 0);
+        Location above = wall.clone().add(0, 3, 0);
+        safe = here -> here.getBlockY() == 70 ? above : here;
+        keeper = keeper(store, Optional.of(new Location(room, 0.5, 65, 0.5)));
+        PlayerMock steve = joining("Steve");
+        steve.teleport(wall);
+
+        keeper.arrive(steve);
+        assertThat(store.load(steve.getUniqueId()).orElseThrow().place()).isEqualTo(HeldPlace.of(above));
+
+        held.remove(steve.getUniqueId());
+        keeper.giveBack(steve);
+        assertThat(steve.getLocation()).isEqualTo(above);
+    }
+
+    @Test
     @DisplayName("a player who leaves from the login world keeps the file, and the next join brings them back")
     void aQuitFromTheLoginWorldIsBroughtBackAtTheNextJoin() {
         World room = server.addSimpleWorld("uxmauth_login");
@@ -411,7 +431,8 @@ final class HoldKeeperTest {
                         return CompletableFuture.completedFuture(true);
                     }
                     return CompletableFuture.completedFuture(player.teleport(target));
-                });
+                },
+                here -> safe.apply(here));
     }
 
     private HoldKeeper keeper(HeldStateStore files) {

@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.logging.Level;
 
 import org.bukkit.GameMode;
@@ -50,6 +51,7 @@ public final class HoldKeeper {
     private final Predicate<Player> isHeld;
     private final Supplier<Optional<Location>> room;
     private final Passes passes;
+    private final UnaryOperator<Location> safe;
     private final BiFunction<Player, Location, CompletableFuture<Boolean>> mover;
     private final Map<UUID, HeldState> taken = new ConcurrentHashMap<>();
     private final Set<UUID> blinded = ConcurrentHashMap.newKeySet();
@@ -89,6 +91,24 @@ public final class HoldKeeper {
             Supplier<Optional<Location>> room,
             Passes passes,
             BiFunction<Player, Location, CompletableFuture<Boolean>> mover) {
+        this(plugin, scheduler, store, hold, isHeld, room, passes, mover, UnaryOperator.identity());
+    }
+
+    /**
+     * @param safe where a player at a place should stand, the way back after the login is taken through: the
+     *     rescue's spot above a wall or a portal
+     */
+    public HoldKeeper(
+            Plugin plugin,
+            Scheduler scheduler,
+            HeldStateStore store,
+            Supplier<AuthSettings.Hold> hold,
+            Predicate<Player> isHeld,
+            Supplier<Optional<Location>> room,
+            Passes passes,
+            BiFunction<Player, Location, CompletableFuture<Boolean>> mover,
+            UnaryOperator<Location> safe) {
+        this.safe = Objects.requireNonNull(safe, "safe");
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.store = Objects.requireNonNull(store, "store");
@@ -238,7 +258,7 @@ public final class HoldKeeper {
         }
     }
 
-    private static @Nullable HeldPlace placeOf(Player player, Optional<HeldState> leftover, Optional<HeldPlace> left) {
+    private @Nullable HeldPlace placeOf(Player player, Optional<HeldState> leftover, Optional<HeldPlace> left) {
         HeldPlace before = leftover.isPresent() ? leftover.get().place() : null;
         if (before != null) {
             return before;
@@ -247,7 +267,7 @@ public final class HoldKeeper {
             return left.get();
         }
         Location here = player.getLocation();
-        return here == null || here.getWorld() == null ? null : HeldPlace.of(here);
+        return here == null || here.getWorld() == null ? null : HeldPlace.of(safe.apply(here));
     }
 
     /** Moves a player as the hold's own teleport, which the hold lets through. */
