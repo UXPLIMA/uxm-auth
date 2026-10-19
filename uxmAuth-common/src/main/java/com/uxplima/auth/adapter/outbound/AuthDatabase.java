@@ -84,7 +84,7 @@ public final class AuthDatabase {
         return lower.substring("jdbc:".length(), colon);
     }
 
-    private static void load(String driver) {
+    static void load(String driver) {
         try {
             Class.forName(driver, true, AuthDatabase.class.getClassLoader());
         } catch (ClassNotFoundException missing) {

@@ -101,14 +101,22 @@ final class EverySettingIsShownTest {
         return false;
     }
 
-    /** Every {@code .conf} this plugin ships at the top of its data folder. */
+    /**
+     * Every {@code .conf} this plugin ships at the top of its data folder, and the import layouts it writes into
+     * {@code imports/}, whose keys an operator reads in the files the plugin wrote there.
+     */
     private static List<ConfigurationNode> shippedFiles() throws IOException, ConfigurateException {
         List<ConfigurationNode> roots = new ArrayList<>();
-        try (java.util.stream.Stream<Path> files = Files.list(RESOURCES)) {
-            for (Path file : files.filter(path -> path.toString().endsWith(".conf"))
-                    .sorted()
-                    .toList()) {
-                roots.add(HoconConfigurationLoader.builder().path(file).build().load());
+        for (Path folder : List.of(RESOURCES, RESOURCES.resolve("imports"))) {
+            try (java.util.stream.Stream<Path> files = Files.list(folder)) {
+                for (Path file : files.filter(path -> path.toString().endsWith(".conf"))
+                        .sorted()
+                        .toList()) {
+                    roots.add(HoconConfigurationLoader.builder()
+                            .path(file)
+                            .build()
+                            .load());
+                }
             }
         }
         return roots;
