@@ -13,8 +13,10 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -365,13 +367,15 @@ final class AuthGraph implements AutoCloseable {
         this.bedrock = BedrockLink.on(plugin.getServer(), plugin.getLogger());
         // A form's answer goes where a dialog's does; the listener that takes them is built further down.
         AtomicReference<FormAnswers> formAnswers = new AtomicReference<>((player, action, answer) -> {});
+        Predicate<UUID> drawsDialogs = DialogClients.on(plugin.getServer(), plugin.getLogger());
         ScreenShower shower = new ScreenRouter(
                 new PaperScreens(),
                 new BedrockForms(
                         BedrockScreen.forServer(plugin.getServer()),
                         (player, action, answer) -> Objects.requireNonNull(formAnswers.get(), "formAnswers")
                                 .answer(player, action, answer)),
-                id -> bedrock.player(id).isPresent());
+                id -> bedrock.player(id).isPresent(),
+                drawsDialogs);
         Welcomes welcomes = new Welcomes();
         Notices notices = new Notices(messages, moments);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
@@ -473,7 +477,7 @@ final class AuthGraph implements AutoCloseable {
                 answers,
                 shower,
                 messages,
-                BedrockLink.javaOnly(bedrock, DialogClients.on(plugin.getServer(), plugin.getLogger())),
+                BedrockLink.javaOnly(bedrock, drawsDialogs),
                 id -> bedrock.player(id).isPresent(),
                 new PermissionDefaults(plugin.getServer().getPluginManager()),
                 welcomes,

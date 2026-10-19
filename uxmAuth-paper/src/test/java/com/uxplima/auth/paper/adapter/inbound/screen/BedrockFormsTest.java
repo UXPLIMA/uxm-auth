@@ -203,6 +203,36 @@ final class BedrockFormsTest {
         assertThat(java).containsExactly(alex);
     }
 
+    @Test
+    @DisplayName("a Java client too old to draw a dialog is shown none in the world, and keeps the commands")
+    void anOldClientIsShownNoDialog() {
+        List<Audience> java = new ArrayList<>();
+        ScreenShower dialogs = new ScreenShower() {
+            @Override
+            public void show(Audience who, DialogSpec spec) {
+                java.add(who);
+            }
+
+            @Override
+            public void close(Audience who) {}
+        };
+        PlayerMock old = server.addPlayer("Oldie");
+        PlayerMock alex = server.addPlayer("Alex");
+        Audience connecting = Audience.empty();
+        ScreenRouter router = new ScreenRouter(
+                dialogs, bedrockForms(), id -> id.equals(steve.getUniqueId()), id -> !id.equals(old.getUniqueId()));
+
+        router.show(old, screens().login(old, null));
+        router.show(alex, screens().login(alex, null));
+        router.show(connecting, screens().login(alex, null));
+        router.show(steve, screens().login(steve, null));
+
+        assertThat(java).containsExactly(alex, connecting);
+        assertThat(forms.shown)
+                .as("a Bedrock client is asked of Floodgate, never of its Java version")
+                .isEqualTo(1);
+    }
+
     private BedrockForms bedrockForms() {
         return new BedrockForms(forms, (player, action, answer) -> {
             answered.add(action);
