@@ -11,6 +11,17 @@ theirs. One product, with no second plugin needed for any part of it.
 - A lone Paper or Folia server: the Paper jar.
 - A Velocity network: the Velocity jar on the proxy, and the Paper jar on every backend.
 
+## After the login, and the player's own account
+
+- The join message waits for the login, and a player who never logged in leaves no quit message.
+- The player reads the date and the masked address of their previous login.
+- A premium player gets a backup password once, for the day Mojang cannot confirm them.
+- Commands run after a registration and a login: on every server, on a named server, or on the proxy.
+- A login spot, the way back to where the player stood, and a rescue out of a wall or a portal.
+- `/unregister` deletes the player's own account, confirmed by the password or the app's code in time.
+- `/cracked` turns a premium account cracked.
+- Accounts nobody logged in to for a while are purged, when the operator turns it on.
+
 ## Placeholders
 
 Published through PlaceholderAPI under the identifier `uxmauth`, when PlaceholderAPI is on the server; the
