@@ -35,6 +35,7 @@ import com.uxplima.auth.domain.premium.DomainMark;
 import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
+import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
 import org.junit.jupiter.api.DisplayName;
@@ -87,7 +88,8 @@ final class AuthSettingsTest {
                         UuidScheme.KEEP_FIRST,
                         ConflictStrategy.RENAME,
                         "_",
-                        new DomainMark("+", false)));
+                        new DomainMark("+", false),
+                        true));
     }
 
     @Test
@@ -310,6 +312,19 @@ final class AuthSettingsTest {
         assertThat(set.spots().loginSpot()).contains(new AuthSettings.Place("lobby", 10.5, 70, -3.5, 90, 10));
         assertThat(set.spots().rescue()).isFalse();
         assertThat(set.spots().rescueReach()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a premium account falls back to its password after a failed handshake unless the operator says not")
+    void thePasswordFallbackIsRead(@TempDir Path folder) throws IOException {
+        Arrival failed = new Arrival(Holder.PREMIUM_WITH_PASSWORD, false, true, "play.example.org");
+        assertThat(settingsFrom(folder, "").ownership().decision().decide(failed, PremiumAnswer.Unknown::new))
+                .isEqualTo(new Decision.Cracked(false, true));
+        assertThat(settingsFrom(folder, "ownership { premium-password-fallback = false }\n")
+                        .ownership()
+                        .decision()
+                        .decide(failed, PremiumAnswer.Unknown::new))
+                .isEqualTo(new Decision.Refuse(Refusal.PAID_NAME));
     }
 
     @Test

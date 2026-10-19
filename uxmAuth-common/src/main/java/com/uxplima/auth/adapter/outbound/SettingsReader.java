@@ -215,7 +215,8 @@ final class SettingsReader {
                 word(config, "ownership.uuid-scheme", "keep-first", UuidScheme.class),
                 word(config, "ownership.conflict", "rename", ConflictStrategy.class),
                 renameMark(config),
-                crackedMark(config));
+                crackedMark(config),
+                config.getBoolean("ownership.premium-password-fallback", true));
     }
 
     private static DomainMark crackedMark(HoconConfig config) {

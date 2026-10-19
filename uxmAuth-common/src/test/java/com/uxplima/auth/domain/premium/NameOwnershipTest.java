@@ -218,6 +218,23 @@ final class NameOwnershipTest {
     }
 
     @Test
+    @DisplayName("with the password fallback off, a premium account that keeps a password is refused like any other")
+    void theFallbackIsTheOperatorsToTurnOff() {
+        NameOwnership strict = new NameOwnership(
+                NameRule.AUTOMATIC,
+                WhenUnknown.CRACKED,
+                new HostPatterns(List.of()),
+                new HostPatterns(List.of()),
+                false);
+        String host = "play.example.org";
+
+        assertThat(strict.decide(new Arrival(Holder.PREMIUM_WITH_PASSWORD, false, true, host), web(UNKNOWN)))
+                .isEqualTo(new Decision.Refuse(Refusal.PAID_NAME));
+        assertThat(strict.decide(new Arrival(Holder.PREMIUM_WITH_PASSWORD, false, false, host), web(UNKNOWN)))
+                .isEqualTo(HANDSHAKE);
+    }
+
+    @Test
     @DisplayName("a premium account whose last try failed is refused once with the reason, under every rule;"
             + " by domain the reason names the other address")
     void aPremiumAccountThatFailedIsToldWhy() {

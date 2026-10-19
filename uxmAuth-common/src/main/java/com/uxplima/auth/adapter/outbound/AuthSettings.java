@@ -70,7 +70,8 @@ public final class AuthSettings {
     /**
      * Who owns a name: the rule, what a name nobody could look up is taken for, how long a failed handshake is
      * remembered, how long a claim waits for its next connection, the addresses of the domain rule, the UUID a
-     * player plays under, and what happens to a cracked account whose name its paid owner proves.
+     * player plays under, what happens to a cracked account whose name its paid owner proves, and whether a premium
+     * account that keeps a password logs in with it after a failed handshake.
      */
     public record Ownership(
             NameRule rule,
@@ -82,7 +83,8 @@ public final class AuthSettings {
             UuidScheme uuidScheme,
             ConflictStrategy conflict,
             String renameMark,
-            DomainMark crackedMark) {
+            DomainMark crackedMark,
+            boolean passwordFallback) {
         public Ownership {
             Objects.requireNonNull(uuidScheme, "uuidScheme");
             Objects.requireNonNull(conflict, "conflict");
@@ -99,7 +101,11 @@ public final class AuthSettings {
         /** The decision the door makes under this rule. */
         public NameOwnership decision() {
             return new NameOwnership(
-                    rule, whenUnknown, new HostPatterns(premiumDomains), new HostPatterns(crackedDomains));
+                    rule,
+                    whenUnknown,
+                    new HostPatterns(premiumDomains),
+                    new HostPatterns(crackedDomains),
+                    passwordFallback);
         }
     }
 

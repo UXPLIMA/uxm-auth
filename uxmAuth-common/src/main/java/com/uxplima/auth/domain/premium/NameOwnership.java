@@ -16,8 +16,23 @@ public final class NameOwnership {
     private final WhenUnknown whenUnknown;
     private final HostPatterns premiumHosts;
     private final HostPatterns crackedHosts;
+    private final boolean passwordFallback;
 
     public NameOwnership(NameRule rule, WhenUnknown whenUnknown, HostPatterns premiumHosts, HostPatterns crackedHosts) {
+        this(rule, whenUnknown, premiumHosts, crackedHosts, true);
+    }
+
+    /**
+     * @param passwordFallback whether a premium account that keeps a password logs in with it after a failed
+     *     handshake: a Mojang outage, or a Mojang account its owner lost
+     */
+    public NameOwnership(
+            NameRule rule,
+            WhenUnknown whenUnknown,
+            HostPatterns premiumHosts,
+            HostPatterns crackedHosts,
+            boolean passwordFallback) {
+        this.passwordFallback = passwordFallback;
         this.rule = Objects.requireNonNull(rule, "rule");
         this.whenUnknown = Objects.requireNonNull(whenUnknown, "whenUnknown");
         this.premiumHosts = Objects.requireNonNull(premiumHosts, "premiumHosts");
@@ -37,14 +52,14 @@ public final class NameOwnership {
             // and a failure there is told of the other address.
             return throughThePremiumAddress(arrival) ? domain(arrival) : new Decision.Cracked(false, false, true);
         }
-        if (arrival.holder() == Holder.PREMIUM) {
-            // An account that proved itself has no password to fall back on, under every other rule. A
-            // try that failed lately is told why once, rather than shown "Invalid session" again.
-            return arrival.failedBefore() ? new Decision.Refuse(Refusal.PAID_NAME) : new Decision.Handshake();
-        }
-        if (arrival.holder() == Holder.PREMIUM_WITH_PASSWORD) {
+        if (arrival.holder() == Holder.PREMIUM_WITH_PASSWORD && passwordFallback) {
             // Its password is the way in while Mojang cannot confirm the player, and the player is told why.
             return arrival.failedBefore() ? new Decision.Cracked(false, true) : new Decision.Handshake();
+        }
+        if (arrival.holder() == Holder.PREMIUM || arrival.holder() == Holder.PREMIUM_WITH_PASSWORD) {
+            // An account that proved itself has no password to fall back on, or may not use it, under every
+            // other rule. A try that failed lately is told why once, rather than shown "Invalid session" again.
+            return arrival.failedBefore() ? new Decision.Refuse(Refusal.PAID_NAME) : new Decision.Handshake();
         }
         return switch (rule) {
             case AUTOMATIC -> automatic(arrival, lookup);
