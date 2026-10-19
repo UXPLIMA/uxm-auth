@@ -23,6 +23,7 @@ import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.NameRule;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
+import com.uxplima.auth.domain.state.AuthMethod;
 
 /** The blocks of {@code config.conf} that decide how a player gets in, one immutable record each. */
 public final class AuthSettings {
@@ -331,6 +332,12 @@ public final class AuthSettings {
         WRONG_PASSWORD("wrong-password"),
         REGISTERED("registered"),
         LOGGED_IN("logged-in"),
+        LOGGED_IN_PASSWORD("logged-in-password"),
+        LOGGED_IN_PREMIUM("logged-in-premium"),
+        LOGGED_IN_BEDROCK("logged-in-bedrock"),
+        LOGGED_IN_SESSION("logged-in-session"),
+        LOGGED_IN_FORCED("logged-in-forced"),
+        CONFLICT("conflict"),
         TIMEOUT("timeout"),
         TOO_MANY_ATTEMPTS("too-many-attempts"),
         BANNED("banned"),
@@ -346,6 +353,18 @@ public final class AuthSettings {
         /** The name of the list in the {@code effects} block. */
         public String key() {
             return key;
+        }
+
+        /** The list a login by this way runs after {@link #LOGGED_IN}; none for a registration or the network's. */
+        public static Optional<Moment> afterLogin(AuthMethod method) {
+            return switch (Objects.requireNonNull(method, "method")) {
+                case PASSWORD -> Optional.of(LOGGED_IN_PASSWORD);
+                case PREMIUM -> Optional.of(LOGGED_IN_PREMIUM);
+                case BEDROCK -> Optional.of(LOGGED_IN_BEDROCK);
+                case SESSION -> Optional.of(LOGGED_IN_SESSION);
+                case FORCED -> Optional.of(LOGGED_IN_FORCED);
+                case REGISTERED, NETWORK -> Optional.empty();
+            };
         }
     }
 

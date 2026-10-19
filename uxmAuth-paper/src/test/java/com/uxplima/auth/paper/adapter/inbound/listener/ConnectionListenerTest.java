@@ -102,6 +102,29 @@ final class ConnectionListenerTest {
     }
 
     @Test
+    @DisplayName("a player whose account moved to a marked name reads it after the login, and the conflict list runs")
+    void aMovedAccountIsToldAndRunsTheConflictList() throws Exception {
+        PlayerMock notch = new PlayerMock(server, "Notch");
+        world.registered(notch, "hunter22");
+        world.sessions.close(notch.getUniqueId());
+        world.accounts.rename(notch.getUniqueId(), new PlayerName("Notch_"), world.clock.instant());
+        hellos.installed = true;
+
+        // The handshake door read the name as a cracked one's, as it would without a paid owner coming.
+        hellos.outcomes.put(MINE, new HelloOutcome.Decided(new Decision.Cracked(false, false)));
+
+        listener(world.accounts).onPreLogin(preLogin("Notch_", notch.getUniqueId(), loginConnection(MINE, true)));
+        PlayerMock moved = new PlayerMock(server, "Notch_", notch.getUniqueId());
+        server.addPlayer(moved);
+        world.notices.deliver(moved, true);
+
+        assertThat(PlainTextComponentSerializer.plainText()
+                        .serialize(java.util.Objects.requireNonNull(moved.nextComponentMessage())))
+                .contains("Notch_");
+        assertThat(world.fired).contains(AuthSettings.Moment.CONFLICT);
+    }
+
+    @Test
     @DisplayName("a name with an account waits for its password, in the case it was registered in")
     void aKnownNameWaitsForItsPassword() throws Exception {
         // Not yet joined: a pre-login comes before the player exists.

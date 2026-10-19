@@ -21,6 +21,12 @@ final class ShippedEffects {
             case REGISTERED -> List.of("[title] @welcome.registered", CHIME);
             case LOGGED_IN -> List.of("[title] @welcome.logged-in", CHIME);
             case TIMEOUT, TOO_MANY_ATTEMPTS, BANNED -> List.of();
+            case LOGGED_IN_PASSWORD,
+                    LOGGED_IN_PREMIUM,
+                    LOGGED_IN_BEDROCK,
+                    LOGGED_IN_SESSION,
+                    LOGGED_IN_FORCED,
+                    CONFLICT -> List.of();
             case LOGGED_OUT -> List.of("[sound] block.note_block.hat 0.8 1.0");
             case PASSWORD_CHANGED -> List.of(CHIME);
         };

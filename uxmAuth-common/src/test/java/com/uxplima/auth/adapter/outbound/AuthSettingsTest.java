@@ -359,6 +359,27 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("each way in, a resumed session and a conflict have lists of their own, empty until written")
+    void theMomentsByMethodAreRead(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot shipped = settingsFrom(folder, "");
+        for (AuthSettings.Moment moment : List.of(
+                AuthSettings.Moment.LOGGED_IN_PASSWORD,
+                AuthSettings.Moment.LOGGED_IN_PREMIUM,
+                AuthSettings.Moment.LOGGED_IN_BEDROCK,
+                AuthSettings.Moment.LOGGED_IN_SESSION,
+                AuthSettings.Moment.LOGGED_IN_FORCED,
+                AuthSettings.Moment.CONFLICT)) {
+            assertThat(shipped.effects().of(moment)).as(moment.key()).isEmpty();
+        }
+        assertThat(settingsFrom(
+                                folder,
+                                "effects { logged-in-session = [\"[actionbar] back\"], conflict = [\"[title] moved\"] }\n")
+                        .effects()
+                        .of(AuthSettings.Moment.LOGGED_IN_SESSION))
+                .containsExactly("[actionbar] back");
+    }
+
+    @Test
     @DisplayName("a deletion waits a minute for its confirmation unless the operator says otherwise, and never none")
     void theDeleteConfirmationWindowIsRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").deleteConfirm()).isEqualTo(java.time.Duration.ofSeconds(60));

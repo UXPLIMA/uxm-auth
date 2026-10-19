@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -11,6 +12,7 @@ import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
+import com.uxplima.auth.adapter.outbound.AuthSettings.Moment;
 import com.uxplima.uxmlib.text.message.MessageKey;
 import com.uxplima.uxmlib.text.message.Messages;
 
@@ -21,22 +23,35 @@ import com.uxplima.uxmlib.text.message.Messages;
  */
 public final class Notices {
 
-    /** One thing to tell, and what to do once it was told. */
-    public record Notice(MessageKey key, List<TagResolver> resolvers, Runnable read) {
+    /** One thing to tell, what to do once it was told, and the effects list it runs for the player then. */
+    public record Notice(MessageKey key, List<TagResolver> resolvers, Runnable read, Optional<Moment> moment) {
         public Notice {
             Objects.requireNonNull(key, "key");
             resolvers = List.copyOf(Objects.requireNonNull(resolvers, "resolvers"));
             Objects.requireNonNull(read, "read");
+            Objects.requireNonNull(moment, "moment");
+        }
+
+        /** A notice with no list of its own. */
+        public Notice(MessageKey key, List<TagResolver> resolvers, Runnable read) {
+            this(key, resolvers, read, Optional.empty());
         }
     }
 
     private record Pending(Notice notice, boolean afterLogin) {}
 
     private final Messages messages;
+    private final MomentRunner moments;
     private final Map<UUID, List<Pending>> pending = new ConcurrentHashMap<>();
 
     public Notices(Messages messages) {
+        this(messages, (player, moment) -> {});
+    }
+
+    /** @param moments runs the list a notice names, once its player read it */
+    public Notices(Messages messages, MomentRunner moments) {
         this.messages = Objects.requireNonNull(messages, "messages");
+        this.moments = Objects.requireNonNull(moments, "moments");
     }
 
     /** Told as soon as the player stands in the world, logged in or not. */
@@ -63,6 +78,7 @@ public final class Notices {
         for (Pending each : due) {
             messages.send(player, each.notice().key(), each.notice().resolvers().toArray(TagResolver[]::new));
             each.notice().read().run();
+            each.notice().moment().ifPresent(moment -> moments.fire(player, moment));
         }
     }
 

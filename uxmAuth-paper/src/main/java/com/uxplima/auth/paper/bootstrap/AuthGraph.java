@@ -116,6 +116,8 @@ import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
 import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.LoginRecords;
+import com.uxplima.auth.paper.adapter.inbound.hold.MomentRunner;
+import com.uxplima.auth.paper.adapter.inbound.hold.MomentsByMethod;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.inbound.hold.Remembering;
 import com.uxplima.auth.paper.adapter.inbound.hold.Rescue;
@@ -326,12 +328,14 @@ final class AuthGraph implements AutoCloseable {
                 passes,
                 Player::teleportAsync,
                 rescue::safe);
-        AuthMoments moments = new AuthMoments(
-                plugin.getServer(),
-                scheduler,
-                messages,
-                styler,
-                () -> settings.current().effects());
+        MomentRunner moments = MomentsByMethod.of(
+                new AuthMoments(
+                        plugin.getServer(),
+                        scheduler,
+                        messages,
+                        styler,
+                        () -> settings.current().effects()),
+                sessions);
         WaitingClock waiting =
                 new WaitingClock(scheduler, sessions, () -> settings.current().timeouts(), clock, moments, messages);
         // A second is enough for a client to report its language; an English one may never report it.
@@ -366,7 +370,7 @@ final class AuthGraph implements AutoCloseable {
                                 .answer(player, action, answer)),
                 id -> bedrock.player(id).isPresent());
         Welcomes welcomes = new Welcomes();
-        Notices notices = new Notices(messages);
+        Notices notices = new Notices(messages, moments);
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);

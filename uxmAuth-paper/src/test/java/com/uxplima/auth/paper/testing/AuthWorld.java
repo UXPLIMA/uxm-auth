@@ -197,7 +197,7 @@ public final class AuthWorld implements AutoCloseable {
                 clock,
                 moments,
                 messages);
-        this.notices = new Notices(messages);
+        this.notices = new Notices(messages, moments);
         this.remembered = new SqlRememberedSessions(database, clock);
         this.remember = new Remember(remembered, () -> sessionSettings, this::sharedAddresses, clock::instant);
         this.remembering = new Remembering(remember, sessions, scheduler);

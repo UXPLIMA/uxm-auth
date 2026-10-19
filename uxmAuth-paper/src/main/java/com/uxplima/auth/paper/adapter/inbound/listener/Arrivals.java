@@ -15,6 +15,7 @@ import io.papermc.paper.connection.PlayerConnection;
 import net.kyori.adventure.text.Component;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
+import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.factor.SecondStep;
@@ -301,7 +302,8 @@ public final class Arrivals {
                                     List.of(
                                             Text.placeholder("old", move.from().value()),
                                             Text.placeholder("new", move.to().value())),
-                                    () -> scheduler.async(() -> hellos.toldMove(account))),
+                                    () -> scheduler.async(() -> hellos.toldMove(account)),
+                                    Optional.of(AuthSettings.Moment.CONFLICT)),
                             true)));
         }
         return notices;

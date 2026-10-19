@@ -84,6 +84,26 @@ final class NoticesTest {
     }
 
     @Test
+    @DisplayName("a notice that names a moment runs its list for the player once it is read, once")
+    void aNoticeRunsItsMoment() {
+        List<com.uxplima.auth.adapter.outbound.AuthSettings.Moment> fired = new java.util.ArrayList<>();
+        Notices told = new Notices(world.messages, (player, moment) -> fired.add(moment));
+        PlayerMock steve = server.addPlayer("Notch_");
+        told.onceIn(
+                steve.getUniqueId(),
+                new Notices.Notice(
+                        Keys.LOGIN_RENAMED,
+                        List.of(Text.placeholder("old", "Notch"), Text.placeholder("new", "Notch_")),
+                        () -> {},
+                        java.util.Optional.of(com.uxplima.auth.adapter.outbound.AuthSettings.Moment.CONFLICT)));
+
+        told.deliver(steve, true);
+        told.deliver(steve, true);
+
+        assertThat(fired).containsExactly(com.uxplima.auth.adapter.outbound.AuthSettings.Moment.CONFLICT);
+    }
+
+    @Test
     @DisplayName("a player who leaves takes their notices with them")
     void aLeavingPlayerTakesTheirNotices() {
         PlayerMock steve = server.addPlayer("Steve");
