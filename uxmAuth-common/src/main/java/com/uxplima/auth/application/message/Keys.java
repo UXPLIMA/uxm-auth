@@ -338,6 +338,29 @@ public enum Keys implements MessageKey {
             "recover.too-many-attempts",
             "<etag:'ERROR'> <body>The tries for that code are spent. Ask a new one with" + " <value>/recover<body>."),
     STAFF_UNKNOWN("staff.unknown", "<etag:'ERROR'> <body>No account is under <value><name><body>."),
+    DATABASE_CONSOLE_ONLY(
+            "database.console-only",
+            "<etag:'ERROR'> <body>Only the console runs <value><command><body>: it changes where every account lives."),
+    DATABASE_MOVE_STARTED(
+            "database.move-started",
+            "<tag:'AUTH'> <body>Copying every account to the database <value>storage.move-to<body> names."),
+    DATABASE_MOVE_RUNNING(
+            "database.move-running", "<etag:'ERROR'> <body>A move is running already. Wait for its answer."),
+    DATABASE_MOVE_NO_TARGET(
+            "database.move-no-target",
+            "<etag:'ERROR'> <body><value>storage.move-to<body> names no database. Write the target's address there and run this again."),
+    DATABASE_MOVE_PLAYERS_ONLINE(
+            "database.move-players-online",
+            "<etag:'ERROR'> <body>Players are online. Move the database while nobody plays."),
+    DATABASE_MOVE_TARGET_FULL(
+            "database.move-target-full",
+            "<etag:'ERROR'> <body>The target holds this plugin's accounts already, and nothing was written. Name an empty database."),
+    DATABASE_MOVE_DONE(
+            "database.move-done",
+            "<tag:'AUTH'> <body>Copied <value><rows><body> rows in <value><tables><body> tables. Copy the three lines of <value>storage.move-to<body> into <value>storage<body>, empty <value>storage.move-to<body>, and restart the server to finish the move."),
+    DATABASE_MOVE_CHANGED(
+            "database.move-changed",
+            "<etag:'ERROR'> <body>The accounts changed while they were copied, so the target misses something. Empty the target and run this again while nobody plays."),
     STAFF_CONSOLE_ONLY(
             "staff.console-only",
             "<etag:'ERROR'> <body>Run <value><command><body> from the console, or open it to staff in game under <value>staff.in-game<body> in config.conf."),

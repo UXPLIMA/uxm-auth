@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 import com.uxplima.auth.domain.hash.Argon2idHasher;
@@ -57,6 +58,7 @@ public final class PluginSettings {
     public record Snapshot(
             LanguageSettings language,
             Storage storage,
+            Optional<Storage> moveTo,
             AuthSettings.Names names,
             AuthSettings.Passwords passwords,
             AuthSettings.HashSettings hashing,
@@ -83,6 +85,7 @@ public final class PluginSettings {
         public Snapshot {
             Objects.requireNonNull(language, "language");
             Objects.requireNonNull(storage, "storage");
+            Objects.requireNonNull(moveTo, "moveTo");
             Objects.requireNonNull(names, "names");
             Objects.requireNonNull(passwords, "passwords");
             Objects.requireNonNull(hashing, "hashing");
@@ -283,6 +286,7 @@ public final class PluginSettings {
         return new Snapshot(
                 language(config),
                 storage(config),
+                moveTo(config),
                 SettingsReader.names(config),
                 SettingsReader.passwords(config),
                 SettingsReader.hashing(config),
@@ -360,6 +364,19 @@ public final class PluginSettings {
                         config.getString(prefix + "username", ""),
                         config.getString(prefix + "password", "")),
                 config.getString(prefix + "table", "").trim());
+    }
+
+    /** The database a move copies every account to, when the operator names one. */
+    private static Optional<Storage> moveTo(HoconConfig config) {
+        String url = config.getString("storage.move-to.jdbc-url", "").trim();
+        if (url.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new Storage(
+                url,
+                config.getString("storage.move-to.username", ""),
+                config.getString("storage.move-to.password", ""),
+                2));
     }
 
     private static @Nullable Locale forcedLocale(String tag) {

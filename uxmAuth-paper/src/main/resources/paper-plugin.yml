@@ -130,6 +130,9 @@ permissions:
   uxmauth.admin.perf:
     description: Read the time spent hashing, querying the database and asking Mojang
     default: op
+  uxmauth.admin.database:
+    description: Move every account to another database; from the console only, whatever a player holds
+    default: op
   uxmauth.admin.language:
     description: Set or clear the language another player reads
     default: op

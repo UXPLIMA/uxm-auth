@@ -32,6 +32,7 @@ import com.uxplima.auth.adapter.outbound.SqlEmails;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.TableCopy;
 import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
@@ -47,6 +48,7 @@ import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.migrate.MoveDatabase;
 import com.uxplima.auth.application.perf.TimedAccounts;
 import com.uxplima.auth.application.perf.Timings;
 import com.uxplima.auth.application.port.AccountRepository;
@@ -125,6 +127,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.inbound.staff.AlertDelivery;
+import com.uxplima.auth.paper.adapter.inbound.staff.DatabaseDesk;
 import com.uxplima.auth.paper.adapter.inbound.staff.ForcedLogins;
 import com.uxplima.auth.paper.adapter.inbound.staff.RemovedAccounts;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffDesk;
@@ -188,6 +191,7 @@ final class AuthGraph implements AutoCloseable {
     final StaffView staff;
     final StaffGraph staffing;
     final StaffDesk desk;
+    final DatabaseDesk databases;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -560,6 +564,7 @@ final class AuthGraph implements AutoCloseable {
         events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
         events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
         events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
+        this.databases = databaseDesk(plugin, scheduler, settings, database, replies, messages);
         this.desk = staffing.desk(
                 new StaffDesk.Cases(
                         force,
@@ -735,5 +740,29 @@ final class AuthGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 disputes);
+    }
+
+    /** The console's move of every account to another database: one at a time, off the server's threads. */
+    private static DatabaseDesk databaseDesk(
+            Plugin plugin,
+            Scheduler scheduler,
+            PluginSettings settings,
+            Database database,
+            Replies replies,
+            Messages messages) {
+        MoveDatabase moves = new MoveDatabase(
+                () -> plugin.getServer().getOnlinePlayers().size(),
+                () -> settings.current()
+                        .moveTo()
+                        .map(to ->
+                                TableCopy.open(database, to, settings.current().websiteTable(), plugin.getName())));
+        return new DatabaseDesk(
+                moves,
+                task -> {
+                    TaskHandle unused = scheduler.async(task);
+                },
+                replies,
+                messages,
+                plugin.getLogger()::info);
     }
 }

@@ -94,6 +94,22 @@ final class PluginSettingsTest {
                 .doesNotContain("secret");
     }
 
+    @Test
+    @DisplayName("a move target is read when it names a URL, and is absent when it names none")
+    void aMoveTargetIsRead(@TempDir Path folder) throws IOException {
+        Path file = folder.resolve("config.conf");
+        Files.writeString(file, """
+                storage {
+                  move-to { jdbc-url = " jdbc:postgresql://db:5432/uxm ", username = "mover", password = "secret" }
+                }
+                """, StandardCharsets.UTF_8);
+        assertThat(new PluginSettings(file).current().moveTo())
+                .contains(new PluginSettings.Storage("jdbc:postgresql://db:5432/uxm", "mover", "secret", 2));
+
+        Files.writeString(file, "storage { move-to { jdbc-url = \"\" } }", StandardCharsets.UTF_8);
+        assertThat(new PluginSettings(file).current().moveTo()).isEmpty();
+    }
+
     private static PluginSettings.Storage storageFrom(Path folder, String body) throws IOException {
         Path file = folder.resolve("config.conf");
         Files.writeString(file, body, StandardCharsets.UTF_8);

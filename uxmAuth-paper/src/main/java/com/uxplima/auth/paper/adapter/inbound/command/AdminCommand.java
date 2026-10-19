@@ -16,6 +16,7 @@ import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.perf.Timings;
 import com.uxplima.auth.application.staff.ResolveConflict;
+import com.uxplima.auth.paper.adapter.inbound.staff.DatabaseActions;
 import com.uxplima.auth.paper.adapter.inbound.staff.PerfView;
 import com.uxplima.auth.paper.adapter.inbound.staff.Staff;
 import com.uxplima.auth.paper.adapter.inbound.staff.StaffActions;
@@ -56,6 +57,7 @@ public final class AdminCommand {
     private final Staff staff;
     private final StaffActions actions;
     private final PerfView perf;
+    private final DatabaseActions databases;
 
     public AdminCommand(
             PluginSettings settings,
@@ -119,6 +121,27 @@ public final class AdminCommand {
             Staff staff,
             StaffActions actions,
             PerfView perf) {
+        this(settings, messages, version, scheduler, health, choices, staff, actions, perf, DatabaseActions.NONE);
+    }
+
+    /**
+     * @param staff what staff read of an account
+     * @param actions what staff do to an account
+     * @param perf the time spent on each kind of work
+     * @param databases what the console does to the database
+     */
+    public AdminCommand(
+            PluginSettings settings,
+            Messages messages,
+            String version,
+            Scheduler scheduler,
+            Supplier<List<HealthCheck>> health,
+            LanguageChoices choices,
+            Staff staff,
+            StaffActions actions,
+            PerfView perf,
+            DatabaseActions databases) {
+        this.databases = Objects.requireNonNull(databases, "databases");
         this.perf = Objects.requireNonNull(perf, "perf");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -266,6 +289,16 @@ public final class AdminCommand {
     @Permission("uxmauth.admin.history")
     public void history(Sender sender, @Arg("player") @SuggestUsing(PlayerNames.KEY) String player) {
         CompletableFuture<Void> unused = staff.history(sender.bukkit(), player);
+    }
+
+    /** Copies every account to the database storage.move-to names. The console only, checked inside. */
+    @FromConfig(
+            value = "database-move",
+            fallbackName = "database move",
+            description = "Move the accounts to another database")
+    @Permission("uxmauth.admin.database")
+    public void moveDatabase(Sender sender) {
+        CompletableFuture<Void> unused = databases.move(sender.bukkit());
     }
 
     /** The time spent hashing, querying the database and asking Mojang, over the last minute and since start. */
