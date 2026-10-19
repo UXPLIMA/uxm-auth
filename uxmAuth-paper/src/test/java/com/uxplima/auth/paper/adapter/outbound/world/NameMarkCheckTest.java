@@ -42,26 +42,37 @@ final class NameMarkCheckTest {
     void theDomainMarkIsNamed() {
         AuthSettings.Ownership domain = ownership(NameRule.DOMAIN, "+", ConflictStrategy.RENAME, "_");
 
-        assertThat(NameMarkCheck.warning(true, domain))
-                .hasValueSatisfying(line -> assertThat(line)
+        assertThat(NameMarkCheck.warnings(true, domain))
+                .singleElement()
+                .satisfies(line -> assertThat(line)
                         .contains("ownership.domains.cracked-mark")
                         .contains("\"+\"")
                         .contains("perform-username-validation"));
-        assertThat(NameMarkCheck.warning(false, domain)).isEmpty();
-        assertThat(NameMarkCheck.warning(true, ownership(NameRule.DOMAIN, "c_", ConflictStrategy.RENAME, "_")))
+        assertThat(NameMarkCheck.warnings(false, domain)).isEmpty();
+        assertThat(NameMarkCheck.warnings(true, ownership(NameRule.DOMAIN, "c_", ConflictStrategy.RENAME, "_")))
                 .isEmpty();
     }
 
     @Test
     @DisplayName("a mark a rule or a strategy never uses is not named; the rename mark is, while renaming is on")
     void onlyAMarkInUseIsNamed() {
-        assertThat(NameMarkCheck.warning(true, ownership(NameRule.AUTOMATIC, "+", ConflictStrategy.RENAME, "_")))
+        assertThat(NameMarkCheck.warnings(true, ownership(NameRule.AUTOMATIC, "+", ConflictStrategy.RENAME, "_")))
                 .isEmpty();
-        assertThat(NameMarkCheck.warning(true, ownership(NameRule.AUTOMATIC, "+", ConflictStrategy.RENAME, "!")))
-                .hasValueSatisfying(line ->
+        assertThat(NameMarkCheck.warnings(true, ownership(NameRule.AUTOMATIC, "+", ConflictStrategy.RENAME, "!")))
+                .singleElement()
+                .satisfies(line ->
                         assertThat(line).contains("ownership.rename-mark").contains("\"!\""));
-        assertThat(NameMarkCheck.warning(true, ownership(NameRule.AUTOMATIC, "+", ConflictStrategy.BLOCK, "!")))
+        assertThat(NameMarkCheck.warnings(true, ownership(NameRule.AUTOMATIC, "+", ConflictStrategy.BLOCK, "!")))
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("both marks refused are both named at once, so the operator fixes them in one restart")
+    void bothRefusedMarksAreNamed() {
+        assertThat(NameMarkCheck.warnings(true, ownership(NameRule.DOMAIN, "+", ConflictStrategy.RENAME, "!")))
+                .satisfiesExactly(
+                        first -> assertThat(first).contains("ownership.domains.cracked-mark"),
+                        second -> assertThat(second).contains("ownership.rename-mark"));
     }
 
     @Test

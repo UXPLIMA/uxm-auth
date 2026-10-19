@@ -4,7 +4,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,20 +37,21 @@ public final class NameMarkCheck {
         }
     }
 
-    /** The console line for a mark in use that Paper refuses while it checks names; empty when there is none. */
-    public static Optional<String> warning(boolean paperChecks, AuthSettings.Ownership ownership) {
+    /** Every console line for a mark in use that Paper refuses while it checks names; empty when there is none. */
+    public static List<String> warnings(boolean paperChecks, AuthSettings.Ownership ownership) {
         if (!paperChecks) {
-            return Optional.empty();
+            return List.of();
         }
+        List<String> lines = new ArrayList<>();
         String domainMark = ownership.crackedMark().mark();
         if (ownership.rule() == NameRule.DOMAIN && !MarkedName.paperAccepts(domainMark)) {
-            return Optional.of(line("ownership.domains.cracked-mark", domainMark));
+            lines.add(line("ownership.domains.cracked-mark", domainMark));
         }
         String renameMark = ownership.renameMark();
         if (ownership.conflict() == ConflictStrategy.RENAME && !MarkedName.paperAccepts(renameMark)) {
-            return Optional.of(line("ownership.rename-mark", renameMark));
+            lines.add(line("ownership.rename-mark", renameMark));
         }
-        return Optional.empty();
+        return List.copyOf(lines);
     }
 
     private static String line(String key, String mark) {
