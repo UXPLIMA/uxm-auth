@@ -136,7 +136,11 @@ public final class DiscordNotices implements AuthNotices, AutoCloseable {
             if (status / 100 != 2) {
                 console.accept("A Discord message was dropped: Discord answered " + status + ".");
             }
-        } catch (ExecutionException | TimeoutException | RuntimeException failed) {
+        } catch (ExecutionException failed) {
+            // The cause's kind says what went wrong; its message can hold the webhook's address, which is a secret.
+            Throwable cause = failed.getCause() == null ? failed : failed.getCause();
+            console.accept("A Discord message was dropped: " + cause.getClass().getSimpleName() + ".");
+        } catch (TimeoutException | RuntimeException failed) {
             console.accept("A Discord message was dropped: " + failed.getClass().getSimpleName() + ".");
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();

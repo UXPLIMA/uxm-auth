@@ -131,6 +131,18 @@ final class DiscordNoticesTest {
     }
 
     @Test
+    @DisplayName("an endpoint nobody listens on is named by the reason the line failed, never by its address")
+    void aDeadEndpointSaysWhy() throws InterruptedException {
+        String dead = settings.url();
+        discord.stop(0);
+        notices.conflictSettled("Steve");
+        until(() -> console.size() == 1);
+
+        assertThat(console.get(0)).contains("ConnectException").doesNotContain("ExecutionException");
+        assertThat(console.get(0)).doesNotContain(dead).doesNotContain("127.0.0.1");
+    }
+
+    @Test
     @DisplayName("an endpoint that answers 429 is asked once more after the time it names, then the message is"
             + " dropped with one line in the console")
     void aRateLimitIsRetriedOnceThenDropped() throws InterruptedException {
