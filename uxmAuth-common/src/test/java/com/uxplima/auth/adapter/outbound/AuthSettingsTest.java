@@ -293,6 +293,27 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("a server named under network.server-name runs its own lines after the lists every server runs")
+    void aServerRunsItsOwnLines(@TempDir Path folder) throws IOException {
+        String servers = """
+                effects {
+                  logged-in = ["[console] say everywhere"]
+                  servers {
+                    lobby    { logged-in = ["[console] say lobby"], registered = ["[console] kit starter %player_name%"] }
+                    survival { logged-in = ["[console] say survival"] }
+                  }
+                }
+                """;
+        PluginSettings.Snapshot lobby = settingsFrom(folder, "network { server-name = lobby }\n" + servers);
+        assertThat(lobby.effects().of(AuthSettings.Moment.LOGGED_IN))
+                .containsExactly("[console] say everywhere", "[console] say lobby");
+        assertThat(lobby.effects().of(AuthSettings.Moment.REGISTERED)).endsWith("[console] kit starter %player_name%");
+
+        PluginSettings.Snapshot unnamed = settingsFrom(folder, servers);
+        assertThat(unnamed.effects().of(AuthSettings.Moment.LOGGED_IN)).containsExactly("[console] say everywhere");
+    }
+
+    @Test
     @DisplayName("an effect list the operator emptied stays empty, and one never written is the shipped one")
     void effectsKeepAnEmptyList(@TempDir Path folder) throws IOException {
         PluginSettings.Snapshot settings = settingsFrom(folder, "effects { logged-in = [] }\n");

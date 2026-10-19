@@ -282,10 +282,19 @@ final class SettingsReader {
         return value;
     }
 
+    /**
+     * The lists every server runs, each followed by the lines {@code effects.servers} names for this server, which
+     * is the one {@code network.server-name} names. A server with no name runs only the lists every server runs.
+     */
     static AuthSettings.Effects effects(HoconConfig config) {
+        String server = config.getString("network.server-name", "").trim();
         Map<AuthSettings.Moment, List<String>> lists = new EnumMap<>(AuthSettings.Moment.class);
         for (AuthSettings.Moment moment : AuthSettings.Moment.values()) {
-            lists.put(moment, list(config, "effects", moment.key(), ShippedEffects.of(moment)));
+            List<String> all = new ArrayList<>(list(config, "effects", moment.key(), ShippedEffects.of(moment)));
+            if (!server.isEmpty() && !server.contains(".")) {
+                all.addAll(list(config, "effects.servers." + server, moment.key(), List.of()));
+            }
+            lists.put(moment, all);
         }
         return new AuthSettings.Effects(lists);
     }

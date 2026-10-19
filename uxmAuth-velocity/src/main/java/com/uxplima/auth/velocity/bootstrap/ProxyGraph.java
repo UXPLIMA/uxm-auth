@@ -72,10 +72,12 @@ import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.inbound.RemovedAccounts;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
+import com.uxplima.auth.velocity.adapter.outbound.ProxyCommands;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
 import com.uxplima.auth.velocity.adapter.outbound.event.VelocityEvents;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
@@ -313,7 +315,11 @@ final class ProxyGraph implements AutoCloseable {
             Remember remember,
             AccountRepository accounts,
             Steps steps) {
-        ProxySessions sessions = new ProxySessions(fired::loggedIn);
+        ProxyCommands commands = proxyCommands(settings);
+        ProxySessions sessions = new ProxySessions((id, method) -> {
+            fired.loggedIn(id, method);
+            commands.loggedIn(id, method);
+        });
         Supplier<Optional<Claims>> claims = claims(settings, steps.secret());
         RouteListener routes = routes(sessions, settings, lastServers);
         register(new DoorListener(
@@ -440,5 +446,21 @@ final class ProxyGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 disputes);
+    }
+
+    /** The command lines of the login moments, run as the proxy's own commands. */
+    private ProxyCommands proxyCommands(PluginSettings settings) {
+        return new ProxyCommands(() -> settings.current().effects(), proxy::getPlayer, new ProxyCommands.Runner() {
+            @Override
+            public void console(String command) {
+                CompletableFuture<Boolean> unused =
+                        proxy.getCommandManager().executeAsync(proxy.getConsoleCommandSource(), command);
+            }
+
+            @Override
+            public void player(Player player, String command) {
+                CompletableFuture<Boolean> unused = proxy.getCommandManager().executeAsync(player, command);
+            }
+        });
     }
 }

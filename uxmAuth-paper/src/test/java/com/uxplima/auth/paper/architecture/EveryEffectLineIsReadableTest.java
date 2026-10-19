@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.spongepowered.configurate.ConfigurateException;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
+import org.spongepowered.configurate.serialize.SerializationException;
 
 /**
  * Every line of every shipped effect list is one the action engine can read, and every key one of them names
@@ -138,9 +139,27 @@ final class EveryEffectLineIsReadableTest {
                 .node("effects");
         List<String> lines = new ArrayList<>();
         for (ConfigurationNode moment : effects.childrenMap().values()) {
+            if (moment.isMap()) {
+                // effects.servers: one block of lists per server, read the same way.
+                moment.childrenMap()
+                        .values()
+                        .forEach(server -> server.childrenMap().values().forEach(list -> {
+                            lines.addAll(listOf(list));
+                        }));
+                continue;
+            }
             lines.addAll(moment.getList(String.class, List.of()));
         }
         return lines;
+    }
+
+    private static List<String> listOf(ConfigurationNode list) {
+        try {
+            return list.getList(String.class, List.of());
+        } catch (SerializationException unreadable) {
+            throw new IllegalStateException(
+                    "effects.servers holds a list that is not text: " + list.path(), unreadable);
+        }
     }
 
     private static Set<String> pathsIn(Path file) throws ConfigurateException {
