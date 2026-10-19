@@ -101,6 +101,7 @@ import com.uxplima.auth.paper.adapter.inbound.account.ProofForm;
 import com.uxplima.auth.paper.adapter.inbound.account.UnregisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.ChangePasswordCommand;
+import com.uxplima.auth.paper.adapter.inbound.command.ChatAnswers;
 import com.uxplima.auth.paper.adapter.inbound.command.ClaimCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.EmailCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.LoginCommand;
@@ -230,6 +231,7 @@ final class AuthGraph implements AutoCloseable {
     final ScreenClickListener screenClicks;
     final ConfigurationGate gate;
     private final LoginWorld loginWorld;
+    private final ChatAnswers chatAnswers;
     private final BedrockLink bedrock;
     /** What the start says of a name mark Paper refuses, read once with the settings of the start. */
     private final Optional<String> nameMarks;
@@ -496,7 +498,8 @@ final class AuthGraph implements AutoCloseable {
                 hold::isHeld,
                 shower,
                 captcha,
-                factors.screen);
+                factors.screen,
+                (player, key) -> messages.send(player, key));
         this.captchaCommand = new CaptchaCommand(captcha, sessions::state, inWorld, messages);
         MailGraph.Email email = mail.email(sessions, id -> bedrock.player(id).isPresent(), replies, moments);
         this.email = email.command();
@@ -643,6 +646,12 @@ final class AuthGraph implements AutoCloseable {
                 player -> new PlayerGuest(player, joins.openingOf(player), door, moments, replies);
         this.screenClicks = new ScreenClickListener(answers, guests, scheduler);
         this.twoFactor = factors.command(guests);
+        this.chatAnswers = new ChatAnswers(
+                sessions,
+                () -> screenFile.current().chatInput(),
+                () -> settings.current().passwords().confirmOnRegister(),
+                ChatAnswers.Answers.of(login, register, twoFactor),
+                messages);
         this.staffing = new StaffGraph(
                 plugin,
                 scheduler,
@@ -752,6 +761,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
+        plugin.getServer().getPluginManager().registerEvents(chatAnswers, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         plugin.getServer().getPluginManager().registerEvents(factors.guard, plugin);
         plugin.getServer().getPluginManager().registerEvents(addressDuty, plugin);

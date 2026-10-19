@@ -22,6 +22,13 @@ theirs. One product, with no second plugin needed for any part of it.
 - `/cracked` turns a premium account cracked.
 - Accounts nobody logged in to for a while are purged, when the operator turns it on.
 
+## Answering in chat
+
+`chat-input` in `screens.conf` lets a player in the world type their password, a new password and its repeat,
+or the app's code as a plain line of chat, with no command. The line is taken before any other plugin, cancelled,
+and reaches no player and no log. The player is told in chat what to type, and the commands keep working beside
+it. Off by default.
+
 ## Placeholders
 
 Published through PlaceholderAPI under the identifier `uxmauth`, when PlaceholderAPI is on the server; the

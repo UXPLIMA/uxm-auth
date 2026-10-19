@@ -103,6 +103,13 @@ final class ScreenFileTest {
         assertThat(screensFrom(folder, "").rules().lines()).isEqualTo(List.of("@rules.line-1", "@rules.line-2"));
     }
 
+    @Test
+    @DisplayName("chat answers only when the operator turns it on")
+    void chatInputIsTheOperatorsChoice(@TempDir Path folder) throws IOException {
+        assertThat(screensFrom(folder, "").chatInput()).isFalse();
+        assertThat(screensFrom(folder, "chat-input = true\n").chatInput()).isTrue();
+    }
+
     private static ScreenSettings screensFrom(Path folder, String body) throws IOException {
         Path file = folder.resolve("screens.conf");
         Files.writeString(file, body, StandardCharsets.UTF_8);

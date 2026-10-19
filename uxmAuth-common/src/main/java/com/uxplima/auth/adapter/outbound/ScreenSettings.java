@@ -23,7 +23,40 @@ public record ScreenSettings(
         Screen replace,
         Screen captcha,
         Screen code,
-        Screen recover) {
+        Screen recover,
+        boolean chatInput) {
+
+    /** Screens with chat answering nothing, as every file read before {@code chat-input} existed. */
+    public ScreenSettings(
+            WaitingRoom waitingRoom,
+            Cancel cancel,
+            boolean canClose,
+            boolean pinPad,
+            Rules rules,
+            Screen register,
+            Screen login,
+            Screen pin,
+            String loginWorld,
+            Screen replace,
+            Screen captcha,
+            Screen code,
+            Screen recover) {
+        this(
+                waitingRoom,
+                cancel,
+                canClose,
+                pinPad,
+                rules,
+                register,
+                login,
+                pin,
+                loginWorld,
+                replace,
+                captcha,
+                code,
+                recover,
+                false);
+    }
 
     /** The world a waiting player is moved to while the waiting room is the login world, unless the file names one. */
     public static final String LOGIN_WORLD = "uxmauth_login";

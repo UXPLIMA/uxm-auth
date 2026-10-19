@@ -37,6 +37,7 @@ final class InWorldScreensTest {
     private final List<DialogSpec> shown = new ArrayList<>();
     private final java.util.Set<java.util.UUID> sentToTheWorld = new java.util.HashSet<>();
     private boolean rules;
+    private boolean chat;
 
     @BeforeEach
     void setUp() {
@@ -239,6 +240,46 @@ final class InWorldScreensTest {
         assertThat(shown).hasSize(1);
     }
 
+    @Test
+    @DisplayName("with chat answering, the world opens no window and tells each player in chat what to type")
+    void chatInputTellsInChat() {
+        chat = true;
+        PlayerMock newcomer = server.addPlayer("Newcomer");
+        PlayerMock steve = server.addPlayer("Steve");
+        PlayerMock alex = server.addPlayer("Alex");
+        world.registered(steve, "hunter22");
+        world.registered(alex, "secret99");
+        AuthState.Registered alexWaits =
+                (AuthState.Registered) world.sessions.state(alex.getUniqueId()).orElseThrow();
+        InWorldScreens offer = offer(ScreenSettings.WaitingRoom.FROZEN);
+
+        offer.offer(newcomer, new AuthState.Unregistered(new PlayerName("Newcomer")));
+        offer.offer(steve, world.sessions.state(steve.getUniqueId()).orElseThrow());
+        offer.offer(
+                alex,
+                new AuthState.SecondFactor(
+                        alexWaits.account(),
+                        com.uxplima.auth.domain.state.AuthMethod.PASSWORD,
+                        java.util.Set.of(com.uxplima.auth.domain.factor.FactorKind.APP),
+                        com.uxplima.auth.domain.state.Attempts.fresh(3),
+                        null));
+
+        assertThat(shown).isEmpty();
+        assertThat(told(newcomer)).contains(world.messages.render(newcomer, Keys.CHAT_REGISTER_PASSWORD));
+        assertThat(told(steve)).contains(world.messages.render(steve, Keys.CHAT_LOGIN_PASSWORD));
+        assertThat(told(alex)).contains(world.messages.render(alex, Keys.CHAT_CODE));
+    }
+
+    private static List<net.kyori.adventure.text.Component> told(PlayerMock player) {
+        List<net.kyori.adventure.text.Component> lines = new ArrayList<>();
+        for (net.kyori.adventure.text.Component line = player.nextComponentMessage();
+                line != null;
+                line = player.nextComponentMessage()) {
+            lines.add(line);
+        }
+        return lines;
+    }
+
     private InWorldScreens offer(ScreenSettings.WaitingRoom room) {
         return offer(room, (player, task) -> task.run(), player -> true);
     }
@@ -257,8 +298,26 @@ final class InWorldScreensTest {
                 shipped.register(),
                 shipped.login(),
                 shipped.pin());
+        if (chat) {
+            settings = new ScreenSettings(
+                    settings.waitingRoom(),
+                    settings.cancel(),
+                    settings.canClose(),
+                    settings.pinPad(),
+                    settings.rules(),
+                    settings.register(),
+                    settings.login(),
+                    settings.pin(),
+                    settings.loginWorld(),
+                    settings.replace(),
+                    settings.captcha(),
+                    settings.code(),
+                    settings.recover(),
+                    true);
+        }
+        ScreenSettings chosen = settings;
         AuthScreens screens =
-                new AuthScreens(() -> settings, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
+                new AuthScreens(() -> chosen, () -> world.passwords, world.messages, new Styler(Theme.defaults()));
         ScreenShower shower = new ScreenShower() {
             @Override
             public void show(Audience who, DialogSpec spec) {
@@ -270,13 +329,14 @@ final class InWorldScreensTest {
             public void close(Audience who) {}
         };
         return new InWorldScreens(
-                () -> settings,
+                () -> chosen,
                 screens,
                 sentToTheWorld::contains,
                 later,
                 stillWaiting,
                 shower,
                 new CaptchaScreen(world.captchas, screens, shower, world.messages, CaptchaScreen.Hand.NONE),
-                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.lane));
+                new FactorScreen(world.confirmFactor, screens, shower, world.messages, world.lane),
+                (player, key) -> world.messages.send(player, key));
     }
 }

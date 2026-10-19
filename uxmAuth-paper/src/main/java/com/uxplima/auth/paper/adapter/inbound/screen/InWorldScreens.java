@@ -9,8 +9,11 @@ import java.util.function.Supplier;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.ScreenSettings;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.hold.ScreenOffer;
+import com.uxplima.uxmlib.text.message.MessageKey;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Shows a held player the screen for their case, while the waiting room is in the world.
@@ -29,6 +32,7 @@ public final class InWorldScreens implements ScreenOffer {
     private final ScreenShower shower;
     private final CaptchaScreen captcha;
     private final FactorOffer factor;
+    private final BiConsumer<Player, MessageKey> tell;
 
     /**
      * @param later runs the showing a moment after the join, when the client can draw a screen: a Bedrock client
@@ -56,6 +60,21 @@ public final class InWorldScreens implements ScreenOffer {
             ScreenShower shower,
             CaptchaScreen captcha,
             FactorOffer factor) {
+        this(settings, screens, sentToTheWorld, later, stillWaiting, shower, captcha, factor, (player, key) -> {});
+    }
+
+    /** @param tell how a player who answers in chat is told what to type */
+    public InWorldScreens(
+            Supplier<ScreenSettings> settings,
+            AuthScreens screens,
+            Predicate<UUID> sentToTheWorld,
+            BiConsumer<Player, Runnable> later,
+            Predicate<Player> stillWaiting,
+            ScreenShower shower,
+            CaptchaScreen captcha,
+            FactorOffer factor,
+            BiConsumer<Player, MessageKey> tell) {
+        this.tell = Objects.requireNonNull(tell, "tell");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.screens = Objects.requireNonNull(screens, "screens");
         this.sentToTheWorld = Objects.requireNonNull(sentToTheWorld, "sentToTheWorld");
@@ -84,6 +103,9 @@ public final class InWorldScreens implements ScreenOffer {
                 captcha.offer(player, player.getUniqueId(), null);
                 return;
             }
+            if (settings.get().chatInput() && askedInChat(player, state)) {
+                return;
+            }
             switch (state) {
                 case AuthState.Unregistered unregistered -> shower.show(player, screens.register(player, null));
                 case AuthState.Registered registered -> shower.show(player, screens.login(player, null));
@@ -94,5 +116,21 @@ public final class InWorldScreens implements ScreenOffer {
                 case AuthState.Authenticated authenticated -> {}
             }
         });
+    }
+
+    /** Tells a player who answers in chat what to type; false for a case chat does not answer. */
+    private boolean askedInChat(Player player, AuthState state) {
+        @Nullable Keys key =
+                switch (state) {
+                    case AuthState.Unregistered unregistered -> Keys.CHAT_REGISTER_PASSWORD;
+                    case AuthState.Registered registered -> Keys.CHAT_LOGIN_PASSWORD;
+                    case AuthState.SecondFactor waiting -> Keys.CHAT_CODE;
+                    default -> null;
+                };
+        if (key == null) {
+            return false;
+        }
+        tell.accept(player, key);
+        return true;
     }
 }

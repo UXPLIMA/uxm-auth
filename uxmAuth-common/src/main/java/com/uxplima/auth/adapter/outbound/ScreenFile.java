@@ -57,7 +57,8 @@ public final class ScreenFile {
                 screen(config, "replace"),
                 screen(config, "captcha"),
                 screen(config, "code"),
-                screen(config, "recover"));
+                screen(config, "recover"),
+                config.getBoolean("chat-input", false));
     }
 
     private static ScreenSettings.Screen screen(HoconConfig config, String name) {
