@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.uxplima.auth.application.port.AccountList;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.PasswordHash;
@@ -17,7 +18,7 @@ import com.uxplima.auth.domain.name.PlayerName;
 import org.jspecify.annotations.Nullable;
 
 /** Accounts in memory, with the same one-row-per-name rule the SQL table keeps, and a count of writes. */
-public final class InMemoryAccounts implements AccountRepository {
+public class InMemoryAccounts implements AccountRepository, AccountList {
 
     private final Map<String, Account> byKey = new ConcurrentHashMap<>();
     private final AtomicInteger writes = new AtomicInteger();
@@ -178,6 +179,11 @@ public final class InMemoryAccounts implements AccountRepository {
     }
 
     /** Puts an account in without counting it, as the state before a test. */
+    @Override
+    public List<Account> all() {
+        return List.copyOf(byKey.values());
+    }
+
     public void seed(Account account) {
         byKey.put(account.name().key(), account);
     }

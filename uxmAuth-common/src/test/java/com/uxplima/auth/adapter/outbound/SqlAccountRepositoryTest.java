@@ -64,6 +64,17 @@ final class SqlAccountRepositoryTest {
     }
 
     @Test
+    @DisplayName("every account comes back in one list, as it was written")
+    void listsEveryAccount() {
+        Account notch = cracked("Notch", "10.0.0.1");
+        Account steve = cracked("Steve", "10.0.0.2");
+        repository.insert(notch);
+        repository.insert(steve);
+
+        assertThat(repository.all()).containsExactlyInAnyOrder(notch, steve);
+    }
+
+    @Test
     @DisplayName("a second account under the same name in another case is refused, naming the first")
     void secondInsertOfTheSameKeyIsNameTaken() {
         repository.insert(cracked("Notch", "10.0.0.1"));

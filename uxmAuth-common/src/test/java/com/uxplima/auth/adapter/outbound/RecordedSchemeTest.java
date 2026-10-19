@@ -54,7 +54,28 @@ final class RecordedSchemeTest {
                 .isInstanceOf(SchemeChanged.class)
                 .hasMessageContaining("keep-first")
                 .hasMessageContaining("random")
-                .hasMessageContaining("/uxmauth migrate-uuids");
+                .hasMessageContaining("/uxmauth uuidscheme random");
         assertThat(new RecordedScheme(database).recorded()).contains(UuidScheme.KEEP_FIRST);
+    }
+
+    @Test
+    @DisplayName("a changed scheme is written in place of the recorded one, and a start under it is let through")
+    void aChangedSchemeIsWritten() {
+        new RecordedScheme(database).check(UuidScheme.OFFLINE);
+
+        new RecordedScheme(database).replace(UuidScheme.MOJANG);
+
+        assertThat(new RecordedScheme(database).recorded()).contains(UuidScheme.MOJANG);
+        new RecordedScheme(database).check(UuidScheme.MOJANG);
+        assertThatThrownBy(() -> new RecordedScheme(database).check(UuidScheme.OFFLINE))
+                .isInstanceOf(SchemeChanged.class);
+    }
+
+    @Test
+    @DisplayName("a scheme written on a database no start has written one on is simply the first")
+    void aFirstSchemeIsWritten() {
+        new RecordedScheme(database).replace(UuidScheme.RANDOM);
+
+        assertThat(new RecordedScheme(database).recorded()).contains(UuidScheme.RANDOM);
     }
 }

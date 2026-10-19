@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.uxplima.auth.application.port.AccountList;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
@@ -21,11 +22,12 @@ import com.uxplima.uxmlib.storage.sql.Database;
 import org.jspecify.annotations.Nullable;
 
 /** Accounts in the {@code uxmauth_account} table, on whichever database the operator chose. */
-public final class SqlAccountRepository implements AccountRepository {
+public final class SqlAccountRepository implements AccountRepository, AccountList {
 
     private static final String COLUMNS = "id, name, name_key, kind, premium_id, password, registered_at,"
             + " registration_address, last_login_at, last_address, unverified, registration_key";
     private static final String SELECT = "SELECT " + COLUMNS + " FROM uxmauth_account WHERE ";
+    private static final String ALL = "SELECT " + COLUMNS + " FROM uxmauth_account";
     private static final String INSERT =
             "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
@@ -90,6 +92,11 @@ public final class SqlAccountRepository implements AccountRepository {
         Objects.requireNonNull(name, "name");
         return database.transaction(sql -> sql.queryFirst(
                 SELECT + "name_key = ?", statement -> statement.setString(1, name.key()), SqlAccountRepository::read));
+    }
+
+    @Override
+    public List<Account> all() {
+        return database.transaction(sql -> sql.query(ALL, statement -> {}, SqlAccountRepository::read));
     }
 
     @Override
