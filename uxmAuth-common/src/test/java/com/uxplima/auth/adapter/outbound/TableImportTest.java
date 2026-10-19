@@ -236,4 +236,28 @@ final class TableImportTest {
                 .containsExactlyInAnyOrder(
                         tuple("Notch", UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5")), tuple("Steve", null));
     }
+
+    @Test
+    @DisplayName("a source that cannot be opened says why in the driver's words, and never prints its password")
+    void aFailureSaysWhy() throws IOException {
+        ImportLayout layout = layout("table = t\nhash-style = plain\ncolumns { name = n, password = p }\n");
+        String missing = "jdbc:sqlite:" + folder.resolve("missing.db");
+
+        assertThatThrownBy(
+                        () -> TableImport.open(layout, new TableImport.Address(missing, "", ""), id -> Optional.empty())
+                                .read())
+                .hasMessageContaining("could not be read: ")
+                .hasMessageContaining("SQLITE_CANTOPEN");
+        assertThat(folder.resolve("missing.db"))
+                .as("a read-only open makes no file")
+                .doesNotExist();
+
+        String secret = "pw-" + UUID.randomUUID();
+        String refused = "jdbc:h2:" + folder.resolve("guarded").toAbsolutePath() + ";MODE=" + secret;
+        assertThatThrownBy(() -> TableImport.open(
+                                layout, new TableImport.Address(refused, "sa", secret), id -> Optional.empty())
+                        .read())
+                .hasMessageContaining("could not be read: ")
+                .hasMessageNotContaining(secret);
+    }
 }

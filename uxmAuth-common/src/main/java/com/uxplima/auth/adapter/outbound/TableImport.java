@@ -56,8 +56,16 @@ public final class TableImport implements ImportSource {
     private final Opener opener;
     private final Function<UUID, Optional<String>> names;
 
+    /** The source's password, kept out of the driver's words when a failure repeats them. */
+    private final String secret;
+
     /** @param names the name the server knows a player's id by, for a source that keeps no names */
     public TableImport(ImportLayout layout, Opener opener, Function<UUID, Optional<String>> names) {
+        this(layout, opener, names, "");
+    }
+
+    private TableImport(ImportLayout layout, Opener opener, Function<UUID, Optional<String>> names, String secret) {
+        this.secret = secret;
         this.layout = Objects.requireNonNull(layout, "layout");
         this.opener = Objects.requireNonNull(opener, "opener");
         this.names = Objects.requireNonNull(names, "names");
@@ -69,7 +77,7 @@ public final class TableImport implements ImportSource {
     /** A reader over the source at this address, its driver loaded from the ones the jar carries. */
     public static TableImport open(ImportLayout layout, Address address, Function<UUID, Optional<String>> names) {
         AuthDatabase.load(AuthDatabase.driverOf(address.jdbcUrl(), "import.jdbc-url"));
-        return new TableImport(layout, () -> connect(address), names);
+        return new TableImport(layout, () -> connect(address), names, address.password());
     }
 
     /** A connection to the source, opened read-only where the driver only allows that at the start. */
@@ -110,7 +118,12 @@ public final class TableImport implements ImportSource {
                 }
             }
         } catch (SQLException failed) {
-            throw new StorageException(layout.display() + "'s table " + layout.table() + " could not be read", failed);
+            String why = Objects.requireNonNullElse(
+                    failed.getMessage(), failed.getClass().getSimpleName());
+            throw new StorageException(
+                    layout.display() + "'s table " + layout.table() + " could not be read: "
+                            + (secret.isEmpty() ? why : why.replace(secret, "hidden")),
+                    failed);
         }
         return rows.stream();
     }
