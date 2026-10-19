@@ -143,11 +143,20 @@ final class ProxyModule {
     /** The words, painted, read from the folder so a language is gained by gaining a file. */
     private MessageCatalog catalog(PluginSettings settings) {
         Locale fallback = settings.current().defaultLocale();
-        Languages languages = Languages.load(folder.resolve(MESSAGES), fallback);
+        Languages languages =
+                languagesIn(folder.resolve(MESSAGES), fallback, getClass().getClassLoader());
         for (String problem : languages.problems()) {
             logger.warn(problem);
         }
         return new Styler(theme()).style(languages.catalog(), List.of(Keys.values()), languages.entries(), fallback);
+    }
+
+    /**
+     * The language files in this folder, over the ones this release carries. A file an older release wrote lacks
+     * every line added since, and read alone each of those reached its readers in the default language.
+     */
+    static Languages languagesIn(Path messages, Locale defaultLocale, ClassLoader resources) {
+        return Languages.load(messages, defaultLocale, resources, MESSAGES);
     }
 
     private Theme theme() {

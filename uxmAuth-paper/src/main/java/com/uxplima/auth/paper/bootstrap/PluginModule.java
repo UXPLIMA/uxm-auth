@@ -400,9 +400,18 @@ final class PluginModule {
      * operator who writes {@code messages_de.conf} has German and needs no new build.
      */
     private Languages readLanguages() {
-        return Languages.load(
+        return languagesIn(
                 plugin.getDataFolder().toPath().resolve(MESSAGES),
-                settings.current().defaultLocale());
+                settings.current().defaultLocale(),
+                getClass().getClassLoader());
+    }
+
+    /**
+     * The language files in this folder, over the ones this release carries. A file an older release wrote lacks
+     * every line added since, and read alone each of those reached its readers in the default language.
+     */
+    static Languages languagesIn(Path folder, Locale defaultLocale, ClassLoader resources) {
+        return Languages.load(folder, defaultLocale, resources, MESSAGES);
     }
 
     /**
