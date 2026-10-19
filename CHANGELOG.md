@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.3
+
+- A start that fails, over a value the plugin cannot read, a changed UUID scheme or a failed import, now refuses
+  every login with a reason and says why in the console. Before, the plugin disabled itself and an offline server
+  let anybody in under any name. The proxy does the same.
+- With chat answers on, a waiting captcha takes the chat line first, so its answer is never taken for a password,
+  and the lines under the map and under the rules say to type in chat.
+- A changed password is said in words: the shipped list tells the player, and that their remembered sessions
+  ended.
+- Under `ownership.rule = opt-in` the start says that only a player who typed `/premium` is proved, on a server
+  and on the proxy.
+- The chat prompt for the second step names the mailed code as well as the app's.
+
 ## 0.0.2
 
 - A player in the world can answer in chat, with no command: the password, a new password and its repeat, or the
