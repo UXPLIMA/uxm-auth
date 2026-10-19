@@ -28,7 +28,7 @@ final class ShippedEffects {
                     LOGGED_IN_FORCED,
                     CONFLICT -> List.of();
             case LOGGED_OUT -> List.of("[sound] block.note_block.hat 0.8 1.0");
-            case PASSWORD_CHANGED -> List.of(CHIME);
+            case PASSWORD_CHANGED -> List.of("[message] @change.done", CHIME);
         };
     }
 }

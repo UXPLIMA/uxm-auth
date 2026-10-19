@@ -359,6 +359,21 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("a changed password is said in words, in the shipped file and where a file names no list")
+    void aChangedPasswordIsSaid(@TempDir Path folder) throws IOException {
+        String said = "[message] @change.done";
+
+        assertThat(settingsFrom(folder, "").effects().of(AuthSettings.Moment.PASSWORD_CHANGED))
+                .contains(said);
+        try (java.io.InputStream shipped =
+                AuthSettingsTest.class.getClassLoader().getResourceAsStream("config.conf")) {
+            String text = new String(
+                    java.util.Objects.requireNonNull(shipped).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            assertThat(text).contains("\"" + said + "\"");
+        }
+    }
+
+    @Test
     @DisplayName("each way in, a resumed session and a conflict have lists of their own, empty until written")
     void theMomentsByMethodAreRead(@TempDir Path folder) throws IOException {
         PluginSettings.Snapshot shipped = settingsFrom(folder, "");
