@@ -60,7 +60,18 @@ own row is still kept, so turning the table off loses only what the website chan
 `import { }` in `config.conf` names a source and where its database is. The files in the plugin's `imports/`
 folder say how each source keeps its accounts; the plugin writes one for every source it knows, and a file of
 your own describes any other table. Passwords keep their hash and move to the current algorithm at the next
-login, authenticator secrets and premium ids come across, the source is only read, and an import runs once.
+login, authenticator secrets and premium ids come across, the source is only read, and an import runs once, at
+the start, before anybody can join. A failed import stops the plugin with its reason and runs again at the next
+start. `import.premium` reads a list of premium names after the accounts, and turns each cracked account it
+names premium once the premium sources give that name the listed id.
+
+## Moving the database, and changing the UUID scheme
+
+`/uxmauth database move` copies every account to the database `storage.move-to` names, from the console while
+nobody plays, and refuses a target that holds any. A restart onto the target completes the move.
+`/uxmauth uuidscheme <scheme>` gives every account the id another UUID scheme gives it, from the console while
+nobody plays; accounts that would share an id are named and left. Then write the scheme in
+`ownership.uuid-scheme` and restart.
 
 ## Build
 
