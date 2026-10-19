@@ -219,10 +219,14 @@ public final class AuthSettings {
      * @param loginSpot where a player waits while they log in, in the server's own worlds; empty for where they
      *     joined. The login world of screens.conf goes first.
      * @param rescue whether a player who joins inside a solid block or a portal is moved to a safe spot above
+     * @param rescueReach how many blocks up the safe spot may be; further up, the player goes to the spawn
      */
-    public record Spots(Optional<Place> loginSpot, boolean rescue) {
+    public record Spots(Optional<Place> loginSpot, boolean rescue, int rescueReach) {
         public Spots {
             Objects.requireNonNull(loginSpot, "loginSpot");
+            if (rescueReach < 1) {
+                throw new IllegalArgumentException("location.rescue-reach must be at least 1, not " + rescueReach);
+            }
         }
     }
 

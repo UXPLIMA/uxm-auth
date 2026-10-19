@@ -21,14 +21,17 @@ import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
 
 /**
- * Moves a player who joins inside a wall or a portal to the nearest safe spot above: a quit in a block, or in a
- * portal the hold kept them from using, must not trap them at their next join. It runs on the join, on the
+ * Moves a player who joins inside a wall or a portal to the nearest safe spot above, within the operator's reach:
+ * a quit in a block, or in a portal the hold kept them from using, must not trap them at their next join. It runs on the join, on the
  * player's own thread, before the hold reads where they stand.
  */
 public final class Rescue implements Listener {
 
     private static final Set<Material> PORTALS =
             EnumSet.of(Material.NETHER_PORTAL, Material.END_PORTAL, Material.END_GATEWAY);
+
+    /** Blocks the map makes a boundary of: a rescue never lifts a player past one. */
+    private static final Set<Material> BOUNDS = EnumSet.of(Material.BEDROCK, Material.BARRIER);
 
     private final Supplier<AuthSettings.Spots> spots;
     private final Passes passes;
@@ -59,7 +62,7 @@ public final class Rescue implements Listener {
         if (here == null || world == null || !spots.get().rescue() || !trapped(world, here)) {
             return;
         }
-        Location safe = safeAbove(world, here);
+        Location safe = safeAbove(world, here, spots.get().rescueReach());
         UUID id = player.getUniqueId();
         passes.allow(id);
         CompletableFuture<Void> unused = mover.apply(player, safe).handle((moved, failure) -> {
@@ -83,12 +86,22 @@ public final class Rescue implements Listener {
         return material.isOccluding() || PORTALS.contains(material);
     }
 
-    /** The first spot above with room for a body and solid ground under it; the world's spawn when none is. */
-    private static Location safeAbove(World world, Location here) {
+    /**
+     * The first spot above, within the reach, with room for a body and solid ground under it; the world's spawn
+     * when none is. The scan stops at bedrock, at a barrier and at the world's logical ceiling, so a portal in the
+     * nether never leads onto its roof and a sealed room is never left through its ceiling.
+     */
+    private static Location safeAbove(World world, Location here, int reach) {
         int x = here.getBlockX();
         int z = here.getBlockZ();
-        for (int y = here.getBlockY() + 1; y < world.getMaxHeight() - 1; y++) {
-            if (open(world.getBlockAt(x, y, z).getType())
+        int ceiling = Math.min(world.getMaxHeight(), world.getMinHeight() + world.getLogicalHeight());
+        int top = Math.min(here.getBlockY() + reach, ceiling - 2);
+        for (int y = here.getBlockY() + 1; y <= top; y++) {
+            Material at = world.getBlockAt(x, y, z).getType();
+            if (BOUNDS.contains(at)) {
+                break;
+            }
+            if (open(at)
                     && open(world.getBlockAt(x, y + 1, z).getType())
                     && world.getBlockAt(x, y - 1, z).getType().isSolid()) {
                 return at(here, y);

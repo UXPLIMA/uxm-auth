@@ -52,7 +52,7 @@ final class LoginSpotTest {
     }
 
     private LoginSpot spots() {
-        return new LoginSpot(server, () -> new AuthSettings.Spots(spot, true), logger);
+        return new LoginSpot(server, () -> new AuthSettings.Spots(spot, true, 6), logger);
     }
 
     @Test

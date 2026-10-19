@@ -295,7 +295,8 @@ final class SettingsReader {
                         config.getDouble("location.login-spot.z", 0.5),
                         (float) config.getDouble("location.login-spot.yaw", 0),
                         (float) config.getDouble("location.login-spot.pitch", 0)));
-        return new AuthSettings.Spots(spot, config.getBoolean("location.rescue", true));
+        return new AuthSettings.Spots(
+                spot, config.getBoolean("location.rescue", true), config.getInt("location.rescue-reach", 6));
     }
 
     /**

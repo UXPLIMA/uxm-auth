@@ -298,15 +298,26 @@ final class AuthSettingsTest {
         PluginSettings.Snapshot none = settingsFrom(folder, "");
         assertThat(none.spots().loginSpot()).isEmpty();
         assertThat(none.spots().rescue()).isTrue();
+        assertThat(none.spots().rescueReach()).isEqualTo(6);
 
         PluginSettings.Snapshot set = settingsFrom(folder, """
                 location {
                   login-spot { world = "lobby", x = 10.5, y = 70, z = -3.5, yaw = 90, pitch = 10 }
                   rescue = false
+                  rescue-reach = 3
                 }
                 """);
         assertThat(set.spots().loginSpot()).contains(new AuthSettings.Place("lobby", 10.5, 70, -3.5, 90, 10));
         assertThat(set.spots().rescue()).isFalse();
+        assertThat(set.spots().rescueReach()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a rescue reach below one block is refused, naming the line")
+    void aReachBelowOneIsRefused(@TempDir Path folder) {
+        assertThatThrownBy(() -> settingsFrom(folder, "location { rescue-reach = 0 }\n"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("location.rescue-reach");
     }
 
     @Test
