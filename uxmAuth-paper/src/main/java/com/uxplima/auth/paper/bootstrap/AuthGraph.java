@@ -84,7 +84,6 @@ import com.uxplima.auth.application.staff.ResolveConflict;
 import com.uxplima.auth.application.staff.SetPassword;
 import com.uxplima.auth.application.staff.Unregister;
 import com.uxplima.auth.domain.hash.Hashing;
-import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
@@ -94,6 +93,7 @@ import com.uxplima.auth.paper.adapter.inbound.account.BedrockBackupForm;
 import com.uxplima.auth.paper.adapter.inbound.account.BedrockProofForm;
 import com.uxplima.auth.paper.adapter.inbound.account.CrackedCommand;
 import com.uxplima.auth.paper.adapter.inbound.account.LastLoginNotice;
+import com.uxplima.auth.paper.adapter.inbound.account.LoginNotices;
 import com.uxplima.auth.paper.adapter.inbound.account.ProofForm;
 import com.uxplima.auth.paper.adapter.inbound.account.UnregisterCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.CaptchaCommand;
@@ -797,13 +797,18 @@ final class AuthGraph implements AutoCloseable {
             HashingLane lane,
             Scheduler scheduler,
             Messages messages) {
-        Function<PlayerName, @Nullable Player> online =
-                name -> plugin.getServer().getPlayerExact(name.value());
+        LoginNotices.Reach reach = new LoginNotices.Reach(
+                name -> plugin.getServer().getPlayerExact(name.value()),
+                scheduler,
+                (player, account) -> sessions.state(player.getUniqueId())
+                        .filter(AuthState.Authenticated.class::isInstance)
+                        .map(state ->
+                                ((AuthState.Authenticated) state).account().id().equals(account))
+                        .orElse(false));
         LastLoginNotice last = new LastLoginNotice(
                 history,
                 () -> settings.current().lastLoginNotice(),
-                online,
-                scheduler,
+                reach,
                 messages,
                 () -> settings.current().placeholders().dates().withZone(ZoneId.systemDefault()));
         BackupPassword backup = new BackupPassword(
@@ -815,8 +820,7 @@ final class AuthGraph implements AutoCloseable {
         BackupPasswordNotice shown = new BackupPasswordNotice(
                 backup,
                 lane,
-                online,
-                scheduler,
+                reach,
                 messages,
                 new BedrockBackupForm(BedrockScreen.forServer(plugin.getServer()), messages),
                 id -> bedrock.player(id).isPresent());

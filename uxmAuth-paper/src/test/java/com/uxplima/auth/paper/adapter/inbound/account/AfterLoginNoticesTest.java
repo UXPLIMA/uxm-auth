@@ -24,6 +24,7 @@ import com.uxplima.auth.domain.hash.Verification;
 import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.state.AuthMethod;
+import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.testing.AuthWorld;
 import com.uxplima.uxmlib.text.Text;
 import org.junit.jupiter.api.AfterEach;
@@ -61,23 +62,20 @@ final class AfterLoginNoticesTest {
         world = new AuthWorld(MockBukkit.createMockPlugin(), folder, AuthWorld.shippedPasswords());
         notch = server.addPlayer("Notch");
         history = new SqlLoginHistory(world.database);
-        lastLogin = new LastLoginNotice(
-                history,
-                () -> on,
+        LoginNotices.Reach reach = new LoginNotices.Reach(
                 name -> server.getPlayerExact(name.value()),
                 world.scheduler,
-                world.messages,
-                () -> DATES);
+                (player, account) -> world.sessions
+                        .state(player.getUniqueId())
+                        .filter(AuthState.Authenticated.class::isInstance)
+                        .map(state ->
+                                ((AuthState.Authenticated) state).account().id().equals(account))
+                        .orElse(false));
+        lastLogin = new LastLoginNotice(history, () -> on, reach, world.messages, () -> DATES);
         BackupPassword backup =
                 new BackupPassword(world.accounts, world.hashing, () -> world.policy, () -> on, new SecureRandom());
         backupNotice = new BackupPasswordNotice(
-                backup,
-                world.lane,
-                name -> server.getPlayerExact(name.value()),
-                world.scheduler,
-                world.messages,
-                (player, password) -> formed.add(password),
-                id -> bedrock);
+                backup, world.lane, reach, world.messages, (player, password) -> formed.add(password), id -> bedrock);
     }
 
     @AfterEach
@@ -98,6 +96,7 @@ final class AfterLoginNoticesTest {
                 null,
                 null);
         world.accounts.insert(account);
+        world.sessions.open(notch.getUniqueId(), new AuthState.Authenticated(account, AuthMethod.PASSWORD));
         return account.id();
     }
 
@@ -164,6 +163,22 @@ final class AfterLoginNoticesTest {
         world.scheduler.settle(world.lane.submit(() -> true));
         world.scheduler.drain();
         assertThat(notch.nextComponentMessage()).as("never shown twice").isNull();
+    }
+
+    @Test
+    @DisplayName("a player under the name who is not logged in as the account, one who came after, reads nothing")
+    void onlyTheLoggedInOwnerReads() {
+        UUID id = account(AccountKind.PREMIUM);
+        history.record(id, new LoginHistory.Entry(Instant.now(), "203.0.113.45", AuthMethod.PASSWORD));
+        world.sessions.open(notch.getUniqueId(), new AuthState.Unregistered(new PlayerName("Notch")));
+        drainMessages();
+
+        backupNotice.landed(id, new PlayerName("Notch"), "198.51.100.7", AuthMethod.PREMIUM);
+        lastLogin.landed(id, new PlayerName("Notch"), "198.51.100.7", AuthMethod.PASSWORD);
+        world.scheduler.settle(world.lane.submit(() -> true));
+        world.scheduler.drain();
+
+        assertThat(notch.nextComponentMessage()).isNull();
     }
 
     @Test
