@@ -17,6 +17,7 @@ import org.bukkit.plugin.ServicesManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
+import com.uxplima.auth.adapter.outbound.CommandFile;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
@@ -522,6 +523,20 @@ final class PluginModule {
         }
     }
 
+    /** The commands a release adds reach an older commands.conf, so the operator can rename them too. */
+    private void mergeShippedCommands(Path dataFolder) {
+        try {
+            if (CommandFile.bringUpToDate(
+                    dataFolder.resolve("commands.conf"), getClass().getClassLoader())) {
+                plugin.getSLF4JLogger()
+                        .info("commands.conf has the commands this release adds. Nothing you wrote changed, and the"
+                                + " file as it was is beside it as commands.conf.bak.");
+            }
+        } catch (RuntimeException unreadable) {
+            plugin.getSLF4JLogger().warn("commands.conf could not be brought up to date: {}", unreadable.getMessage());
+        }
+    }
+
     /** Write the shipped defaults on first run. An existing file is never overwritten. */
     private void extractDefaults(Path dataFolder) {
         saveIfAbsent(dataFolder, "config.conf");
@@ -529,6 +544,7 @@ final class PluginModule {
         saveIfAbsent(dataFolder, "screens.conf");
         mergeShippedScreens(dataFolder);
         saveIfAbsent(dataFolder, "commands.conf");
+        mergeShippedCommands(dataFolder);
         saveIfAbsent(dataFolder, "passwords/common.txt");
         saveIfAbsent(dataFolder, "menus/info.conf");
         saveSharedTheme(dataFolder);

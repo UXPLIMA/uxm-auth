@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
+import com.uxplima.auth.adapter.outbound.CommandFile;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
@@ -172,9 +173,22 @@ final class ProxyModule {
         } catch (RuntimeException unreadable) {
             logger.warn("config.conf could not be brought up to date: {}", unreadable.getMessage());
         }
+        mergeShippedCommands();
         copyIfAbsent("theme.conf", ThemeFiles.shared(folder, THEME_FOLDER));
         LanguageFiles.extractShipped(getClass().getClassLoader(), MESSAGES, folder.resolve(MESSAGES));
         MailFiles.extractShipped(getClass().getClassLoader(), folder.resolve(MailFiles.FOLDER));
+    }
+
+    /** The commands a release adds reach an older commands.conf, so the operator can rename them too. */
+    private void mergeShippedCommands() {
+        try {
+            if (CommandFile.bringUpToDate(folder.resolve(COMMANDS), getClass().getClassLoader())) {
+                logger.info("commands.conf has the commands this release adds. Nothing you wrote changed, and the"
+                        + " file as it was is beside it as commands.conf.bak.");
+            }
+        } catch (RuntimeException unreadable) {
+            logger.warn("commands.conf could not be brought up to date: {}", unreadable.getMessage());
+        }
     }
 
     private void copyIfAbsent(String resource, Path target) {

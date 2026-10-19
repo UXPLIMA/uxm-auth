@@ -1,5 +1,6 @@
 package com.uxplima.auth.adapter.outbound;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -17,6 +18,22 @@ import org.spongepowered.configurate.serialize.SerializationException;
 public final class CommandFile {
 
     private CommandFile() {}
+
+    /**
+     * Adds to an operator's file every command a release added, keeping what they wrote.
+     *
+     * <p>A command the file does not name still works under its own name. What a file without it loses is the
+     * promise that every command can be renamed: an operator cannot rename a command their file never shows,
+     * and the readers of another language never get its words.
+     */
+    public static boolean bringUpToDate(Path file, ClassLoader resources) {
+        Objects.requireNonNull(file, "file");
+        Objects.requireNonNull(resources, "resources");
+        if (!Files.isRegularFile(file)) {
+            return false;
+        }
+        return HoconConfig.load(file).mergeDefaults("commands.conf", resources);
+    }
 
     /** Every word for the command under this key, in lower case: none when it is disabled or absent. */
     public static Set<String> labels(Path file, String key) {
