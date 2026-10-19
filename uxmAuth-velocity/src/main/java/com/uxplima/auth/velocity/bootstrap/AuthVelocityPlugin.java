@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 import com.google.inject.Inject;
+import com.uxplima.auth.velocity.adapter.inbound.LockedProxyDoor;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -35,6 +36,13 @@ public final class AuthVelocityPlugin {
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         Objects.requireNonNull(event, "event");
-        new ProxyModule(this, proxy, logger, dataDirectory).wire();
+        try {
+            new ProxyModule(this, proxy, logger, dataDirectory).wire();
+        } catch (RuntimeException failed) {
+            // A start that failed shuts the door rather than leaving the network open to anybody under any name.
+            logger.error("uxmAuth could not start: {}", failed.getMessage(), failed);
+            proxy.getEventManager().register(this, new LockedProxyDoor());
+            logger.error("Every login is refused until uxmAuth starts. Fix the cause above, then restart.");
+        }
     }
 }

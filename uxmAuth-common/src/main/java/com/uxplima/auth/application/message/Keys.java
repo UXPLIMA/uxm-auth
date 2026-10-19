@@ -202,6 +202,9 @@ public enum Keys implements MessageKey {
             "register.already", "<etag:'ERROR'> <body>You already have an account. Log in with <value>/login<body>."),
     REGISTER_REFUSED("register.refused", "<tag:'AUTH'> <body>Your registration was refused."),
 
+    START_FAILED_KICK(
+            "kick.start-failed",
+            "This server's login could not start, so nobody can join until its staff fix it. Try again later."),
     CHANGE_DONE("change.done", "<good>Your password is changed. Every remembered session of it has ended."),
     CHANGE_WRONG_OLD("change.wrong-old", "<etag:'ERROR'> <body>The old password is wrong."),
     CHANGE_NOT_LOGGED_IN("change.not-logged-in", "<etag:'ERROR'> <body>Log in first."),

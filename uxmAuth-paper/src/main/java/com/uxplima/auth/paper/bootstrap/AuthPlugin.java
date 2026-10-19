@@ -1,9 +1,12 @@
 package com.uxplima.auth.paper.bootstrap;
 
+import java.util.logging.Level;
+
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.auth.adapter.outbound.ImportFailed;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
+import com.uxplima.auth.paper.adapter.inbound.listener.LockedDoor;
 import org.bstats.bukkit.Metrics;
 import org.jspecify.annotations.Nullable;
 
@@ -32,13 +35,18 @@ public class AuthPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        PluginModule wired = new PluginModule(this);
+        PluginModule wired = null;
         try {
+            wired = new PluginModule(this);
             wired.wire();
         } catch (SchemeChanged | ImportFailed refused) {
             // An operator's mistake with a sentence that fixes it, not a defect: no stack trace to read past.
             getLogger().severe(refused.getMessage());
-            getServer().getPluginManager().disablePlugin(this);
+            lock(wired);
+            return;
+        } catch (RuntimeException failed) {
+            getLogger().log(Level.SEVERE, "uxmAuth could not start: " + failed.getMessage(), failed);
+            lock(wired);
             return;
         }
         module = wired;
@@ -52,6 +60,22 @@ public class AuthPlugin extends JavaPlugin {
             module = null;
         }
     }
+    /**
+     * A start that failed shuts the door rather than the plugin. Disabled, the plugin left an offline server open to
+     * anybody under any name; enabled with only this, it refuses every login until its staff fix the cause.
+     */
+    private void lock(@Nullable PluginModule wired) {
+        try {
+            if (wired != null) {
+                wired.shutdown();
+            }
+        } catch (RuntimeException halfBuilt) {
+            getLogger().log(Level.WARNING, "What the failed start had opened did not all close", halfBuilt);
+        }
+        getServer().getPluginManager().registerEvents(new LockedDoor(), this);
+        getLogger().severe("Every login is refused until uxmAuth starts. Fix the cause above, then restart.");
+    }
+
     /** Start the anonymous counts, unless this plugin has no id yet. */
     private void startMetrics() {
         if (METRICS_ID <= 0) {
