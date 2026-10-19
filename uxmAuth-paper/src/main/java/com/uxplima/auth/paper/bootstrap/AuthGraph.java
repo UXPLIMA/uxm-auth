@@ -653,7 +653,8 @@ final class AuthGraph implements AutoCloseable {
                 sessions,
                 () -> screenFile.current().chatInput(),
                 () -> settings.current().passwords().confirmOnRegister(),
-                ChatAnswers.Answers.of(login, register, twoFactor),
+                ChatAnswers.Answers.of(login, register, twoFactor, captchaCommand, scheduler),
+                captcha::waiting,
                 messages);
         this.staffing = new StaffGraph(
                 plugin,

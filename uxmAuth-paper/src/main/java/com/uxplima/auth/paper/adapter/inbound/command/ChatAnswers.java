@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -23,6 +24,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.text.message.Messages;
 import org.jspecify.annotations.Nullable;
 
@@ -40,20 +42,39 @@ public final class ChatAnswers implements Listener {
     public record Answers(
             BiFunction<Player, String, CompletableFuture<Void>> login,
             Register register,
-            BiFunction<Player, String, CompletableFuture<Void>> code) {
+            BiFunction<Player, String, CompletableFuture<Void>> code,
+            BiFunction<Player, String, CompletableFuture<Void>> captcha) {
 
         public Answers {
             Objects.requireNonNull(login, "login");
             Objects.requireNonNull(register, "register");
             Objects.requireNonNull(code, "code");
+            Objects.requireNonNull(captcha, "captcha");
         }
 
-        /** The answers the three commands give. */
-        public static Answers of(LoginCommand login, RegisterCommand register, TwoFactorCommand factor) {
+        /** The answers the four commands give; the captcha's on the player's own thread, where it hands a map. */
+        public static Answers of(
+                LoginCommand login,
+                RegisterCommand register,
+                TwoFactorCommand factor,
+                CaptchaCommand captcha,
+                Scheduler scheduler) {
             Objects.requireNonNull(login, "login");
             Objects.requireNonNull(register, "register");
             Objects.requireNonNull(factor, "factor");
-            return new Answers(login::attempt, register::attempt, factor::answer);
+            Objects.requireNonNull(captcha, "captcha");
+            Objects.requireNonNull(scheduler, "scheduler");
+            return new Answers(login::attempt, register::attempt, factor::answer, (player, typed) -> {
+                CompletableFuture<Void> done = new CompletableFuture<>();
+                scheduler.entity(player, () -> {
+                    try {
+                        captcha.answer(player, typed);
+                    } finally {
+                        done.complete(null);
+                    }
+                });
+                return done;
+            });
         }
     }
 
@@ -69,6 +90,7 @@ public final class ChatAnswers implements Listener {
     private final BooleanSupplier on;
     private final BooleanSupplier asksTwice;
     private final Answers answers;
+    private final Predicate<UUID> captchaWaiting;
     private final Messages messages;
 
     /** The first password of a registration that waits for its repeat; changed only through compute. */
@@ -77,9 +99,16 @@ public final class ChatAnswers implements Listener {
     /**
      * @param on whether chat answers at all, which the operator chooses
      * @param asksTwice whether a registration asks its password twice
+     * @param captchaWaiting whether a captcha waits for this player's answer, which then takes the line
      */
     public ChatAnswers(
-            Sessions sessions, BooleanSupplier on, BooleanSupplier asksTwice, Answers answers, Messages messages) {
+            Sessions sessions,
+            BooleanSupplier on,
+            BooleanSupplier asksTwice,
+            Answers answers,
+            Predicate<UUID> captchaWaiting,
+            Messages messages) {
+        this.captchaWaiting = Objects.requireNonNull(captchaWaiting, "captchaWaiting");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.on = Objects.requireNonNull(on, "on");
         this.asksTwice = Objects.requireNonNull(asksTwice, "asksTwice");
@@ -120,6 +149,9 @@ public final class ChatAnswers implements Listener {
         }
         forgetTheGone();
         String typed = line.strip();
+        if (captchaWaiting.test(player.getUniqueId())) {
+            return Optional.of(answers.captcha().apply(player, typed));
+        }
         AuthState state = sessions.state(player.getUniqueId()).orElseThrow();
         return Optional.of(
                 switch (state) {

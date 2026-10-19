@@ -44,6 +44,8 @@ final class ChatAnswersTest {
     private PlayerMock steve;
     private boolean on = true;
     private final List<String> codes = new ArrayList<>();
+    private final List<String> captchas = new ArrayList<>();
+    private final Set<java.util.UUID> captchaWaiting = new HashSet<>();
     private ChatAnswers chat;
 
     @BeforeEach
@@ -65,10 +67,18 @@ final class ChatAnswersTest {
                 world.sessions,
                 () -> on,
                 () -> AuthWorld.shippedPasswords().confirmOnRegister(),
-                new ChatAnswers.Answers(login::attempt, register::attempt, (player, code) -> {
-                    codes.add(code);
-                    return CompletableFuture.completedFuture(null);
-                }),
+                new ChatAnswers.Answers(
+                        login::attempt,
+                        register::attempt,
+                        (player, code) -> {
+                            codes.add(code);
+                            return CompletableFuture.completedFuture(null);
+                        },
+                        (player, code) -> {
+                            captchas.add(code);
+                            return CompletableFuture.completedFuture(null);
+                        }),
+                captchaWaiting::contains,
                 world.messages);
     }
 
@@ -132,6 +142,22 @@ final class ChatAnswersTest {
                 .as("the line after a mismatch is a new first password, asked again")
                 .isEqualTo(world.messages.render(steve, Keys.CHAT_REGISTER_REPEAT));
         type("secret99");
+        assertThat(world.isAuthenticated(steve)).isTrue();
+    }
+
+    @Test
+    @DisplayName("while a captcha waits, the line answers the captcha and is never taken for a password")
+    void aWaitingCaptchaTakesTheLine() {
+        world.registered(steve, "hunter22");
+        captchaWaiting.add(steve.getUniqueId());
+
+        type("hunter22");
+
+        assertThat(captchas).containsExactly("hunter22");
+        assertThat(world.isAuthenticated(steve)).isFalse();
+
+        captchaWaiting.clear();
+        type("hunter22");
         assertThat(world.isAuthenticated(steve)).isTrue();
     }
 
