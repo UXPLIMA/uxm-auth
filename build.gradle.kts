@@ -8,5 +8,5 @@
 
 allprojects {
     group = "com.uxplima"
-    version = project.findProperty("projectVersion")?.toString() ?: "0.1.0-SNAPSHOT"
+    version = providers.gradleProperty("projectVersion").get()
 }

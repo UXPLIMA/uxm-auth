@@ -34,6 +34,14 @@ publishing {
             from(components["java"])
         }
     }
+    // The release workflow copies this folder onto the repository's maven branch, which serves it as a Maven
+    // repository with nothing to configure.
+    repositories {
+        maven {
+            name = "localRepo"
+            url = uri(rootProject.layout.buildDirectory.dir("maven-repo"))
+        }
+    }
 }
 
 // Every type and every method a reader needs is written; a tag repeating a record component's name is not.
