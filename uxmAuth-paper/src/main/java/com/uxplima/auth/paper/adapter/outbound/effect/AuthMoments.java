@@ -24,6 +24,7 @@ import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.text.message.MessageKey;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.uxplima.uxmlib.text.style.Styler;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Runs the list an operator wrote for one moment, for the player it happened to.
@@ -108,9 +109,21 @@ public final class AuthMoments implements MomentRunner {
         }
     }
 
+    /**
+     * The player's name and id first, which every line may need and which must not wait on PlaceholderAPI and
+     * its Player expansion being installed, then everything else the server's placeholders answer.
+     */
+    private static String resolve(@Nullable Player player, String template) {
+        String filled = player == null
+                ? template
+                : template.replace("%player_name%", player.getName())
+                        .replace("%player_uuid%", player.getUniqueId().toString());
+        return Operands.standard().resolve(player, filled);
+    }
+
     /** A context for one moment: who it happened to, who hears a broadcast, and whose language is read. */
     private ActionContext contextFor(Player player, Audience room, Player reader) {
-        return ActionContext.builder(Operands.standard())
+        return ActionContext.builder(AuthMoments::resolve)
                 .player(player)
                 .style(line -> styler.tokens(line, messages.localeOf(reader)))
                 .words(path -> MiniMessage.miniMessage().serialize(messages.render(reader, MessageKey.of(path, path))))

@@ -83,6 +83,17 @@ final class AuthMomentsTest {
         assertThat(plain(steve.nextComponentMessage())).isEqualTo("Logged in");
     }
 
+    @Test
+    @DisplayName("the player's name and id are filled in a line without PlaceholderAPI")
+    void theNameAndIdNeedNoPlaceholderPlugin() {
+        PlayerMock steve = server.addPlayer("Steve");
+
+        moments(Map.of(AuthSettings.Moment.LOGGED_IN, List.of("[message] Hello %player_name% (%player_uuid%)")))
+                .fire(steve, AuthSettings.Moment.LOGGED_IN);
+
+        assertThat(plain(steve.nextComponentMessage())).isEqualTo("Hello Steve (" + steve.getUniqueId() + ")");
+    }
+
     private static @Nullable String plain(@Nullable Component line) {
         return line == null ? null : PlainTextComponentSerializer.plainText().serialize(line);
     }
