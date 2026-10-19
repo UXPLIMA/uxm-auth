@@ -13,11 +13,11 @@ public final class Passes {
 
     private final Set<UUID> moving = ConcurrentHashMap.newKeySet();
 
-    void allow(UUID player) {
+    public void allow(UUID player) {
         moving.add(Objects.requireNonNull(player, "player"));
     }
 
-    void done(UUID player) {
+    public void done(UUID player) {
         moving.remove(Objects.requireNonNull(player, "player"));
     }
 

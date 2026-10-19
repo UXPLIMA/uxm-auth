@@ -8,6 +8,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -280,6 +281,21 @@ final class SettingsReader {
             throw new IllegalArgumentException(path + " must be at least 1, got: " + value);
         }
         return value;
+    }
+
+    /** The login spot and the rescue. A login spot with no world is none. */
+    static AuthSettings.Spots spots(HoconConfig config) {
+        String world = config.getString("location.login-spot.world", "").trim();
+        Optional<AuthSettings.Place> spot = world.isEmpty()
+                ? Optional.empty()
+                : Optional.of(new AuthSettings.Place(
+                        world,
+                        config.getDouble("location.login-spot.x", 0.5),
+                        config.getDouble("location.login-spot.y", 64),
+                        config.getDouble("location.login-spot.z", 0.5),
+                        (float) config.getDouble("location.login-spot.yaw", 0),
+                        (float) config.getDouble("location.login-spot.pitch", 0)));
+        return new AuthSettings.Spots(spot, config.getBoolean("location.rescue", true));
     }
 
     /**

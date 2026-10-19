@@ -105,6 +105,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.HoldListener;
 import com.uxplima.auth.paper.adapter.inbound.hold.LoginRecords;
 import com.uxplima.auth.paper.adapter.inbound.hold.Notices;
 import com.uxplima.auth.paper.adapter.inbound.hold.Remembering;
+import com.uxplima.auth.paper.adapter.inbound.hold.Rescue;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
 import com.uxplima.auth.paper.adapter.inbound.listener.Arrivals;
@@ -148,6 +149,7 @@ import com.uxplima.auth.paper.adapter.outbound.handshake.PremiumHelloDoor;
 import com.uxplima.auth.paper.adapter.outbound.handshake.ServerHellos;
 import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
+import com.uxplima.auth.paper.adapter.outbound.hold.LoginSpot;
 import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilter;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
@@ -199,6 +201,7 @@ final class AuthGraph implements AutoCloseable {
     final DatabaseDesk databases;
     private final ClosedDoor closedDoor;
     private final JoinMessages joinMessages;
+    private final Rescue rescue;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -281,6 +284,8 @@ final class AuthGraph implements AutoCloseable {
         Set<String> labels = PlayerCommandLabels.of(commands);
 
         Passes passes = new Passes();
+        LoginSpot loginSpot =
+                new LoginSpot(plugin.getServer(), () -> settings.current().spots(), plugin.getLogger());
         this.loginWorld = new LoginWorld(plugin.getServer(), screenFile::current, plugin.getLogger());
         this.hold = new HoldListener(
                 sessions,
@@ -294,8 +299,9 @@ final class AuthGraph implements AutoCloseable {
                 new HeldStateStore(plugin.getDataFolder().toPath().resolve("held")),
                 () -> settings.current().hold(),
                 hold::isHeld,
-                loginWorld::room,
+                () -> loginWorld.room().or(loginSpot::where),
                 passes);
+        this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
         AuthMoments moments = new AuthMoments(
                 plugin.getServer(),
                 scheduler,
@@ -655,6 +661,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(closedDoor, plugin);
         plugin.getServer().getPluginManager().registerEvents(joinMessages, plugin);
+        plugin.getServer().getPluginManager().registerEvents(rescue, plugin);
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);

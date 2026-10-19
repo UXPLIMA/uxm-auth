@@ -65,6 +65,7 @@ public final class PluginSettings {
             AuthSettings.Lane lane,
             AuthSettings.Hold hold,
             boolean joinMessageWaits,
+            AuthSettings.Spots spots,
             AuthSettings.Timeouts timeouts,
             AuthSettings.Effects effects,
             AuthSettings.Bedrock bedrock,
@@ -87,6 +88,7 @@ public final class PluginSettings {
             Objects.requireNonNull(language, "language");
             Objects.requireNonNull(storage, "storage");
             Objects.requireNonNull(moveTo, "moveTo");
+            Objects.requireNonNull(spots, "spots");
             Objects.requireNonNull(names, "names");
             Objects.requireNonNull(passwords, "passwords");
             Objects.requireNonNull(hashing, "hashing");
@@ -294,6 +296,7 @@ public final class PluginSettings {
                 SettingsReader.lane(config),
                 SettingsReader.hold(config),
                 config.getBoolean("hold.join-message-waits", true),
+                SettingsReader.spots(config),
                 SettingsReader.timeouts(config),
                 SettingsReader.effects(config),
                 SettingsReader.bedrock(config),

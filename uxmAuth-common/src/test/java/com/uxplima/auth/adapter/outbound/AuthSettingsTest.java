@@ -293,6 +293,23 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("a login spot is read with its world, none is set by default, and the rescue is on")
+    void theLoginSpotIsRead(@TempDir Path folder) throws IOException {
+        PluginSettings.Snapshot none = settingsFrom(folder, "");
+        assertThat(none.spots().loginSpot()).isEmpty();
+        assertThat(none.spots().rescue()).isTrue();
+
+        PluginSettings.Snapshot set = settingsFrom(folder, """
+                location {
+                  login-spot { world = "lobby", x = 10.5, y = 70, z = -3.5, yaw = 90, pitch = 10 }
+                  rescue = false
+                }
+                """);
+        assertThat(set.spots().loginSpot()).contains(new AuthSettings.Place("lobby", 10.5, 70, -3.5, 90, 10));
+        assertThat(set.spots().rescue()).isFalse();
+    }
+
+    @Test
     @DisplayName("the join message waits for the login unless the operator says it should not")
     void theJoinMessageWaitsByDefault(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").joinMessageWaits()).isTrue();

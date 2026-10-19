@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.random.RandomGenerator;
 
@@ -204,6 +205,26 @@ public final class AuthSettings {
 
     /** A point a player stands on, and the way they face there. */
     public record Spot(double x, double y, double z, float yaw, float pitch) {}
+
+    /** A place in a named world, read from the settings and found in the world when the server has it loaded. */
+    public record Place(String world, double x, double y, double z, float yaw, float pitch) {
+        public Place {
+            Objects.requireNonNull(world, "world");
+        }
+    }
+
+    /**
+     * Where a waiting player stands, and whether a player who joins inside a block or a portal is moved out.
+     *
+     * @param loginSpot where a player waits while they log in, in the server's own worlds; empty for where they
+     *     joined. The login world of screens.conf goes first.
+     * @param rescue whether a player who joins inside a solid block or a portal is moved to a safe spot above
+     */
+    public record Spots(Optional<Place> loginSpot, boolean rescue) {
+        public Spots {
+            Objects.requireNonNull(loginSpot, "loginSpot");
+        }
+    }
 
     /**
      * The lists a password is checked against beyond the rules.
