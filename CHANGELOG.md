@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.5
+
+- A player who has not logged in is sent only the login commands and is suggested nothing else. Another
+  plugin's suggestions are worked out as the account the player claims, so a stranger under a name could read
+  that account's homes or warps with the tab key. The whole command tree comes back at the login, and a
+  `/logout` cuts it again.
+- `/changepassword`, `/email add`, `/email confirm` and the `/2fa` subcommands typed alone say how to use them.
+  A bare line spends no try and counts no wrong code against the address.
+
 ## 0.0.4
 
 - A language file an older release wrote no longer turns every line added since into the default language: the
