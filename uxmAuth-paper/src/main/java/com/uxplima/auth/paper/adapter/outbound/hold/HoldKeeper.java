@@ -170,6 +170,8 @@ public final class HoldKeeper {
         HeldPlace place = room.get().isEmpty() ? null : placeOf(player, leftover, left);
         HeldState snapshot = capture(player, hold.get(), place);
         taken.put(id, snapshot);
+        // A /logout holds a player whose client has every command; the hold's listener cuts the tree it sends.
+        player.updateCommands();
         onDisk(id, () -> {
             // Given back already: the player is whole and a file now would only be a stale one.
             if (taken.get(id) != snapshot) {

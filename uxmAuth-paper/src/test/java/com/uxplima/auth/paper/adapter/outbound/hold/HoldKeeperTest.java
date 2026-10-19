@@ -81,7 +81,7 @@ final class HoldKeeperTest {
     }
 
     @Test
-    @DisplayName("the login sends the whole command tree again, which the hold cut down to the login commands")
+    @DisplayName("the hold sends the client the cut-down command tree, and the login sends the whole one again")
     void theLoginSendsTheCommandsAgain() {
         int[] sent = {0};
         PlayerMock steve = new PlayerMock(server, "Steve") {
@@ -93,13 +93,16 @@ final class HoldKeeperTest {
         server.addPlayer(steve);
         held.add(steve.getUniqueId());
         keeper.arrive(steve);
+        assertThat(sent[0])
+                .as("a /logout holds a player whose client has the whole tree already")
+                .isEqualTo(1);
 
         held.remove(steve.getUniqueId());
         keeper.giveBack(steve);
 
-        assertThat(sent[0]).isEqualTo(1);
+        assertThat(sent[0]).isEqualTo(2);
         keeper.leave(steve);
-        assertThat(sent[0]).as("a player who leaves needs no tree").isEqualTo(1);
+        assertThat(sent[0]).as("a player who leaves needs no tree").isEqualTo(2);
     }
 
     @Test
