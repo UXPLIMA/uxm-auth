@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.4
+
+- A language file an older release wrote no longer turns every line added since into the default language: the
+  release's own files sit under the operator's, and every line the operator wrote still wins. On a server and on
+  the proxy.
+- `/register`, `/login` and `/captcha` typed alone say how to use them, in the player's language, instead of the
+  game's incomplete-command line. A bare `/login` spends no try and a bare `/captcha` keeps its code.
+- A player whose command meets a database that cannot be reached is told to try again in a minute.
+- A player with no account who waits out the timeout is told that registering took too long, not logging in.
+- The start names every name mark Paper refuses, not only the first.
+- An account delete nobody confirmed is let go once its window closes.
+
 ## 0.0.3
 
 - A start that fails, over a value the plugin cannot read, a changed UUID scheme or a failed import, now refuses
