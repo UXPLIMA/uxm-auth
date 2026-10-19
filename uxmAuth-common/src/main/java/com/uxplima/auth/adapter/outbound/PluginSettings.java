@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import com.uxplima.auth.application.account.PurgeInactive;
 import com.uxplima.auth.domain.hash.Argon2idHasher;
 import com.uxplima.auth.domain.hash.AuthMeSha256Hasher;
 import com.uxplima.auth.domain.hash.BcryptHasher;
@@ -70,6 +71,7 @@ public final class PluginSettings {
             Duration deleteConfirm,
             boolean backupPassword,
             boolean lastLoginNotice,
+            PurgeInactive.Settings purge,
             AuthSettings.Timeouts timeouts,
             AuthSettings.Effects effects,
             AuthSettings.Bedrock bedrock,
@@ -94,6 +96,7 @@ public final class PluginSettings {
             Objects.requireNonNull(moveTo, "moveTo");
             Objects.requireNonNull(spots, "spots");
             Objects.requireNonNull(deleteConfirm, "deleteConfirm");
+            Objects.requireNonNull(purge, "purge");
             Objects.requireNonNull(names, "names");
             Objects.requireNonNull(passwords, "passwords");
             Objects.requireNonNull(hashing, "hashing");
@@ -305,6 +308,7 @@ public final class PluginSettings {
                 SettingsReader.deleteConfirm(config),
                 config.getBoolean("premium.backup-password", true),
                 config.getBoolean("notices.last-login", true),
+                SettingsReader.purge(config),
                 SettingsReader.timeouts(config),
                 SettingsReader.effects(config),
                 SettingsReader.bedrock(config),

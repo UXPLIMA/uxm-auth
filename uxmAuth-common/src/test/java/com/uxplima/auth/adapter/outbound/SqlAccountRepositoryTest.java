@@ -75,6 +75,32 @@ final class SqlAccountRepositoryTest {
     }
 
     @Test
+    @DisplayName("the inactive accounts are those whose last login, or registration when none, is before the time")
+    void listsTheInactive() {
+        Instant cut = REGISTERED.plus(java.time.Duration.ofDays(30));
+        Account old = cracked("Old", "10.0.0.1");
+        Account recent = cracked("Recent", "10.0.0.2");
+        Account premium = new Account(
+                UUID.randomUUID(),
+                new PlayerName("Paid"),
+                AccountKind.PREMIUM,
+                UUID.randomUUID(),
+                null,
+                REGISTERED,
+                "10.0.0.3",
+                null,
+                null);
+        java.util.List.of(old, recent, premium).forEach(repository::insert);
+        repository.recordLogin(recent.id(), cut.plusSeconds(1), "10.0.0.2");
+
+        assertThat(repository.inactiveSince(cut, false, 10)).containsExactlyInAnyOrder(old.id(), premium.id());
+        assertThat(repository.inactiveSince(cut, true, 10)).containsExactly(old.id());
+        assertThat(repository.inactiveSince(cut, false, 1)).hasSize(1);
+        repository.recordLogin(old.id(), cut.minusSeconds(1), "10.0.0.1");
+        assertThat(repository.inactiveSince(cut, true, 10)).containsExactly(old.id());
+    }
+
+    @Test
     @DisplayName("a second account under the same name in another case is refused, naming the first")
     void secondInsertOfTheSameKeyIsNameTaken() {
         repository.insert(cracked("Notch", "10.0.0.1"));

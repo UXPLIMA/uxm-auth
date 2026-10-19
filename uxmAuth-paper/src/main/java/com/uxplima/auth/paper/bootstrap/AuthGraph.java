@@ -49,6 +49,7 @@ import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.SessionsAuthApi;
 import com.uxplima.auth.application.account.BackupPassword;
 import com.uxplima.auth.application.account.DeleteOwnAccount;
+import com.uxplima.auth.application.account.PurgeInactive;
 import com.uxplima.auth.application.account.SwitchToCracked;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
@@ -235,6 +236,7 @@ final class AuthGraph implements AutoCloseable {
     private final Scheduler scheduler;
     private @Nullable TaskHandle countryTask;
     private final TaskHandle historyTask;
+    private final TaskHandle purgeTask;
     private final NetworkEvents events;
     private final Alerts alerts;
     private final DiscordNotices discord;
@@ -493,6 +495,19 @@ final class AuthGraph implements AutoCloseable {
                 Duration.ZERO,
                 Duration.ofDays(1),
                 task -> records.prune(settings.current().staff().historyKeep()));
+        PurgeInactive purge = new PurgeInactive(
+                new SqlAccountRepository(database),
+                accounts,
+                () -> settings.current().purge(),
+                clock);
+        // It looks every hour and runs when its check is due, so a reload of check-hours counts.
+        this.purgeTask = scheduler.asyncTimer(
+                Duration.ofMinutes(1),
+                Duration.ofHours(1),
+                task -> purge.tick()
+                        .ifPresent(done -> plugin.getLogger()
+                                .info("The purge removed " + done.removed() + " accounts with no login in "
+                                        + settings.current().purge().after().toDays() + " days.")));
         Door door = new Door(
                 sessions,
                 keeper,
@@ -728,6 +743,7 @@ final class AuthGraph implements AutoCloseable {
     @Override
     public void close() {
         historyTask.cancel();
+        purgeTask.cancel();
         if (countryTask != null) {
             countryTask.cancel();
         }

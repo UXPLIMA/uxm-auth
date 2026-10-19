@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import com.uxplima.auth.adapter.outbound.premium.PremiumSource;
+import com.uxplima.auth.application.account.PurgeInactive;
 import com.uxplima.auth.domain.hash.HashAlgorithm;
 import com.uxplima.auth.domain.network.AfterLogin;
 import com.uxplima.auth.domain.network.Balance;
@@ -274,6 +275,15 @@ final class SettingsReader {
                             + ", and this plugin knows " + String.join(", ", shipped))));
         }
         return sources;
+    }
+
+    /** The purge of inactive accounts, off until the operator turns it on. */
+    static PurgeInactive.Settings purge(HoconConfig config) {
+        return new PurgeInactive.Settings(
+                config.getBoolean("purge.enabled", false),
+                Duration.ofDays(positive(config, "purge.after-days", 180)),
+                config.getBoolean("purge.keep-premium", true),
+                Duration.ofHours(positive(config, "purge.check-hours", 24)));
     }
 
     static int positive(HoconConfig config, String path, int fallback) {

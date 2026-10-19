@@ -12,6 +12,7 @@ import java.util.UUID;
 
 import com.uxplima.auth.application.port.AccountList;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.InactiveAccounts;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.PasswordHash;
@@ -22,12 +23,16 @@ import com.uxplima.uxmlib.storage.sql.Database;
 import org.jspecify.annotations.Nullable;
 
 /** Accounts in the {@code uxmauth_account} table, on whichever database the operator chose. */
-public final class SqlAccountRepository implements AccountRepository, AccountList {
+public final class SqlAccountRepository implements AccountRepository, AccountList, InactiveAccounts {
 
     private static final String COLUMNS = "id, name, name_key, kind, premium_id, password, registered_at,"
             + " registration_address, last_login_at, last_address, unverified, registration_key";
     private static final String SELECT = "SELECT " + COLUMNS + " FROM uxmauth_account WHERE ";
     private static final String ALL = "SELECT " + COLUMNS + " FROM uxmauth_account";
+    private static final String INACTIVE =
+            "SELECT id FROM uxmauth_account WHERE COALESCE(last_login_at, registered_at) < ? ORDER BY id LIMIT ?";
+    private static final String INACTIVE_NOT_PREMIUM = "SELECT id FROM uxmauth_account"
+            + " WHERE COALESCE(last_login_at, registered_at) < ? AND kind <> 'PREMIUM' ORDER BY id LIMIT ?";
     private static final String INSERT =
             "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
@@ -97,6 +102,18 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
     @Override
     public List<Account> all() {
         return database.transaction(sql -> sql.query(ALL, statement -> {}, SqlAccountRepository::read));
+    }
+
+    @Override
+    public List<UUID> inactiveSince(Instant before, boolean keepPremium, int limit) {
+        Objects.requireNonNull(before, "before");
+        return database.transaction(sql -> sql.query(
+                keepPremium ? INACTIVE_NOT_PREMIUM : INACTIVE,
+                statement -> {
+                    statement.setLong(1, before.toEpochMilli());
+                    statement.setInt(2, limit);
+                },
+                row -> UUID.fromString(row.getString("id"))));
     }
 
     @Override

@@ -12,13 +12,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.uxplima.auth.application.port.AccountList;
 import com.uxplima.auth.application.port.AccountRepository;
+import com.uxplima.auth.application.port.InactiveAccounts;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
 import org.jspecify.annotations.Nullable;
 
 /** Accounts in memory, with the same one-row-per-name rule the SQL table keeps, and a count of writes. */
-public class InMemoryAccounts implements AccountRepository, AccountList {
+public class InMemoryAccounts implements AccountRepository, AccountList, InactiveAccounts {
 
     private final Map<String, Account> byKey = new ConcurrentHashMap<>();
     private final AtomicInteger writes = new AtomicInteger();
@@ -27,6 +28,19 @@ public class InMemoryAccounts implements AccountRepository, AccountList {
     @Override
     public Optional<Account> findByName(PlayerName name) {
         return Optional.ofNullable(byKey.get(name.key()));
+    }
+
+    @Override
+    public List<UUID> inactiveSince(java.time.Instant before, boolean keepPremium, int limit) {
+        return byKey.values().stream()
+                .filter(account ->
+                        !keepPremium || account.kind() != com.uxplima.auth.domain.account.AccountKind.PREMIUM)
+                .filter(account -> Objects.requireNonNullElse(account.lastLoginAt(), account.registeredAt())
+                        .isBefore(before))
+                .map(Account::id)
+                .sorted()
+                .limit(limit)
+                .toList();
     }
 
     @Override

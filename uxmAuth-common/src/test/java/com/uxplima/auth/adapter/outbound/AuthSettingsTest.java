@@ -341,6 +341,24 @@ final class AuthSettingsTest {
     }
 
     @Test
+    @DisplayName("the purge is off by default, read when set, and refuses a window or a check of none")
+    void thePurgeIsRead(@TempDir Path folder) throws IOException {
+        assertThat(settingsFrom(folder, "").purge())
+                .isEqualTo(new com.uxplima.auth.application.account.PurgeInactive.Settings(
+                        false, Duration.ofDays(180), true, Duration.ofHours(24)));
+        assertThat(settingsFrom(
+                                folder,
+                                "purge { enabled = true, after-days = 30, keep-premium = false, check-hours = 6 }\n")
+                        .purge())
+                .isEqualTo(new com.uxplima.auth.application.account.PurgeInactive.Settings(
+                        true, Duration.ofDays(30), false, Duration.ofHours(6)));
+        assertThatThrownBy(() -> settingsFrom(folder, "purge { after-days = 0 }\n"))
+                .hasMessageContaining("purge.after-days");
+        assertThatThrownBy(() -> settingsFrom(folder, "purge { check-hours = 0 }\n"))
+                .hasMessageContaining("purge.check-hours");
+    }
+
+    @Test
     @DisplayName("a deletion waits a minute for its confirmation unless the operator says otherwise, and never none")
     void theDeleteConfirmationWindowIsRead(@TempDir Path folder) throws IOException {
         assertThat(settingsFrom(folder, "").deleteConfirm()).isEqualTo(java.time.Duration.ofSeconds(60));
