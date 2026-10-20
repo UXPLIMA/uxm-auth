@@ -62,7 +62,7 @@ import com.uxplima.uxmlib.scheduler.TaskHandle;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.language.FilePlayerLanguages;
 import com.uxplima.uxmlib.text.language.LanguageChoices;
-import com.uxplima.uxmlib.text.language.LanguageFiles;
+import com.uxplima.uxmlib.text.language.LanguageFileUpdates;
 import com.uxplima.uxmlib.text.language.LanguageResolver;
 import com.uxplima.uxmlib.text.language.LanguageServices;
 import com.uxplima.uxmlib.text.language.Languages;
@@ -559,7 +559,8 @@ final class PluginModule {
         saveSharedTheme(dataFolder);
         // The language files are discovered in the jar rather than named in a list here. A plugin gains a
         // language by gaining a file, and a list is the one place that gets forgotten when it does.
-        LanguageFiles.extractShipped(getClass().getClassLoader(), MESSAGES, dataFolder.resolve(MESSAGES));
+        reportCorrectedLines(
+                LanguageFileUpdates.bringUpToDate(getClass().getClassLoader(), MESSAGES, dataFolder.resolve(MESSAGES)));
         MailFiles.extractShipped(getClass().getClassLoader(), dataFolder.resolve(MailFiles.FOLDER));
     }
 
@@ -595,5 +596,19 @@ final class PluginModule {
             return;
         }
         plugin.saveResource(resource, false);
+    }
+
+    /**
+     * Say which language lines this start corrected. A line nobody changed takes the words this release ships, and
+     * an operator who wonders why a line moved finds the answer in the console.
+     */
+    private void reportCorrectedLines(LanguageFileUpdates.Report report) {
+        if (!report.updated().isEmpty()) {
+            plugin.getSLF4JLogger()
+                    .info(
+                            "Corrected {} language lines nobody had changed: {}",
+                            report.updated().size(),
+                            report.updated());
+        }
     }
 }

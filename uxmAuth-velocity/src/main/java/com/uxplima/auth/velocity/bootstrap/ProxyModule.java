@@ -17,7 +17,7 @@ import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyLocales;
 import com.uxplima.uxmlib.storage.sql.Database;
-import com.uxplima.uxmlib.text.language.LanguageFiles;
+import com.uxplima.uxmlib.text.language.LanguageFileUpdates;
 import com.uxplima.uxmlib.text.language.Languages;
 import com.uxplima.uxmlib.text.message.MessageCatalog;
 import com.uxplima.uxmlib.text.message.Messages;
@@ -184,7 +184,8 @@ final class ProxyModule {
         }
         mergeShippedCommands();
         copyIfAbsent("theme.conf", ThemeFiles.shared(folder, THEME_FOLDER));
-        LanguageFiles.extractShipped(getClass().getClassLoader(), MESSAGES, folder.resolve(MESSAGES));
+        reportCorrectedLines(
+                LanguageFileUpdates.bringUpToDate(getClass().getClassLoader(), MESSAGES, folder.resolve(MESSAGES)));
         MailFiles.extractShipped(getClass().getClassLoader(), folder.resolve(MailFiles.FOLDER));
     }
 
@@ -215,6 +216,19 @@ final class ProxyModule {
             Files.copy(shipped, target);
         } catch (IOException unwritable) {
             logger.warn("Cannot write {}. The shipped one is used.", target, unwritable);
+        }
+    }
+
+    /**
+     * Say which language lines this start corrected. A line nobody changed takes the words this release ships, and
+     * an operator who wonders why a line moved finds the answer in the console.
+     */
+    private void reportCorrectedLines(LanguageFileUpdates.Report report) {
+        if (!report.updated().isEmpty()) {
+            logger.info(
+                    "Corrected {} language lines nobody had changed: {}",
+                    report.updated().size(),
+                    report.updated());
         }
     }
 }
