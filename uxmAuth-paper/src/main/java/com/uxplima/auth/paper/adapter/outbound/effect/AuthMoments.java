@@ -167,6 +167,11 @@ public final class AuthMoments implements MomentRunner {
                 .player(player)
                 .style(line -> styler.tokens(line, messages.localeOf(reader)))
                 .words(path -> MiniMessage.miniMessage().serialize(messages.render(reader, MessageKey.of(path, path))))
+                // A broadcast reaches players other than this one, and each reads it in their own language.
+                .perReader(
+                        (each, path) ->
+                                MiniMessage.miniMessage().serialize(messages.render(each, MessageKey.of(path, path))),
+                        (each, line) -> styler.tokens(line, messages.localeOf(each)))
                 .itemStore(ItemStore.inventory())
                 .wallet(wallet)
                 .broadcast(room)
