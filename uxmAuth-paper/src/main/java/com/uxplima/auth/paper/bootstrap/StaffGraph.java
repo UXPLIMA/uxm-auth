@@ -69,16 +69,10 @@ final class StaffGraph implements AutoCloseable {
                 bindings.conditions());
         // The detector and the screen let the engine draw a form for a Bedrock player who reaches the window some
         // other way. The info view itself sends a Bedrock player the form below first.
-        this.menus = new Menus(
-                renderer,
-                scheduler,
-                bindings.lists(),
-                null,
-                bindings.actions(),
-                bindings.conditions(),
-                null,
-                BedrockDetector.forServer(plugin.getServer()),
-                BedrockScreen.forServer(plugin.getServer()));
+        this.menus = Menus.builder(renderer, scheduler, bindings.lists())
+                .openRegistries(bindings.actions(), bindings.conditions())
+                .bedrock(BedrockDetector.forServer(plugin.getServer()), BedrockScreen.forServer(plugin.getServer()))
+                .build();
         MenuBasics.register(bindings, menus);
         this.clicks = new MenuListener(renderer, bindings.actions(), bindings.conditions(), scheduler, plugin);
         this.window = new InfoMenu(bindings, menus, messages, dates, this::reread);
