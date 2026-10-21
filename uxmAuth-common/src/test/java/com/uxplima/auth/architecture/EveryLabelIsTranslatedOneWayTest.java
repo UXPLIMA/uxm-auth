@@ -28,8 +28,7 @@ import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
  * <p>A label is the word before the arrow of a line: {@code <tag:'...'>} for the plugin, {@code <etag:'...'>} for a
  * failure. On 2026-09-23 uxm-plots found the Turkish files of the family mixed: one file wrote the error label
  * {@code ERROR}, {@code Hata} and {@code HATA} on different lines, and one still carried the template's own label.
- * The English labels are capitals, drawn in small capitals; Turkish has no small capitals, so its labels are written
- * in capitals to read the same way. A label is a word a translator moves, so a language may not borrow the English
+ * The labels of every language are capitals, and English and Turkish draw them in small capitals. A label is a word a translator moves, so a language may not borrow the English
  * error word.
  */
 final class EveryLabelIsTranslatedOneWayTest {
