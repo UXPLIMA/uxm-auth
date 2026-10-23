@@ -12,7 +12,7 @@ velocity       = "4.1.1"                   # com.velocitypowered:velocity-api (r
 adventure      = "5.2.0"                   # net.kyori:adventure-* (verified 2026-08-28)
 
 # our foundation
-uxmlib = "0.198.2"                  # com.uxplima.uxmlib on repo.uxplima.com
+uxmlib = "0.198.4"                  # com.uxplima.uxmlib on repo.uxplima.com
 
 # runtime libraries
 configurate    = "4.1.2"
