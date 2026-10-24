@@ -11,8 +11,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.random.RandomGenerator;
 
@@ -101,8 +102,9 @@ final class ProxyGraph implements AutoCloseable {
     private final Path folder;
     private final HttpClient web = HttpClient.newHttpClient();
     private final WaitingWorld waiting;
-    /** Who a player waits as, when LimboAPI asks before the proxy's login events; set once the door listens. */
-    private Function<Player, Optional<GameProfile>> settleEarly = player -> Optional.empty();
+    /** What the door makes of a player when LimboAPI asks, before the proxy's login events; set once it listens. */
+    private BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> settleEarly =
+            (player, taken) -> new DoorListener.Early.Free();
 
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;

@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.application.factor.SecondStep;
@@ -212,22 +213,47 @@ public final class DoorListener {
                 why -> event.setResult(ResultedEvent.ComponentResult.denied(words.refusal(why, Optional.empty()))));
     }
 
+    /** What the door made of a player when LimboAPI asked whether to hold them. */
+    public sealed interface Early {
+
+        /** The player waits for the password, under this profile. */
+        record Waits(GameProfile profile) implements Early {
+            public Waits {
+                Objects.requireNonNull(profile, "profile");
+            }
+        }
+
+        /** The player does not wait at the proxy: another plugin decided them, Mojang proved them, or a session did. */
+        record Free() implements Early {}
+
+        /** A player under the same id or name is on the proxy already; nothing was settled for this connection. */
+        record Taken() implements Early {}
+    }
+
     /**
      * LimboAPI asks whether to hold a player before the proxy's profile and login events reach any other plugin, so
      * the door settles a player it let through offline here, under the id and the name the profile will carry. The
      * login after keeps what was settled, a login in the world among it.
      *
-     * @return the profile the player waits under, or empty when they do not wait at the proxy
+     * <p>LimboAPI asks after Velocity's check for a second connection, but with kick-existing-players on that check
+     * lets the newcomer through while the first is still online. A session is kept by id, so settling the newcomer
+     * would end the online player's login. Such a newcomer settles nothing.
+     *
+     * @param taken whether a player under this profile's id or name is on the proxy already
      */
-    public Optional<GameProfile> settleEarly(Player player) {
+    public Early settleEarly(Player player, Predicate<GameProfile> taken) {
+        Objects.requireNonNull(taken, "taken");
         InetSocketAddress remote = Objects.requireNonNull(player, "player").getRemoteAddress();
         if (!(door.arrival(remote).orElse(null) instanceof ProxyDoor.Arrival.Usual usual)) {
-            return Optional.empty();
+            return new Early.Free();
         }
         GameProfile profile = door.profile(player.getGameProfile(), false, remote);
+        if (taken.test(profile)) {
+            return new Early.Taken();
+        }
         waitOrResume(profile.getId(), profile.getName(), player, usual);
         settledEarly.add(remote);
-        return sessions.waitsAtTheProxy(profile.getId()) ? Optional.of(profile) : Optional.empty();
+        return sessions.waitsAtTheProxy(profile.getId()) ? new Early.Waits(profile) : new Early.Free();
     }
 
     /** A player with a password waits for it, unless a session from this address lets them in. */

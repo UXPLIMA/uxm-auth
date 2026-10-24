@@ -12,7 +12,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
@@ -42,6 +43,7 @@ import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
 import com.uxplima.auth.velocity.adapter.inbound.LimboRecovery;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisit;
@@ -86,7 +88,7 @@ final class WaitingWorld implements AutoCloseable {
     /**
      * Hold every player who waits for the proxy's password in the world, when the settings ask for it.
      *
-     * @param door who a player waits as, settled by the door when LimboAPI asks, before the proxy's login events
+     * @param door what the door makes of a player when LimboAPI asks, before the proxy's login events
      * @throws NoWaitingWorld when the settings ask for the world and the proxy cannot build it
      */
     void open(
@@ -94,7 +96,7 @@ final class WaitingWorld implements AutoCloseable {
             AccountRepository accounts,
             Messages words,
             ProxySessions network,
-            Function<Player, Optional<GameProfile>> door,
+            BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> door,
             Guards guards) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
@@ -128,7 +130,7 @@ final class WaitingWorld implements AutoCloseable {
             AccountRepository accounts,
             Messages words,
             ProxySessions network,
-            Function<Player, Optional<GameProfile>> door,
+            BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> door,
             Guards guards) {
         LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
@@ -136,14 +138,33 @@ final class WaitingWorld implements AutoCloseable {
         guards.bulletins().listen(reach);
         LimboWait wait = new LimboWait(
                 kit.open(limboApi, folder, settings.current().network(), metas(labels), logger),
-                player -> door.apply(player)
-                        .map(profile -> new LimboWait.Waiter(profile.getId(), new PlayerName(profile.getName()))),
+                player -> waiter(door.apply(player, this::taken), player, words),
                 (player, waiter, exit) -> visit(passwords, network, guards.remember(), player, waiter, exit, reach),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
         proxy.getEventManager().register(plugin, wait);
         logger.info("Players who must log in wait in the proxy's own world, built with LimboAPI.");
+    }
+
+    /** Who a player waits as; a second connection under a name already online is turned away instead. */
+    private static Optional<LimboWait.Waiter> waiter(DoorListener.Early early, Player player, Messages words) {
+        return switch (early) {
+            case DoorListener.Early.Waits waits ->
+                Optional.of(new LimboWait.Waiter(
+                        waits.profile().getId(), new PlayerName(waits.profile().getName())));
+            case DoorListener.Early.Free free -> Optional.empty();
+            case DoorListener.Early.Taken taken -> {
+                player.disconnect(words.render(player, Keys.KICK_ALREADY_ONLINE));
+                yield Optional.empty();
+            }
+        };
+    }
+
+    /** Whether a player under this profile's id or name is on the proxy already. */
+    private boolean taken(GameProfile profile) {
+        return proxy.getPlayer(profile.getId()).isPresent()
+                || proxy.getPlayer(profile.getName()).isPresent();
     }
 
     /**

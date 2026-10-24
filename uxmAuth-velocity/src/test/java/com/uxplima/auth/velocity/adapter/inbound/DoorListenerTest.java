@@ -326,9 +326,12 @@ final class DoorListenerTest {
         listener.preLogin(preLoginOf("Steve"));
         UUID steve = UuidScheme.offline(new PlayerName("Steve"));
 
-        Optional<GameProfile> held = listener.settleEarly(arriving(FROM, steve, "Steve"));
+        DoorListener.Early held = listener.settleEarly(arriving(FROM, steve, "Steve"), profile -> false);
 
-        assertThat(held).map(GameProfile::getId).contains(steve);
+        assertThat(held)
+                .isInstanceOfSatisfying(
+                        DoorListener.Early.Waits.class,
+                        waits -> assertThat(waits.profile().getId()).isEqualTo(steve));
         assertThat(sessions.waitsAtTheProxy(steve)).isTrue();
     }
 
@@ -340,9 +343,29 @@ final class DoorListenerTest {
         bedrock.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
         listener.preLogin(bedrock);
 
-        assertThat(listener.settleEarly(arriving(FROM, ProxyWorld.MOJANG, "Notch")))
-                .isEmpty();
+        assertThat(listener.settleEarly(arriving(FROM, ProxyWorld.MOJANG, "Notch"), profile -> false))
+                .isEqualTo(new DoorListener.Early.Free());
         assertThat(sessions.waitsAtTheProxy(ProxyWorld.MOJANG)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a second connection under the name of a player online leaves that player's session alone")
+    void aSecondConnectionTouchesNoSession() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        sessions.loggedIn(steve, AuthMethod.PASSWORD);
+        listener.preLogin(preLoginOf("Steve"));
+
+        // LimboAPI asks before Velocity turns a second connection away when kick-existing-players is on.
+        DoorListener.Early early = listener.settleEarly(
+                arriving(FROM, steve, "Steve"), profile -> profile.getId().equals(steve));
+
+        assertThat(early).isEqualTo(new DoorListener.Early.Taken());
+        assertThat(sessions.loggedIn(steve)).isTrue();
+        // Nothing was settled for this connection, so its own login, should it come, settles it afresh.
+        listener.login(new LoginEvent(arriving(FROM, steve, "Steve"), ""));
+        assertThat(sessions.waitsAtTheProxy(steve)).isTrue();
     }
 
     @Test
@@ -353,7 +376,7 @@ final class DoorListenerTest {
         listener.preLogin(preLoginOf("Steve"));
         UUID steve = UuidScheme.offline(new PlayerName("Steve"));
         Player player = arriving(FROM, steve, "Steve");
-        listener.settleEarly(player);
+        listener.settleEarly(player, profile -> false);
         sessions.loggedIn(steve, AuthMethod.PASSWORD);
 
         listener.profile(new GameProfileRequestEvent(connection, new GameProfile(steve, "Steve", List.of()), false));
