@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.7
+
+- `network.wait-in = limbo` holds players in the proxy's own world on LimboAPI 1.1, the release Modrinth
+  serves and the one that runs on Velocity 4, as well as on LimboAPI 2. Before, a proxy with LimboAPI 1.1
+  could not build the world.
+- The proxy's world holds the players it should. LimboAPI asks whether to hold a player before the proxy's
+  login events reach other plugins, and the proxy had not yet marked anybody as waiting, so everybody went
+  on to a server. A player is settled when LimboAPI asks now, and a login in the world is kept.
+- A proxy asked for its own world that cannot build it, because LimboAPI is missing or is a release uxmAuth
+  does not know, refuses every login and says why in its console. Before, the players went on to a server,
+  and a server without uxmAuth let them in without a password.
+- With the proxy's world, a player who has not logged in reaches no server, not even the first.
+- A proxy whose UUID scheme changed refuses every login, as the server does. Before, it said why and then let
+  everybody in.
+- A second connection under the name of a player already online is turned away at the proxy's world, and the
+  online player's login is left alone, also when that connection leaves. Before, a connection the proxy turned
+  away ended the session of the player online under the same id.
+
 ## 0.0.6
 
 - A shipped language line that a release corrects now reaches a server that has the old file. A copy of each
