@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.6
+
+- A shipped language line that a release corrects now reaches a server that has the old file. A copy of each
+  shipped file is kept under `messages/.defaults/`, and a line still equal to that copy takes the new words. A
+  line the operator changed is kept. On a server and on the proxy.
+- A broadcast about one player is read by every recipient in their own language, not in that player's.
+- Turkish is written in small capitals, as English is. The six letters with no small-capital form keep their
+  own shape.
+- Every page arrow in a window is drawn on every page and does nothing when there is no page to turn to, and
+  no window shows an empty slot. A menu file can still hide an arrow with `has-next`, `has-previous` or
+  `has-page`.
+- The language a player read is let go when the player leaves, so a long-running server no longer keeps one
+  for every player who ever joined.
+
 ## 0.0.5
 
 - A player who has not logged in is sent only the login commands and is suggested nothing else. Another
