@@ -50,12 +50,16 @@ public final class DoorListener {
     private final DoorWords words;
     private final Logger logger;
     private final SecondStep secondStep;
+    private final Function<UUID, Optional<Player>> online;
 
     /**
      * The connections the waiting world settled before their login, by their address and port, which no other
      * connection shares. Their login keeps what the world settled; any other login is settled afresh.
      */
     private final Set<InetSocketAddress> settledEarly = ConcurrentHashMap.newKeySet();
+
+    /** The connections the waiting world turned away as a second one under a name already online. */
+    private final Set<InetSocketAddress> turnedAway = ConcurrentHashMap.newKeySet();
 
     /**
      * @param admission the rules a connection meets before its name is read
@@ -83,6 +87,24 @@ public final class DoorListener {
             DoorWords words,
             Logger logger,
             SecondStep secondStep) {
+        this(door, admission, remember, accounts, sessions, words, logger, secondStep, id -> Optional.empty());
+    }
+
+    /**
+     * @param online the player the proxy holds under an id, so that a connection which leaves ends only its own
+     *     session and never that of another player under the same id
+     */
+    public DoorListener(
+            ProxyDoor door,
+            Admission admission,
+            Remember remember,
+            Function<UUID, Optional<Account>> accounts,
+            ProxySessions sessions,
+            DoorWords words,
+            Logger logger,
+            SecondStep secondStep,
+            Function<UUID, Optional<Player>> online) {
+        this.online = Objects.requireNonNull(online, "online");
         this.door = Objects.requireNonNull(door, "door");
         this.admission = Objects.requireNonNull(admission, "admission");
         this.remember = Objects.requireNonNull(remember, "remember");
@@ -186,6 +208,10 @@ public final class DoorListener {
      */
     void login(LoginEvent event) {
         Player player = event.getPlayer();
+        if (turnedAway.remove(player.getRemoteAddress())) {
+            event.setResult(ResultedEvent.ComponentResult.denied(words.alreadyOnline()));
+            return;
+        }
         Optional<Refusal> refusal =
                 switch (door.arrival(player.getRemoteAddress()).orElse(null)) {
                     case ProxyDoor.Arrival.Usual usual -> {
@@ -249,6 +275,7 @@ public final class DoorListener {
         }
         GameProfile profile = door.profile(player.getGameProfile(), false, remote);
         if (taken.test(profile)) {
+            turnedAway.add(remote);
             return new Early.Taken();
         }
         waitOrResume(profile.getId(), profile.getName(), player, usual);
@@ -280,8 +307,15 @@ public final class DoorListener {
     }
 
     void left(DisconnectEvent event) {
-        settledEarly.remove(event.getPlayer().getRemoteAddress());
-        door.gone(event.getPlayer().getRemoteAddress());
+        Player player = event.getPlayer();
+        settledEarly.remove(player.getRemoteAddress());
+        turnedAway.remove(player.getRemoteAddress());
+        door.gone(player.getRemoteAddress());
+        // Velocity tells every plugin that a second connection it turned away left. The session under the id is the
+        // other player's then, and stays.
+        if (online.apply(player.getUniqueId()).filter(held -> held != player).isPresent()) {
+            return;
+        }
         sessions.forget(event.getPlayer().getUniqueId());
     }
 

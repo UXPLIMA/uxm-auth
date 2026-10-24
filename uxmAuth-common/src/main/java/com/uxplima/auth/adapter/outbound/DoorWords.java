@@ -50,6 +50,11 @@ public final class DoorWords {
         };
     }
 
+    /** Why a second connection under the name of a player already online is turned away. */
+    public Component alreadyOnline() {
+        return messages.render(Audience.empty(), Keys.KICK_ALREADY_ONLINE);
+    }
+
     /** Why a server behind the proxy turned away a player the network could not vouch for. */
     public Component network() {
         return messages.render(Audience.empty(), Keys.KICK_NETWORK_CLAIM);

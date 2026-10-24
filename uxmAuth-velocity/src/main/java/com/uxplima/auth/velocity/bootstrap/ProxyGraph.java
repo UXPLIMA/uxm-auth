@@ -340,7 +340,8 @@ final class ProxyGraph implements AutoCloseable {
                 sessions,
                 new DoorWords(words),
                 logger,
-                steps.secondStep());
+                steps.secondStep(),
+                proxy::getPlayer);
         this.settleEarly = doorListener::settleEarly;
         register(doorListener);
         register(new HoldListener(

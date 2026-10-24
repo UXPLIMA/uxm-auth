@@ -71,6 +71,9 @@ final class DoorListenerTest {
         world.close();
     }
 
+    /** The players the proxy holds, by id. */
+    private final java.util.Map<UUID, Player> online = new java.util.concurrent.ConcurrentHashMap<>();
+
     private DoorListener listener() {
         return new DoorListener(
                 world.door(),
@@ -80,7 +83,8 @@ final class DoorListenerTest {
                 sessions,
                 world.words,
                 logger,
-                world.secondStep);
+                world.secondStep,
+                id -> Optional.ofNullable(online.get(id)));
     }
 
     private PreLoginEvent preLoginOf(String name) {
@@ -363,9 +367,44 @@ final class DoorListenerTest {
 
         assertThat(early).isEqualTo(new DoorListener.Early.Taken());
         assertThat(sessions.loggedIn(steve)).isTrue();
-        // Nothing was settled for this connection, so its own login, should it come, settles it afresh.
-        listener.login(new LoginEvent(arriving(FROM, steve, "Steve"), ""));
-        assertThat(sessions.waitsAtTheProxy(steve)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a connection turned away as a second one is refused at its login, and its leaving ends nothing")
+    void aTurnedAwayConnectionEndsNothing() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        sessions.loggedIn(steve, AuthMethod.PASSWORD);
+        online.put(steve, arriving(new InetSocketAddress(InetAddress.getLoopbackAddress(), 40002), steve, "Steve"));
+        listener.preLogin(preLoginOf("Steve"));
+        Player second = arriving(FROM, steve, "Steve");
+        listener.settleEarly(second, profile -> true);
+
+        LoginEvent login = new LoginEvent(second, "");
+        listener.login(login);
+        listener.left(new DisconnectEvent(second, DisconnectEvent.LoginStatus.CONFLICTING_LOGIN));
+
+        assertThat(login.getResult().isAllowed()).isFalse();
+        assertThat(sessions.loggedIn(steve)).isTrue();
+    }
+
+    @Test
+    @DisplayName(
+            "a connection that leaves while the proxy holds another player under its id leaves that player logged in")
+    void aLeavingStrangerEndsNothing() {
+        DoorListener listener = listener();
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        sessions.loggedIn(steve, AuthMethod.PASSWORD);
+        online.put(steve, arriving(new InetSocketAddress(InetAddress.getLoopbackAddress(), 40002), steve, "Steve"));
+
+        // Velocity turns a second connection away itself and still tells every plugin it left.
+        listener.left(
+                new DisconnectEvent(arriving(FROM, steve, "Steve"), DisconnectEvent.LoginStatus.CONFLICTING_LOGIN));
+
+        assertThat(sessions.loggedIn(steve)).isTrue();
+        listener.left(new DisconnectEvent(online.get(steve), DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN));
+        assertThat(sessions.loggedIn(steve)).isFalse();
     }
 
     @Test
