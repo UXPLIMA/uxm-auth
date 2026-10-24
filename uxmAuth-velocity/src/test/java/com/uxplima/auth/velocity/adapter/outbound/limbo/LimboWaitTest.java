@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
@@ -20,28 +21,25 @@ import java.util.concurrent.TimeUnit;
 import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisit;
 import com.velocitypowered.api.proxy.Player;
-import net.elytrium.limboapi.api.Limbo;
-import net.elytrium.limboapi.api.LimboSessionHandler;
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent;
-import net.elytrium.limboapi.api.world.BuiltInWorldFileType;
-import net.elytrium.limboapi.api.world.player.LimboPlayer;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-/** The glue between LimboAPI and a visit: who is held, what the world does, and when the time runs out. */
+/** The glue between the waiting world and a visit: who is held, what the world does, and when the time runs out. */
 final class LimboWaitTest {
 
     private static final UUID STEVE = UUID.fromString("8667ba71-b85a-4004-af54-457a9734eed7");
     private static final AuthSettings.Timeouts LIMITS =
             new AuthSettings.Timeouts(Duration.ofSeconds(90), Duration.ofSeconds(60), Duration.ofSeconds(5));
 
-    private final Limbo limbo = mock(Limbo.class);
+    private final LimboKit.Room room = mock(LimboKit.Room.class);
     private final Player player = mock(Player.class);
-    private final LimboPlayer inWorld = mock(LimboPlayer.class);
+    private final LimboKit.Inside inWorld = mock(LimboKit.Inside.class);
     private final ScheduledExecutorService loop = mock(ScheduledExecutorService.class);
     private final LimboVisit visit = mock(LimboVisit.class);
     private final ScheduledFuture<?> timer = mock(ScheduledFuture.class);
@@ -50,8 +48,7 @@ final class LimboWaitTest {
 
     LimboWaitTest() {
         when(player.getUniqueId()).thenReturn(STEVE);
-        when(inWorld.getScheduledExecutor()).thenReturn(loop);
-        when(inWorld.getProxyPlayer()).thenReturn(player);
+        when(inWorld.loop()).thenReturn(loop);
         doReturn(timer).when(loop).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
         doReturn(timer).when(loop).scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.class));
         when(visit.said(any())).thenReturn(CompletableFuture.completedFuture(null));
@@ -59,9 +56,10 @@ final class LimboWaitTest {
 
     private LimboWait holding() {
         return new LimboWait(
-                limbo,
-                id -> waits,
-                (who, made) -> {
+                room,
+                who -> waits ? Optional.of(new LimboWait.Waiter(STEVE, new PlayerName("Steve"))) : Optional.empty(),
+                (who, waiter, made) -> {
+                    assertThat(waiter.id()).isEqualTo(STEVE);
                     exit = made;
                     return visit;
                 },
@@ -70,25 +68,25 @@ final class LimboWaitTest {
                 org.slf4j.helpers.NOPLogger.NOP_LOGGER);
     }
 
-    /** The handler a held player is spawned with, once LimboAPI runs the join callback. */
-    private LimboSessionHandler spawned() {
+    /** The guest a held player is spawned with, once LimboAPI runs the join callback. */
+    private LimboKit.Guest spawned() {
         LoginLimboRegisterEvent event = new LoginLimboRegisterEvent(player);
         holding().register(event);
         assertThat(event.getOnJoinCallbacks()).hasSize(1);
         event.getOnJoinCallbacks().poll().run();
-        ArgumentCaptor<LimboSessionHandler> handler = ArgumentCaptor.forClass(LimboSessionHandler.class);
-        verify(limbo).spawnPlayer(eq(player), handler.capture());
-        return handler.getValue();
+        ArgumentCaptor<LimboKit.Guest> guest = ArgumentCaptor.forClass(LimboKit.Guest.class);
+        verify(room).spawn(eq(player), guest.capture());
+        return guest.getValue();
     }
 
     @Test
     @DisplayName("the world file is read by its extension, and a file of no known kind is not read")
     void theWorldFileIsReadByItsExtension() {
-        assertThat(LimboWorld.kind("limbo.schem")).contains(BuiltInWorldFileType.WORLDEDIT_SCHEM);
-        assertThat(LimboWorld.kind("LOBBY.SCHEM")).contains(BuiltInWorldFileType.WORLDEDIT_SCHEM);
-        assertThat(LimboWorld.kind("old.schematic")).contains(BuiltInWorldFileType.SCHEMATIC);
-        assertThat(LimboWorld.kind("room.nbt")).contains(BuiltInWorldFileType.STRUCTURE);
-        assertThat(LimboWorld.kind("notes.txt")).isEmpty();
+        assertThat(WorldFileKind.of("limbo.schem")).contains(WorldFileKind.WORLDEDIT_SCHEM);
+        assertThat(WorldFileKind.of("LOBBY.SCHEM")).contains(WorldFileKind.WORLDEDIT_SCHEM);
+        assertThat(WorldFileKind.of("old.schematic")).contains(WorldFileKind.SCHEMATIC);
+        assertThat(WorldFileKind.of("room.nbt")).contains(WorldFileKind.STRUCTURE);
+        assertThat(WorldFileKind.of("notes.txt")).isEmpty();
     }
 
     @Test
@@ -106,11 +104,11 @@ final class LimboWaitTest {
     @DisplayName(
             "a held player stops falling, is told what to type, and is sent away when the time to register runs out")
     void aHeldPlayerArrivesAndHasATimeLimit() {
-        LimboSessionHandler handler = spawned();
+        LimboKit.Guest guest = spawned();
 
-        handler.onSpawn(limbo, inWorld);
+        guest.arrive(inWorld);
 
-        verify(inWorld).disableFalling();
+        verify(inWorld).stopFalling();
         verify(visit).arrive();
         ArgumentCaptor<Runnable> timeUp = ArgumentCaptor.forClass(Runnable.class);
         verify(loop).schedule(timeUp.capture(), eq(90_000L), eq(TimeUnit.MILLISECONDS));
@@ -124,7 +122,7 @@ final class LimboWaitTest {
     void aRegisteredPlayerHasTheLoginLimit() {
         when(visit.registered()).thenReturn(true);
 
-        spawned().onSpawn(limbo, inWorld);
+        spawned().arrive(inWorld);
 
         verify(loop).schedule(any(Runnable.class), eq(60_000L), eq(TimeUnit.MILLISECONDS));
     }
@@ -132,11 +130,11 @@ final class LimboWaitTest {
     @Test
     @DisplayName("a line the player says reaches the visit, and leaving stops the clocks")
     void chatReachesTheVisitAndLeavingStopsTheClocks() {
-        LimboSessionHandler handler = spawned();
-        handler.onSpawn(limbo, inWorld);
+        LimboKit.Guest guest = spawned();
+        guest.arrive(inWorld);
 
-        handler.onChat("/login hunter22");
-        handler.onDisconnect();
+        guest.said("/login hunter22");
+        guest.left();
 
         verify(visit).said("/login hunter22");
         verify(visit).left();
@@ -146,15 +144,15 @@ final class LimboWaitTest {
     @Test
     @DisplayName("a player let out leaves the world on its own thread, and one sent away is disconnected")
     void theExitActsOnTheWorld() {
-        spawned().onSpawn(limbo, inWorld);
+        spawned().arrive(inWorld);
         LimboVisit.Exit made = java.util.Objects.requireNonNull(exit);
 
         made.release();
-        verify(inWorld, never()).disconnect();
+        verify(inWorld, never()).leave();
         ArgumentCaptor<Runnable> onLoop = ArgumentCaptor.forClass(Runnable.class);
         verify(loop).execute(onLoop.capture());
         onLoop.getValue().run();
-        verify(inWorld).disconnect();
+        verify(inWorld).leave();
 
         made.sendAway(Component.text("bye"));
         verify(player).disconnect(Component.text("bye"));
@@ -165,7 +163,7 @@ final class LimboWaitTest {
     @Test
     @DisplayName("a captcha goes on a map in the hand, drawn pixel for pixel")
     void theCaptchaGoesOnAMap() {
-        spawned().onSpawn(limbo, inWorld);
+        spawned().arrive(inWorld);
         com.uxplima.auth.domain.protection.CaptchaPicture picture =
                 com.uxplima.auth.domain.protection.CaptchaPicture.draw("K7QXR", new java.util.SplittableRandom(2));
 
@@ -173,7 +171,7 @@ final class LimboWaitTest {
 
         ArgumentCaptor<java.awt.image.BufferedImage> image =
                 ArgumentCaptor.forClass(java.awt.image.BufferedImage.class);
-        verify(inWorld).sendImage(image.capture());
+        verify(inWorld).draw(image.capture());
         java.awt.image.BufferedImage expected = com.uxplima.auth.adapter.outbound.CaptchaImage.of(picture);
         assertThat(image.getValue().getRGB(0, 0, 128, 128, null, 0, 128))
                 .isEqualTo(expected.getRGB(0, 0, 128, 128, null, 0, 128));

@@ -1,62 +1,47 @@
-package com.uxplima.auth.velocity.adapter.outbound.limbo;
+package com.uxplima.auth.velocity.adapter.outbound.limbo.two;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ScheduledExecutorService;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
+import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboKit;
+import com.uxplima.auth.velocity.adapter.outbound.limbo.WorldFileKind;
 import com.velocitypowered.api.command.CommandMeta;
 import net.elytrium.limboapi.api.Limbo;
 import net.elytrium.limboapi.api.LimboFactory;
+import net.elytrium.limboapi.api.LimboSessionHandler;
 import net.elytrium.limboapi.api.world.BuiltInWorldFileType;
 import net.elytrium.limboapi.api.world.VirtualWorld;
 import net.elytrium.limboapi.api.world.chunk.Dimension;
 import net.elytrium.limboapi.api.world.chunk.block.VirtualBlock;
 import net.elytrium.limboapi.api.world.player.GameMode;
+import net.elytrium.limboapi.api.world.player.LimboPlayer;
 import org.slf4j.Logger;
 
-/**
- * The world a waiting player stands in: the operator's schematic where it was saved, or a small platform under the
- * spawn when there is none. Nobody can break or place a block in it.
- */
-public final class LimboWorld {
+/** The waiting world on LimboAPI 2. Nobody can break or place a block in it. */
+public final class LimboTwo implements LimboKit {
 
     private static final String NAME = "uxmAuth";
     private static final int PLATFORM = 2;
 
-    private LimboWorld() {}
-
-    /** The kind of world file this name is, by its extension. */
-    public static Optional<BuiltInWorldFileType> kind(String file) {
-        String name = Objects.requireNonNull(file, "file").toLowerCase(Locale.ROOT);
-        if (name.endsWith(".schem")) {
-            return Optional.of(BuiltInWorldFileType.WORLDEDIT_SCHEM);
-        }
-        if (name.endsWith(".schematic")) {
-            return Optional.of(BuiltInWorldFileType.SCHEMATIC);
-        }
-        if (name.endsWith(".nbt")) {
-            return Optional.of(BuiltInWorldFileType.STRUCTURE);
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * The waiting world, with the words for /login and /register known to the client so it sends them.
-     *
-     * @param factory the LimboAPI plugin, as the proxy hands it out
-     */
-    public static Limbo open(
+    @Override
+    public Room open(
             Object factory,
             Path folder,
             AuthSettings.Network settings,
             Collection<CommandMeta> commands,
             Logger logger) {
         LimboFactory limbos = (LimboFactory) Objects.requireNonNull(factory, "factory");
+        Objects.requireNonNull(folder, "folder");
+        Objects.requireNonNull(settings, "settings");
+        Objects.requireNonNull(commands, "commands");
+        Objects.requireNonNull(logger, "logger");
         AuthSettings.Spot spawn = settings.limboSpawn();
         VirtualWorld world = limbos.createVirtualWorld(
                 Dimension.OVERWORLD, spawn.x(), spawn.y(), spawn.z(), spawn.yaw(), spawn.pitch());
@@ -67,20 +52,21 @@ public final class LimboWorld {
         for (CommandMeta command : commands) {
             limbo.registerCommand(command);
         }
-        return limbo;
+        return (player, guest) -> limbo.spawnPlayer(player, new Stay(guest));
     }
 
     private static boolean pasted(LimboFactory limbos, VirtualWorld world, Path file, Logger logger) {
         if (!Files.isRegularFile(file)) {
             return false;
         }
-        Optional<BuiltInWorldFileType> kind = kind(file.getFileName().toString());
+        Optional<WorldFileKind> kind = WorldFileKind.of(file.getFileName().toString());
         if (kind.isEmpty()) {
             logger.warn("{} is not a .schem, .schematic or .nbt file; the waiting world is a platform.", file);
             return false;
         }
         try {
-            limbos.openWorldFile(kind.get(), file).toWorld(limbos, world, 0, 0, 0);
+            limbos.openWorldFile(BuiltInWorldFileType.valueOf(kind.get().name()), file)
+                    .toWorld(limbos, world, 0, 0, 0);
             return true;
         } catch (IOException | RuntimeException unreadable) {
             logger.warn("Cannot read {}; the waiting world is a platform.", file, unreadable);
@@ -97,6 +83,48 @@ public final class LimboWorld {
             for (int dz = -PLATFORM; dz <= PLATFORM; dz++) {
                 world.setBlock(x + dx, y, z + dz, stone);
             }
+        }
+    }
+
+    /** Hands what LimboAPI says of one player to the guest. */
+    private record Stay(Guest guest) implements LimboSessionHandler {
+
+        @Override
+        public void onSpawn(Limbo server, LimboPlayer inWorld) {
+            guest.arrive(new InWorld(inWorld));
+        }
+
+        @Override
+        public void onChat(String line) {
+            guest.said(line);
+        }
+
+        @Override
+        public void onDisconnect() {
+            guest.left();
+        }
+    }
+
+    private record InWorld(LimboPlayer player) implements Inside {
+
+        @Override
+        public void stopFalling() {
+            player.disableFalling();
+        }
+
+        @Override
+        public ScheduledExecutorService loop() {
+            return player.getScheduledExecutor();
+        }
+
+        @Override
+        public void leave() {
+            player.disconnect();
+        }
+
+        @Override
+        public void draw(BufferedImage picture) {
+            player.sendImage(picture);
         }
     }
 }

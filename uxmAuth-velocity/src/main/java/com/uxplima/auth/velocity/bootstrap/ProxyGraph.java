@@ -12,9 +12,11 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.random.RandomGenerator;
 
+import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.DoorWords;
 import com.uxplima.auth.adapter.outbound.LocalEvents;
 import com.uxplima.auth.adapter.outbound.NetworkBulletins;
@@ -82,6 +84,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
+import com.velocitypowered.api.util.GameProfile;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
@@ -98,6 +101,9 @@ final class ProxyGraph implements AutoCloseable {
     private final Path folder;
     private final HttpClient web = HttpClient.newHttpClient();
     private final WaitingWorld waiting;
+    /** Who a player waits as, when LimboAPI asks before the proxy's login events; set once the door listens. */
+    private Function<Player, Optional<GameProfile>> settleEarly = player -> Optional.empty();
+
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;
     private @Nullable ScheduledTask countryTask;
@@ -184,6 +190,7 @@ final class ProxyGraph implements AutoCloseable {
                 accounts,
                 words,
                 sessions,
+                settleEarly,
                 guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
         logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
     }
@@ -323,7 +330,7 @@ final class ProxyGraph implements AutoCloseable {
         });
         Supplier<Optional<Claims>> claims = claims(settings, steps.secret());
         RouteListener routes = routes(sessions, settings, lastServers);
-        register(new DoorListener(
+        DoorListener doorListener = new DoorListener(
                 door,
                 admission,
                 remember,
@@ -331,12 +338,15 @@ final class ProxyGraph implements AutoCloseable {
                 sessions,
                 new DoorWords(words),
                 logger,
-                steps.secondStep()));
+                steps.secondStep());
+        this.settleEarly = doorListener::settleEarly;
+        register(doorListener);
         register(new HoldListener(
                 sessions,
                 proxy.getCommandManager(),
                 () -> settings.current().network().allowedCommands(),
                 routes::waitingRoom,
+                () -> settings.current().network().waitIn() == AuthSettings.WaitIn.LIMBO,
                 words));
         register(routes);
         register(new ClaimWriter(sessions, claims, clock));

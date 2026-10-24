@@ -227,19 +227,19 @@ final class ProxyModuleTest {
     }
 
     @Test
-    @DisplayName("a proxy asked for the waiting world without LimboAPI says so once, and players wait on a server")
-    void withoutLimboApiThePlayersWaitOnAServer(@TempDir Path folder) throws IOException {
+    @DisplayName("a proxy asked for the waiting world without LimboAPI does not start, and says why")
+    void withoutLimboApiTheStartStops(@TempDir Path folder) throws IOException {
         PluginManager plugins = mock(PluginManager.class);
         when(proxy.getPluginManager()).thenReturn(plugins);
         when(plugins.getPlugin("limboapi")).thenReturn(Optional.empty());
         ProxyModule module = askingForTheWorld(folder);
 
-        module.wire();
-        module.shutdown();
+        // Waiting on a server instead would let a player into a server that runs no uxmAuth of its own.
+        assertThat(module.wire()).isFalse();
 
-        verify(logger).warn(contains("LimboAPI is not on this proxy"));
+        verify(logger).error(contains("LimboAPI is not on this proxy"));
         verify(events, never()).register(eq(plugin), any(LimboWait.class));
-        assertThat(folder.resolve("commands.conf")).isRegularFile();
+        assertThat(module.database()).isNull();
     }
 
     @Test
@@ -274,8 +274,8 @@ final class ProxyModuleTest {
     }
 
     @Test
-    @DisplayName("a LimboAPI this plugin cannot speak to leaves the players on a server, and the proxy starts")
-    void aForeignLimboApiLeavesThePlayersOnAServer(@TempDir Path folder) throws IOException {
+    @DisplayName("a LimboAPI this plugin cannot speak to stops the start, and says which releases it speaks to")
+    void aForeignLimboApiStopsTheStart(@TempDir Path folder) throws IOException {
         PluginContainer container = mock(PluginContainer.class);
         doReturn(Optional.of(new Object())).when(container).getInstance();
         PluginManager plugins = mock(PluginManager.class);
@@ -286,11 +286,11 @@ final class ProxyModuleTest {
         when(commands.metaBuilder(anyString())).thenReturn(mock(CommandMeta.Builder.class, RETURNS_SELF));
         ProxyModule module = askingForTheWorld(folder);
 
-        assertThat(module.wire()).isTrue();
-        module.shutdown();
+        assertThat(module.wire()).isFalse();
 
         verify(events, never()).register(eq(plugin), any(LimboWait.class));
-        verify(logger).warn(contains("not one this uxmAuth speaks to"), any(Throwable.class));
+        verify(logger).error(contains("uxmAuth speaks to LimboAPI 1.1 and LimboAPI 2"));
+        assertThat(module.database()).isNull();
     }
 
     @Test

@@ -43,6 +43,61 @@ dependencies {
     testImplementation(libs.archunit.junit)
 }
 
+// LimboAPI 2 moved its world, chunk, file and player types into new packages, so a class that names them links
+// against one generation only. Each generation's kit is its own source set, compiled against its own release, and
+// the jar carries both; LimboKits loads the one the proxy has. The kit for LimboAPI 1.1 must never see LimboAPI 2,
+// so its classpath is built here rather than taken from the main one.
+val mainSet = sourceSets.main.get()
+val limboTwo =
+    sourceSets.create("limboTwo") {
+        compileClasspath += mainSet.output + mainSet.compileClasspath
+    }
+val limboOne =
+    sourceSets.create("limboOne") {
+        compileClasspath += mainSet.output
+    }
+val limboOneTest =
+    sourceSets.create("limboOneTest") {
+        compileClasspath += mainSet.output + limboOne.output
+        runtimeClasspath += mainSet.output + limboOne.output
+    }
+configurations["limboOneTestImplementation"].extendsFrom(configurations.implementation.get())
+
+dependencies {
+    "limboOneCompileOnly"(project(":uxmAuth-common"))
+    "limboOneCompileOnly"(libs.velocity.api)
+    "limboOneCompileOnly"(libs.limboapi.one.api) { isTransitive = false }
+    "limboOneCompileOnly"(libs.adventure.nbt)
+    "limboOneCompileOnly"(libs.jspecify)
+    "limboOneCompileOnly"(libs.errorprone.annos)
+
+    "limboOneTestImplementation"(libs.velocity.api)
+    "limboOneTestImplementation"(libs.limboapi.one.api) { isTransitive = false }
+    "limboOneTestImplementation"(libs.adventure.nbt)
+    "limboOneTestImplementation"(libs.fastutil)
+    "limboOneTestImplementation"(platform(libs.junit.bom))
+    "limboOneTestImplementation"(libs.bundles.testing)
+    "limboOneTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+    "limboOneTestCompileOnly"(libs.jspecify)
+    "limboOneTestCompileOnly"(libs.errorprone.annos)
+
+    testImplementation(limboTwo.output)
+}
+
+val limboOneTests =
+    tasks.register<Test>("limboOneTest") {
+        description = "The waiting world against LimboAPI 1.1, on a classpath without LimboAPI 2."
+        group = "verification"
+        testClassesDirs = limboOneTest.output.classesDirs
+        classpath = limboOneTest.runtimeClasspath
+    }
+
+tasks.check { dependsOn(limboOneTests) }
+
+tasks.jar {
+    from(limboOne.output, limboTwo.output)
+}
+
 tasks.processResources {
     filteringCharset = "UTF-8"
     val pluginVersion = version.toString()
@@ -57,6 +112,7 @@ tasks.processResources {
 
 tasks.shadowJar {
     archiveClassifier.set("")
+    from(limboOne.output, limboTwo.output)
     mergeServiceFiles()
 
     relocate("com.uxplima.uxmlib", "com.uxplima.auth.libs.uxmlib")
@@ -134,6 +190,10 @@ val requiredJarEntries =
         "com/uxplima/auth/libs/zxing/" to "ZXing is missing, and the second factor's QR code needs it.",
         "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
         "com/uxplima/auth/velocity/bootstrap/" to "The plugin's own classes are missing.",
+        "com/uxplima/auth/velocity/adapter/outbound/limbo/one/LimboOne.class" to
+            "The waiting world for LimboAPI 1.1 is missing, and it is the LimboAPI most proxies run.",
+        "com/uxplima/auth/velocity/adapter/outbound/limbo/two/LimboTwo.class" to
+            "The waiting world for LimboAPI 2 is missing.",
         "com/uxplima/auth/api/AuthApi.class" to "The API is missing, or relocated where no other plugin finds it.",
         "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",
         "org/mariadb/jdbc/Driver.class" to "The MariaDB driver is missing, and it opens MySQL and MariaDB.",

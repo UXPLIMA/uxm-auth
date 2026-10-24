@@ -3,7 +3,9 @@ package com.uxplima.auth.velocity.adapter.inbound;
 import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import com.uxplima.auth.adapter.outbound.DoorWords;
@@ -22,6 +24,7 @@ import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.util.GameProfile;
 import org.slf4j.Logger;
 
 /**
@@ -46,6 +49,12 @@ public final class DoorListener {
     private final DoorWords words;
     private final Logger logger;
     private final SecondStep secondStep;
+
+    /**
+     * The connections the waiting world settled before their login, by their address and port, which no other
+     * connection shares. Their login keeps what the world settled; any other login is settled afresh.
+     */
+    private final Set<InetSocketAddress> settledEarly = ConcurrentHashMap.newKeySet();
 
     /**
      * @param admission the rules a connection meets before its name is read
@@ -179,12 +188,14 @@ public final class DoorListener {
         Optional<Refusal> refusal =
                 switch (door.arrival(player.getRemoteAddress()).orElse(null)) {
                     case ProxyDoor.Arrival.Usual usual -> {
-                        waitOrResume(player, usual);
+                        if (!settledEarly.remove(player.getRemoteAddress())) {
+                            waitOrResume(player.getUniqueId(), player.getUsername(), player, usual);
+                        }
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Premium premium -> {
                         passed(
-                                player,
+                                player.getUniqueId(),
                                 premium.state().account(),
                                 premium.state().method());
                         yield Optional.empty();
@@ -201,30 +212,49 @@ public final class DoorListener {
                 why -> event.setResult(ResultedEvent.ComponentResult.denied(words.refusal(why, Optional.empty()))));
     }
 
+    /**
+     * LimboAPI asks whether to hold a player before the proxy's profile and login events reach any other plugin, so
+     * the door settles a player it let through offline here, under the id and the name the profile will carry. The
+     * login after keeps what was settled, a login in the world among it.
+     *
+     * @return the profile the player waits under, or empty when they do not wait at the proxy
+     */
+    public Optional<GameProfile> settleEarly(Player player) {
+        InetSocketAddress remote = Objects.requireNonNull(player, "player").getRemoteAddress();
+        if (!(door.arrival(remote).orElse(null) instanceof ProxyDoor.Arrival.Usual usual)) {
+            return Optional.empty();
+        }
+        GameProfile profile = door.profile(player.getGameProfile(), false, remote);
+        waitOrResume(profile.getId(), profile.getName(), player, usual);
+        settledEarly.add(remote);
+        return sessions.waitsAtTheProxy(profile.getId()) ? Optional.of(profile) : Optional.empty();
+    }
+
     /** A player with a password waits for it, unless a session from this address lets them in. */
-    private void waitOrResume(Player player, ProxyDoor.Arrival.Usual usual) {
-        sessions.waiting(player.getUniqueId(), new Claim.Waiting(usual.unverified(), usual.explain(), usual.marked()));
+    private void waitOrResume(UUID id, String name, Player player, ProxyDoor.Arrival.Usual usual) {
+        sessions.waiting(id, new Claim.Waiting(usual.unverified(), usual.explain(), usual.marked()));
         String host =
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse("");
         // Only the account this very name holds, with a password, is let in by a session kept under its id.
-        accounts.apply(player.getUniqueId())
-                .filter(account -> account.name().value().equals(player.getUsername()))
+        accounts.apply(id)
+                .filter(account -> account.name().value().equals(name))
                 .filter(account -> account.password() != null)
                 .filter(account -> remember.resumes(
                         account.id(), player.getRemoteAddress().getAddress().getHostAddress(), host))
-                .ifPresent(account -> passed(player, account, AuthMethod.SESSION));
+                .ifPresent(account -> passed(id, account, AuthMethod.SESSION));
     }
 
     /** A way in passed: the player is logged in, or past the password only, owing the app's code. */
-    private void passed(Player player, Account account, AuthMethod method) {
+    private void passed(UUID id, Account account, AuthMethod method) {
         if (secondStep.asks(account, method)) {
-            sessions.code(player.getUniqueId(), method);
+            sessions.code(id, method);
         } else {
-            sessions.loggedIn(player.getUniqueId(), method);
+            sessions.loggedIn(id, method);
         }
     }
 
     void left(DisconnectEvent event) {
+        settledEarly.remove(event.getPlayer().getRemoteAddress());
         door.gone(event.getPlayer().getRemoteAddress());
         sessions.forget(event.getPlayer().getUniqueId());
     }

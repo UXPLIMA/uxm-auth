@@ -3,6 +3,7 @@ package com.uxplima.auth.velocity.adapter.inbound;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -30,22 +31,26 @@ public final class HoldListener {
     private final CommandManager commands;
     private final Supplier<List<String>> allowed;
     private final Predicate<String> waitingRooms;
+    private final BooleanSupplier inTheWorld;
     private final Messages messages;
 
     /**
      * @param allowed the proxy commands a waiting player may run, without the slash
      * @param waitingRooms whether a server, by name, is one a waiting player may be sent to
+     * @param inTheWorld whether a waiting player waits in the proxy's own world, so that no server is theirs yet
      */
     public HoldListener(
             ProxySessions sessions,
             CommandManager commands,
             Supplier<List<String>> allowed,
             Predicate<String> waitingRooms,
+            BooleanSupplier inTheWorld,
             Messages messages) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.commands = Objects.requireNonNull(commands, "commands");
         this.allowed = Objects.requireNonNull(allowed, "allowed");
         this.waitingRooms = Objects.requireNonNull(waitingRooms, "waitingRooms");
+        this.inTheWorld = Objects.requireNonNull(inTheWorld, "inTheWorld");
         this.messages = Objects.requireNonNull(messages, "messages");
     }
 
@@ -73,6 +78,13 @@ public final class HoldListener {
 
     void switched(ServerPreConnectEvent event) {
         Player player = event.getPlayer();
+        if (event.getPreviousServer() == null
+                && inTheWorld.getAsBoolean()
+                && sessions.waitsAtTheProxy(player.getUniqueId())) {
+            // Out of the world without logging in: a server behind it may run no uxmAuth to hold the player itself.
+            event.setResult(ServerPreConnectEvent.ServerResult.denied());
+            return;
+        }
         if (!event.getResult().isAllowed()
                 || sessions.loggedIn(player.getUniqueId())
                 || event.getPreviousServer() == null) {

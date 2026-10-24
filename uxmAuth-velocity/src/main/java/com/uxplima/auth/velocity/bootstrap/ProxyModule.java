@@ -64,8 +64,9 @@ final class ProxyModule {
     /**
      * Build the graph and register what the proxy must see.
      *
-     * @return whether the proxy half started; a database recorded under another UUID scheme stops it, with the
-     *     reason in the console, because every player would come back to an empty inventory
+     * @return whether the proxy half started; a database recorded under another UUID scheme stops it, because every
+     *     player would come back to an empty inventory, and so does a waiting world asked for and not built, because
+     *     a waiting player would go on to a server; the reason is in the console
      */
     boolean wire() {
         extractDefaults();
@@ -94,9 +95,28 @@ final class ProxyModule {
         this.messages = words;
         ProxyGraph network = new ProxyGraph(plugin, proxy, logger, folder);
         this.graph = network;
-        network.open(settings, opened, words);
+        if (!opened(network, settings, opened, words)) {
+            return false;
+        }
         proxy.getEventManager().register(plugin, ProxyShutdownEvent.class, this::onShutdown);
         return true;
+    }
+
+    /** Open the graph. A waiting world asked for and not built stops the start, with the reason in the console. */
+    private boolean opened(ProxyGraph network, PluginSettings settings, Database database, Messages words) {
+        try {
+            network.open(settings, database, words);
+            return true;
+        } catch (NoWaitingWorld unbuilt) {
+            shutdown();
+            Throwable cause = unbuilt.getCause();
+            if (cause == null) {
+                logger.error(unbuilt.getMessage());
+            } else {
+                logger.error(unbuilt.getMessage(), cause);
+            }
+            return false;
+        }
     }
 
     void onShutdown(ProxyShutdownEvent event) {

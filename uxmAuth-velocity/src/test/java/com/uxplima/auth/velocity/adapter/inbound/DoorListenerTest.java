@@ -308,6 +308,64 @@ final class DoorListenerTest {
         assertThat(sessions.loggedIn(ProxyWorld.MOJANG)).isFalse();
     }
 
+    /** A player as LimboAPI hands it out: before the proxy's profile and login events reach any other plugin. */
+    private static Player arriving(InetSocketAddress from, UUID id, String name) {
+        Player player = mock(Player.class);
+        when(player.getRemoteAddress()).thenReturn(from);
+        when(player.getUniqueId()).thenReturn(id);
+        when(player.getUsername()).thenReturn(name);
+        when(player.getGameProfile()).thenReturn(new GameProfile(id, name, List.of()));
+        return player;
+    }
+
+    @Test
+    @DisplayName("LimboAPI asks before the profile and the login, so the door settles a cracked player then")
+    void theDoorSettlesAPlayerBeforeTheLoginEvents() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Steve"));
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+
+        Optional<GameProfile> held = listener.settleEarly(arriving(FROM, steve, "Steve"));
+
+        assertThat(held).map(GameProfile::getId).contains(steve);
+        assertThat(sessions.waitsAtTheProxy(steve)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a connection another plugin decided is not held, and is settled at its login as before")
+    void anUntouchedConnectionIsNotHeld() {
+        DoorListener listener = listener();
+        PreLoginEvent bedrock = preLoginOf("Notch");
+        bedrock.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+        listener.preLogin(bedrock);
+
+        assertThat(listener.settleEarly(arriving(FROM, ProxyWorld.MOJANG, "Notch")))
+                .isEmpty();
+        assertThat(sessions.waitsAtTheProxy(ProxyWorld.MOJANG)).isFalse();
+    }
+
+    @Test
+    @DisplayName("the login after a login in the world keeps the player logged in, for that connection only")
+    void theLoginKeepsWhatTheWorldSettled() {
+        world.web = new com.uxplima.auth.domain.premium.PremiumAnswer.Cracked();
+        DoorListener listener = listener();
+        listener.preLogin(preLoginOf("Steve"));
+        UUID steve = UuidScheme.offline(new PlayerName("Steve"));
+        Player player = arriving(FROM, steve, "Steve");
+        listener.settleEarly(player);
+        sessions.loggedIn(steve, AuthMethod.PASSWORD);
+
+        listener.profile(new GameProfileRequestEvent(connection, new GameProfile(steve, "Steve", List.of()), false));
+        listener.login(new LoginEvent(player, ""));
+        assertThat(sessions.loggedIn(steve)).isTrue();
+
+        // A second login of the same connection settles it again: only the first after the world is spared.
+        listener.login(new LoginEvent(player, ""));
+        assertThat(sessions.loggedIn(steve)).isFalse();
+        assertThat(sessions.waitsAtTheProxy(steve)).isTrue();
+    }
+
     @Test
     @DisplayName("a name with a control character reaches the console without it")
     void aNameIsCleanedForTheConsole() {

@@ -55,8 +55,10 @@ final class HoldListenerTest {
         world.close();
     }
 
+    private boolean inTheWorld;
+
     private HoldListener listener() {
-        return new HoldListener(sessions, commands, () -> allowed, rooms::contains, world.messages);
+        return new HoldListener(sessions, commands, () -> allowed, rooms::contains, () -> inTheWorld, world.messages);
     }
 
     private CommandExecuteEvent typed(CommandSource source, String line) {
@@ -130,5 +132,33 @@ final class HoldListenerTest {
         assertThat(switching("survival", server("lobby")).getResult().isAllowed())
                 .isTrue();
         verify(steve, never()).sendMessage(any(Component.class));
+    }
+
+    @Test
+    @DisplayName("with the proxy's own world, a player who has not logged in reaches not even the first server")
+    void inTheWorldTheFirstServerWaitsForTheLogin() {
+        inTheWorld = true;
+        ServerPreConnectEvent first = new ServerPreConnectEvent(steve, server("lobby"), null);
+
+        listener().switched(first);
+
+        // The world holds them until they log in; a server behind it may run no uxmAuth to hold them itself.
+        assertThat(first.getResult().isAllowed()).isFalse();
+        sessions.loggedIn(STEVE, AuthMethod.PASSWORD);
+        ServerPreConnectEvent after = new ServerPreConnectEvent(steve, server("lobby"), null);
+        listener().switched(after);
+        assertThat(after.getResult().isAllowed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("with the proxy's own world, a player another plugin decided still reaches the first server")
+    void inTheWorldAnUntouchedPlayerGoesOn() {
+        inTheWorld = true;
+        sessions.untouched(STEVE);
+        ServerPreConnectEvent first = new ServerPreConnectEvent(steve, server("lobby"), null);
+
+        listener().switched(first);
+
+        assertThat(first.getResult().isAllowed()).isTrue();
     }
 }

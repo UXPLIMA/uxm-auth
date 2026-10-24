@@ -36,11 +36,16 @@ public final class AuthVelocityPlugin {
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         Objects.requireNonNull(event, "event");
+        boolean started;
         try {
-            new ProxyModule(this, proxy, logger, dataDirectory).wire();
+            // A start the module refused, over a changed UUID scheme or a waiting world it cannot build, has said why.
+            started = new ProxyModule(this, proxy, logger, dataDirectory).wire();
         } catch (RuntimeException failed) {
-            // A start that failed shuts the door rather than leaving the network open to anybody under any name.
             logger.error("uxmAuth could not start: {}", failed.getMessage(), failed);
+            started = false;
+        }
+        if (!started) {
+            // A start that failed shuts the door rather than leaving the network open to anybody under any name.
             proxy.getEventManager().register(this, new LockedProxyDoor());
             logger.error("Every login is refused until uxmAuth starts. Fix the cause above, then restart.");
         }

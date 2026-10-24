@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
@@ -46,19 +47,22 @@ import com.uxplima.auth.velocity.adapter.inbound.LimboRecovery;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisit;
 import com.uxplima.auth.velocity.adapter.inbound.LimboVisits;
 import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
+import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboKit;
+import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboKits;
 import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboWait;
-import com.uxplima.auth.velocity.adapter.outbound.limbo.LimboWorld;
 import com.uxplima.uxmlib.text.message.Messages;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.util.GameProfile;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
  * The proxy's waiting world, when the operator asks for it and LimboAPI is there to build it. LimboAPI's classes
- * are reached only past the check that the plugin is loaded, so a proxy without it never links them.
+ * are reached only past the check that the plugin is loaded, so a proxy without it never links them. A proxy asked
+ * for the world that cannot build it does not start, so it never sends a waiting player on to a server.
  */
 final class WaitingWorld implements AutoCloseable {
 
@@ -79,45 +83,62 @@ final class WaitingWorld implements AutoCloseable {
         this.folder = Objects.requireNonNull(folder, "folder");
     }
 
-    /** Hold every player who waits for the proxy's password in the world, when the settings ask for it. */
+    /**
+     * Hold every player who waits for the proxy's password in the world, when the settings ask for it.
+     *
+     * @param door who a player waits as, settled by the door when LimboAPI asks, before the proxy's login events
+     * @throws NoWaitingWorld when the settings ask for the world and the proxy cannot build it
+     */
     void open(
-            PluginSettings settings, AccountRepository accounts, Messages words, ProxySessions network, Guards guards) {
+            PluginSettings settings,
+            AccountRepository accounts,
+            Messages words,
+            ProxySessions network,
+            Function<Player, Optional<GameProfile>> door,
+            Guards guards) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
         }
         Optional<?> limboApi = proxy.getPluginManager().getPlugin(LIMBO_API).flatMap(PluginContainer::getInstance);
         if (limboApi.isEmpty()) {
-            logger.warn("network.wait-in is limbo, but LimboAPI is not on this proxy. Players who must log in wait"
-                    + " on a server instead: on an auth server when network.auth-servers names one.");
-            return;
+            throw new NoWaitingWorld(
+                    "network.wait-in is limbo, but LimboAPI is not on this proxy. Install LimboAPI, or set"
+                            + " network.wait-in = server and put uxmAuth on every server behind the proxy.",
+                    null);
+        }
+        Optional<LimboKit> kit = LimboKits.of(limboApi.get());
+        if (kit.isEmpty()) {
+            throw new NoWaitingWorld(
+                    "The LimboAPI on this proxy is a release uxmAuth does not know. uxmAuth speaks to LimboAPI 1.1"
+                            + " and LimboAPI 2.",
+                    null);
         }
         try {
-            hold(limboApi.get(), settings, accounts, words, network, guards);
+            hold(kit.get(), limboApi.get(), settings, accounts, words, network, door, guards);
         } catch (RuntimeException | LinkageError foreign) {
-            // A LimboAPI of another major version names its types elsewhere; the proxy starts without the world.
             close();
-            logger.warn(
-                    "The LimboAPI on this proxy is not one this uxmAuth speaks to: it needs LimboAPI 2, made for"
-                            + " Velocity 4. Players who must log in wait on a server instead.",
-                    foreign);
+            throw new NoWaitingWorld("LimboAPI could not build the waiting world: " + foreign, foreign);
         }
     }
 
     private void hold(
+            LimboKit kit,
             Object limboApi,
             PluginSettings settings,
             AccountRepository accounts,
             Messages words,
             ProxySessions network,
+            Function<Player, Optional<GameProfile>> door,
             Guards guards) {
         LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
         LimboVisits reach = new LimboVisits((id, address) -> forced(id, address));
         guards.bulletins().listen(reach);
         LimboWait wait = new LimboWait(
-                LimboWorld.open(limboApi, folder, settings.current().network(), metas(labels), logger),
-                network::waitsAtTheProxy,
-                (player, exit) -> visit(passwords, network, guards.remember(), player, exit, reach),
+                kit.open(limboApi, folder, settings.current().network(), metas(labels), logger),
+                player -> door.apply(player)
+                        .map(profile -> new LimboWait.Waiter(profile.getId(), new PlayerName(profile.getName()))),
+                (player, waiter, exit) -> visit(passwords, network, guards.remember(), player, waiter, exit, reach),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
@@ -264,14 +285,15 @@ final class WaitingWorld implements AutoCloseable {
             ProxySessions network,
             Remember remember,
             Player player,
+            LimboWait.Waiter waiter,
             LimboVisit.Exit exit,
             LimboVisit.Reach reach) {
         return new LimboVisit(
                 passwords,
                 network,
                 remember,
-                player.getUniqueId(),
-                new PlayerName(player.getUsername()),
+                waiter.id(),
+                waiter.name(),
                 player.getRemoteAddress().getAddress().getHostAddress(),
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(""),
                 player,

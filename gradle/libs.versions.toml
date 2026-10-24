@@ -32,6 +32,8 @@ zxing          = "3.5.4"                   # com.google.zxing:core (Maven Centra
 placeholderapi = "2.11.6"                  # me.clip:placeholderapi (extendedclip repo, not Maven Central)
 # LimboAPI publishes no release for Velocity 4 yet; this is the build its 2.0.0 snapshot pointed at.
 limboapi       = "2.0.0-20251118.093310-4" # net.elytrium.limboapi:api (maven.elytrium.net, verified 2026-10-18)
+# LimboAPI 1.1, the release on Modrinth, which runs on Velocity 4 too; 2.0 moved its world types. Both are spoken to.
+limboapi-one   = "1.1.27"                  # net.elytrium.limboapi:api (maven.elytrium.net, verified 2026-10-24)
 
 # tests
 fastutil       = "8.5.18"                  # it.unimi.dsi:fastutil, which LimboAPI's types name and the proxy ships
@@ -77,6 +79,7 @@ uxmlib-redis      = { module = "com.uxplima.uxmlib:uxmlib-redis",               
 uxmlib-menu       = { module = "com.uxplima.uxmlib:uxmlib-menu",                 version.ref = "uxmlib" }
 velocity-api      = { module = "com.velocitypowered:velocity-api",               version.ref = "velocity" }
 limboapi-api      = { module = "net.elytrium.limboapi:api",                      version.ref = "limboapi" }
+limboapi-one-api  = { module = "net.elytrium.limboapi:api",                      version.ref = "limboapi-one" }
 adventure-api     = { module = "net.kyori:adventure-api",                        version.ref = "adventure" }
 adventure-mini    = { module = "net.kyori:adventure-text-minimessage",           version.ref = "adventure" }
 adventure-plain   = { module = "net.kyori:adventure-text-serializer-plain",      version.ref = "adventure" }
