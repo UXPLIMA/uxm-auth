@@ -6,8 +6,7 @@ import com.uxplima.uxmlib.text.message.MessageKey;
  * Every string that a player can see. A key carries its own English default, so the plugin can never ship a
  * message with no text, and an operator who deletes a line still gets something readable.
  *
- * <p>No user-facing text appears anywhere else. A literal in a command or a listener is a defect, and
- * {@code NoInlineTextTest} fails the build over one.
+ * <p>No user-facing text appears anywhere else. A literal in a command or a listener is a defect.
  */
 public enum Keys implements MessageKey {
     USAGE("admin.usage", "<tag:'AUTH'> <body>Add <value>help<body> after this command to see everything it does."),
