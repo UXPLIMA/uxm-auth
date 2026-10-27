@@ -41,7 +41,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The dialog before the world. A client that waits is shown its screen while it is still connecting, and the
- * thread Paper gives this event is held until the client answers, leaves, or runs out of time. See ADR 0005.
+ * thread Paper gives this event is held until the client answers, leaves, or runs out of time.
  *
  * <p>The wait always ends: a close completes it at once and the timeout from config.conf completes it at the
  * latest. A client too old to draw a dialog is not held here; the world holds it, with the commands.

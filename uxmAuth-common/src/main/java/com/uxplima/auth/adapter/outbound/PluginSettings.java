@@ -274,7 +274,7 @@ public final class PluginSettings {
      *
      * <p>The words and the palette are read by the module rather than here, and they have to move at the same
      * moment as the numbers: a reload that repaints half of what a player sees is worse than one that repaints
-     * none. See UI-STYLE.md section 14.2.
+     * none.
      */
     public void afterReload(Runnable action) {
         afterReload.add(Objects.requireNonNull(action, "action"));
@@ -346,7 +346,6 @@ public final class PluginSettings {
      * How a player's language is answered.
      *
      * <p>The three keys are the same in every plugin of ours, and uxmLib holds the order they are read in.
-     * See {@code uxm-briefs/repos/uxm-auth/docs/04-i18n.md}.
      */
     private static LanguageSettings language(HoconConfig config) {
         return new LanguageSettings(
