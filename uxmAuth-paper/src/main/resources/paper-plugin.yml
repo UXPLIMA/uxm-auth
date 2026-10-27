@@ -1,7 +1,7 @@
 name: uxmAuth
 version: '${version}'
 main: com.uxplima.auth.paper.bootstrap.AuthPlugin
-api-version: '26.2'
+api-version: '26.3'
 authors: ['UXPLIMA']
 description: 'Registration, login and premium identity, on one server or a whole network.'
 website: 'https://github.com/UXPLIMA/uxm-auth'
