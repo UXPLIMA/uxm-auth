@@ -1,11 +1,9 @@
-// The root project builds nothing. It carries the group and the version so that the three
-// modules read one number rather than three.
-//
-// There is no root `plugins {}` block. Spotless, Error Prone and NullAway reach every
-// module through the buildSrc convention plugin, and declaring one of them here again,
-// even with `apply false`, makes Gradle 9 fail with "plugin already on classpath". Shadow
-// and run-paper are applied in the module that needs them, which is not every module.
+// Declared here so every module resolves the plugins the conventions bring, Shadow among them, without a version.
+plugins {
+    id("uxm.java") apply false
+}
 
+// The root project builds nothing: the modules carry the plugins. It holds the group and the one version they share.
 allprojects {
     group = "com.uxplima"
     version = providers.gradleProperty("projectVersion").get()

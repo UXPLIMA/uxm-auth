@@ -1,126 +1,44 @@
-# The single source of truth for every version in this build.
-# Pin an exact version. Record the date on which the coordinate was verified.
+# Only what the shared uxm catalog does not carry.
 
 [versions]
-# The Log4j the server ships, for the filter that keeps a password out of the log. compileOnly.
+adventure = "5.2.0"
+velocity = "4.1.1"
+limboapi = "2.0.0-20251118.093310-4"
+limboapi-one = "1.1.27"
+fastutil = "8.5.18"
+gson = "2.14.0"
+bouncycastle = "1.86"
+lettuce = "7.6.0.RELEASE"
+maxmind-db = "4.2.0"
+zxing = "3.5.4"
+mariadb-jdbc = "3.5.3"
+postgresql = "42.7.4"
+h2 = "2.3.232"
 log4j = "2.26.0"
-# language and platform
-java           = "25"
-paper          = "26.2.build.112-stable"   # io.papermc.paper:paper-api (verified 2026-08-28)
-velocity       = "4.1.1"                   # com.velocitypowered:velocity-api (repo.papermc.io, verified 2026-08-28)
-# Paper 26.2 and Velocity 4.1.1 both import adventure-bom 5.2.0, so one number serves both.
-adventure      = "5.2.0"                   # net.kyori:adventure-* (verified 2026-08-28)
-
-# our foundation
-uxmlib = "0.211.0"                  # com.uxplima.uxmlib on repo.uxplima.com
-
-# runtime libraries
-configurate    = "4.1.2"
-jspecify       = "1.0.0"
-bstats         = "3.0.2"
-# Argon2id and BCrypt in pure Java, with no native library to load on a host we do not control.
-gson           = "2.14.0"                  # com.google.code.gson:gson, the copy Paper and Velocity already ship
-bouncycastle   = "1.86"                    # org.bouncycastle:bcprov-jdk18on (Maven Central, verified 2026-10-17)
-# Redis carries the bulletins of a network. The version uxmlib-redis compiles against.
-lettuce        = "7.6.0.RELEASE"           # io.lettuce:lettuce-core (Maven Central, verified 2026-10-18)
-# Reads the GeoLite2 country file for the country rule. No dependency of its own.
-maxmind-db     = "4.2.0"                   # com.maxmind.db:maxmind-db (Maven Central, verified 2026-10-18)
-# Draws the QR code of the second factor's link. Apache 2.0, no dependency of its own.
-zxing          = "3.5.4"                   # com.google.zxing:core (Maven Central, verified 2026-10-18)
-
-# soft dependencies, compileOnly, reached only past a plugin-present guard
-placeholderapi = "2.11.6"                  # me.clip:placeholderapi (extendedclip repo, not Maven Central)
-# LimboAPI publishes no release for Velocity 4 yet; this is the build its 2.0.0 snapshot pointed at.
-limboapi       = "2.0.0-20251118.093310-4" # net.elytrium.limboapi:api (maven.elytrium.net, verified 2026-10-18)
-# LimboAPI 1.1, the release on Modrinth, which runs on Velocity 4 too; 2.0 moved its world types. Both are spoken to.
-limboapi-one   = "1.1.27"                  # net.elytrium.limboapi:api (maven.elytrium.net, verified 2026-10-24)
-
-# tests
-fastutil       = "8.5.18"                  # it.unimi.dsi:fastutil, which LimboAPI's types name and the proxy ships
-junit          = "5.12.1"
-assertj        = "3.27.3"
-mockito        = "5.23.0"
-mockbukkit     = "4.116.1"                 # org.mockbukkit.mockbukkit:mockbukkit-v26.2 (verified 2026-08-28)
-archunit       = "1.4.2"                   # 1.3.0 bundles an ASM that rejects Java 25 bytecode and
-                                           # silently imports zero classes, which defeats every fence
-
-# tooling
-errorprone     = "2.50.0"
-nullaway       = "0.13.7"
-spotless       = "8.7.0"
-palantir-fmt   = "2.93.0"
-shadow         = "9.4.1"
-run-paper      = "3.0.2"
-paperweight    = "2.0.0-beta.22"            # io.papermc.paperweight.userdev, the version uxmEssentials builds with
-
-# The JDBC drivers a network database needs. uxmLib ships SQLite only, and Velocity ships none.
-mariadb-jdbc = "3.5.3"      # org.mariadb.jdbc:mariadb-java-client, which speaks MySQL too
-postgresql   = "42.7.4"     # org.postgresql:postgresql
-h2           = "2.3.232"    # com.h2database:h2
+paperweight = "2.0.0-beta.22"
 
 [libraries]
-mariadb-jdbc      = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb-jdbc" }
-postgresql        = { module = "org.postgresql:postgresql",           version.ref = "postgresql" }
-h2                = { module = "com.h2database:h2",                    version.ref = "h2" }
-paper-api         = { module = "io.papermc.paper:paper-api",                     version.ref = "paper" }
-# Individual modules, never uxmlib-all. That artifact is the shaded standalone plugin jar:
-# it relocates Configurate into com.uxplima.uxmlib.libs.configurate, and those internal types
-# then appear in the signatures a consumer has to name. The per-module artifacts are clean.
-uxmlib-common     = { module = "com.uxplima.uxmlib:uxmlib-common",               version.ref = "uxmlib" }
-uxmlib-command    = { module = "com.uxplima.uxmlib:uxmlib-command",              version.ref = "uxmlib" }
-uxmlib-item       = { module = "com.uxplima.uxmlib:uxmlib-item",                 version.ref = "uxmlib" }
-uxmlib-gui        = { module = "com.uxplima.uxmlib:uxmlib-gui",                  version.ref = "uxmlib" }
-uxmlib-integration = { module = "com.uxplima.uxmlib:uxmlib-integration",         version.ref = "uxmlib" }
-uxmlib-storage    = { module = "com.uxplima.uxmlib:uxmlib-storage",              version.ref = "uxmlib" }
-uxmlib-bedrock    = { module = "com.uxplima.uxmlib:uxmlib-bedrock",              version.ref = "uxmlib" }
-uxmlib-hud        = { module = "com.uxplima.uxmlib:uxmlib-hud",                  version.ref = "uxmlib" }
-uxmlib-condition  = { module = "com.uxplima.uxmlib:uxmlib-condition",            version.ref = "uxmlib" }
-uxmlib-redis      = { module = "com.uxplima.uxmlib:uxmlib-redis",                version.ref = "uxmlib" }
-uxmlib-menu       = { module = "com.uxplima.uxmlib:uxmlib-menu",                 version.ref = "uxmlib" }
-velocity-api      = { module = "com.velocitypowered:velocity-api",               version.ref = "velocity" }
-limboapi-api      = { module = "net.elytrium.limboapi:api",                      version.ref = "limboapi" }
-limboapi-one-api  = { module = "net.elytrium.limboapi:api",                      version.ref = "limboapi-one" }
-adventure-api     = { module = "net.kyori:adventure-api",                        version.ref = "adventure" }
-adventure-mini    = { module = "net.kyori:adventure-text-minimessage",           version.ref = "adventure" }
-adventure-plain   = { module = "net.kyori:adventure-text-serializer-plain",      version.ref = "adventure" }
-adventure-nbt     = { module = "net.kyori:adventure-nbt",                        version.ref = "adventure" }
-fastutil          = { module = "it.unimi.dsi:fastutil",                          version.ref = "fastutil" }
-adventure-legacy  = { module = "net.kyori:adventure-text-serializer-legacy",     version.ref = "adventure" }
-gson              = { module = "com.google.code.gson:gson",                      version.ref = "gson" }
-bouncycastle      = { module = "org.bouncycastle:bcprov-jdk18on",                version.ref = "bouncycastle" }
-lettuce-core      = { module = "io.lettuce:lettuce-core",                        version.ref = "lettuce" }
-maxmind-db        = { module = "com.maxmind.db:maxmind-db",                      version.ref = "maxmind-db" }
-zxing-core        = { module = "com.google.zxing:core",                 version.ref = "zxing" }
-configurate-hocon = { module = "org.spongepowered:configurate-hocon",            version.ref = "configurate" }
-jspecify          = { module = "org.jspecify:jspecify",                          version.ref = "jspecify" }
-# bstats is here for the plugin that wants metrics. Nothing in the template builds a
-# Metrics, so the template does not take it: an unused library is weight in every jar.
-bstats-bukkit     = { module = "org.bstats:bstats-bukkit",                       version.ref = "bstats" }
-bstats-velocity   = { module = "org.bstats:bstats-velocity",                     version.ref = "bstats" }
-placeholderapi    = { module = "me.clip:placeholderapi",                         version.ref = "placeholderapi" }
-
-junit-bom         = { module = "org.junit:junit-bom",                            version.ref = "junit" }
-junit-jupiter     = { module = "org.junit.jupiter:junit-jupiter" }
-assertj           = { module = "org.assertj:assertj-core",                       version.ref = "assertj" }
-mockito-core      = { module = "org.mockito:mockito-core",                       version.ref = "mockito" }
-mockito-jupiter   = { module = "org.mockito:mockito-junit-jupiter",              version.ref = "mockito" }
-mockbukkit        = { module = "org.mockbukkit.mockbukkit:mockbukkit-v26.2",     version.ref = "mockbukkit" }
-archunit-junit    = { module = "com.tngtech.archunit:archunit-junit5",           version.ref = "archunit" }
-
-errorprone-core   = { module = "com.google.errorprone:error_prone_core",         version.ref = "errorprone" }
-errorprone-annos  = { module = "com.google.errorprone:error_prone_annotations",  version.ref = "errorprone" }
-nullaway          = { module = "com.uber.nullaway:nullaway",                     version.ref = "nullaway" }
-
-log4j-core        = { module = "org.apache.logging.log4j:log4j-core",            version.ref = "log4j" }
+velocity-api = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
+limboapi-api = { module = "net.elytrium.limboapi:api", version.ref = "limboapi" }
+limboapi-one-api = { module = "net.elytrium.limboapi:api", version.ref = "limboapi-one" }
+adventure-api = { module = "net.kyori:adventure-api", version.ref = "adventure" }
+adventure-mini = { module = "net.kyori:adventure-text-minimessage", version.ref = "adventure" }
+adventure-plain = { module = "net.kyori:adventure-text-serializer-plain", version.ref = "adventure" }
+adventure-legacy = { module = "net.kyori:adventure-text-serializer-legacy", version.ref = "adventure" }
+adventure-nbt = { module = "net.kyori:adventure-nbt", version.ref = "adventure" }
+fastutil = { module = "it.unimi.dsi:fastutil", version.ref = "fastutil" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+lettuce-core = { module = "io.lettuce:lettuce-core", version.ref = "lettuce" }
+maxmind-db = { module = "com.maxmind.db:maxmind-db", version.ref = "maxmind-db" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+mariadb-jdbc = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb-jdbc" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+h2 = { module = "com.h2database:h2", version.ref = "h2" }
+log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
 
 [bundles]
-testing = ["junit-jupiter", "assertj", "mockito-core", "mockito-jupiter"]
-# The foundation every plugin takes, and -condition and -integration with it: every effect list
-# an operator writes runs through them. Add -hud or -update when the plugin needs them.
-uxmlib  = ["uxmlib-common", "uxmlib-command", "uxmlib-item", "uxmlib-gui", "uxmlib-condition", "uxmlib-integration"]
 adventure = ["adventure-api", "adventure-mini", "adventure-plain", "adventure-legacy"]
 
 [plugins]
-shadow    = { id = "com.gradleup.shadow",   version.ref = "shadow" }
-run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }
 paperweight = { id = "io.papermc.paperweight.userdev", version.ref = "paperweight" }

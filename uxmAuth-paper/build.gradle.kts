@@ -1,87 +1,46 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import java.util.zip.ZipFile
 
-// No root `plugins {}` block. Spotless, Error Prone and NullAway reach every
-// subproject through the buildSrc convention plugin. Declaring them again here
-// with `apply false` makes Gradle 9 fail with "plugin already on classpath".
-
 plugins {
-    id("uxm.java-conventions")
-    alias(libs.plugins.shadow)
-    alias(libs.plugins.run.paper)
+    id("uxm.paper-plugin")
+}
+
+uxplima {
+    slug = "auth"
 }
 
 repositories {
-    mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
-    mavenLocal() // uxmLib, while a release is still on its way to JitPack
-    maven("https://repo.uxplima.com/repository/maven-public/") // uxmLib
     maven("https://repo.extendedclip.com/releases/") // PlaceholderAPI
 }
 
 dependencies {
-    // Paper provides the server API, Adventure and Brigadier at runtime. Never shade them.
-    compileOnly(libs.paper.api)
-
-    // uxmLib is our foundation, and it is shaded into the jar. The plugin must run as a
-    // standalone jar, without another plugin on the server. See uxm-briefs/repos/uxm-auth/docs/02-build.md.
-    // The bundle is a starting point, not a rule. A plugin with no menu takes the four
-    // modules one by one and leaves uxmlib-gui out. See uxm-briefs/repos/uxm-auth/docs/02-build.md.
-    // The common module is shaded in, not depended on at runtime: an operator installs one
-    // jar, and the two platform jars must not have to agree on a third file.
+    // Shaded and relocated: an operator installs one jar, and the platform jars share no third file.
     implementation(project(":uxmAuth-common"))
     // The login handshake, compiled against the server and touched only on a server that runs it.
     implementation(project(":uxmAuth-handshake"))
     // The API another plugin compiles against, carried unrelocated so its classes are where that plugin looks.
     implementation(project(":uxmAuth-api"))
-    implementation(libs.bundles.uxmlib)
-    // The native forms a Bedrock player reads every screen in. Floodgate itself is never a dependency: the
-    // library names it only past its own plugin-present guard.
-    implementation(libs.uxmlib.bedrock)
-    // The staff info window is a file the operator rewrites, drawn by the menu engine.
-    implementation(libs.uxmlib.menu)
-    implementation(libs.configurate.hocon)
-    // bStats, so the estate can see how many servers run this and on what. The operator opts out in
-    // plugins/bStats/config.yml, which is the switch every bStats plugin shares.
-    implementation(libs.bstats.bukkit)
+    implementation(uxm.uxmlib.common)
+    implementation(uxm.uxmlib.command)
+    implementation(uxm.uxmlib.item)
+    implementation(uxm.uxmlib.gui)
+    implementation(uxm.uxmlib.condition)
+    implementation(uxm.uxmlib.integration)
+    implementation(uxm.uxmlib.bedrock)
+    implementation(uxm.uxmlib.menu)
+    implementation(uxm.configurate.hocon)
+    implementation(uxm.bstats.bukkit)
 
-    // Soft dependencies. Touched only past a plugin-present guard, so the plugin loads
-    // on a server that does not have them.
-    compileOnly(libs.placeholderapi)
-    // The server's own Log4j, which the password filter attaches to. Paper ships it, so it is never shaded.
+    // Soft dependencies, touched only past a plugin-present guard.
+    compileOnly(uxm.placeholderapi)
+    // The server's own Log4j, which the password filter attaches to.
     compileOnly(libs.log4j.core)
-
-    // Paper is compileOnly for the jar, because the server provides it. A test still has to
-    // link against it: a fake that implements a uxmLib port sees Location and Entity in the
-    // signatures it has to write out.
-    testImplementation(libs.paper.api)
-    testImplementation(libs.mockbukkit)
-    testImplementation(libs.archunit.junit)
-    // Test only: a test reads the QR code on the map back, as a phone does.
-    testImplementation(libs.zxing.core)
-    // The guards that ask the library which skill and content plugins it reads. A plugin cut from this
-    // template takes uxmlib-integration as soon as it reads an operator's line, and these guards travel
-    // with the template so it never starts without them. Test only: nothing of it reaches the jar.
-    testImplementation(libs.uxmlib.integration)
-    // The guard that every shipped effect line parses asks the action engine itself.
-    testImplementation(libs.uxmlib.condition)
-    testImplementation(libs.log4j.core)
 }
 
-tasks.processResources {
-    filteringCharset = "UTF-8"
-    val pluginVersion = version.toString()
-    inputs.property("version", pluginVersion)
-    // paper-plugin.yml carries one ${version} token. A line filter replaces it, rather
-    // than expand(), which would also try to read every other ${...} in the file.
-    filesMatching("paper-plugin.yml") {
-        filter { line -> line.replace("\${version}", pluginVersion) }
-    }
-}
-
-// Lettuce carries the bulletins on Redis, and brings Netty and Reactor. The server ships a Netty of its own, at a
-// version it chose, so ours must carry our namespace. The handshake, though, reaches into the server's own Netty
-// pipeline and must keep naming io.netty. One relocation of io.netty in the plugin jar would rewrite both, so Lettuce
-// and what it brings are relocated here first, in a jar of their own, and the plugin jar takes that jar whole.
+// Lettuce brings Netty and Reactor. The server ships a Netty of its own, so ours must carry our namespace. The
+// handshake, though, reaches into the server's own Netty pipeline and must keep naming io.netty. One relocation of
+// io.netty in the plugin jar would rewrite both, so Lettuce and what it brings are relocated here first, in a jar of
+// their own, and the plugin jar takes that jar whole.
 val redisRuntime: Configuration by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -92,9 +51,9 @@ dependencies {
 }
 
 val redisLibraries =
-    tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("redisLibraries") {
-        description = "Lettuce, Netty and Reactor, relocated into the plugin's namespace before the plugin jar takes them."
-        archiveClassifier.set("redis")
+    tasks.register<ShadowJar>("redisLibraries") {
+        description = "Lettuce, Netty and Reactor, relocated into the plugin's namespace."
+        archiveClassifier = "redis"
         configurations = listOf(redisRuntime)
         mergeServiceFiles()
         relocate("io.lettuce", "com.uxplima.auth.libs.lettuce")
@@ -109,204 +68,90 @@ val redisLibraries =
     }
 
 tasks.shadowJar {
-    archiveClassifier.set("")
     dependsOn(redisLibraries)
     from(redisLibraries.flatMap { libraries -> libraries.archiveFile }.map { file -> zipTree(file) })
-
-    // The handshake module is compiled against the server in Mojang's names, which is what Paper runs, so the
-    // jar asks Paper not to remap it.
     manifest {
         attributes("paperweight-mappings-namespace" to "mojang")
     }
-
-    // Configurate finds its type serializers through the ServiceLoader, and a JDBC driver
-    // registers itself the same way. Without this, the several META-INF/services files of
-    // the merged dependencies overwrite each other and the loser goes quiet at runtime
-    // rather than failing at build time.
-    mergeServiceFiles()
-
-    // Relocate everything we bundle into our own namespace, so that two plugins that
-    // shade the same library cannot clash. Never relocate Adventure or Kyori: Paper
-    // bundles them, and relocating breaks the server's own serializers.
-    relocate("com.uxplima.uxmlib", "com.uxplima.auth.libs.uxmlib")
-    relocate("org.bstats", "com.uxplima.auth.libs.bstats")
-    relocate("com.typesafe.config", "com.uxplima.auth.libs.typesafe")
-    relocate("org.spongepowered.configurate", "com.uxplima.auth.libs.configurate")
-
-    // geantyref arrives with Configurate, which reads a generic type through it at runtime,
-    // so it is a real library and it is relocated like the rest.
-    relocate("io.leangen.geantyref", "com.uxplima.auth.libs.geantyref")
-    // BouncyCastle hashes the passwords. It ships as a signed jar, and a signature that names classes we
-    // relocated no longer verifies, so the JVM would refuse the jar: the signature files stay out.
+    // BouncyCastle ships signed, and a signature that names relocated classes no longer verifies.
     relocate("org.bouncycastle", "com.uxplima.auth.libs.bouncycastle")
-    // Lettuce arrives relocated already, from redisLibraries above. Our own classes and uxmLib's still name it
-    // as io.lettuce, so that name moves to where it now lives. io.netty is not relocated here: the handshake
-    // means the server's.
+    // Our own classes and uxmLib's name Lettuce as io.lettuce; the copy inside the jar moved already.
     relocate("io.lettuce", "com.uxplima.auth.libs.lettuce")
-    // uxmlib-storage pools connections with HikariCP and caches with Caffeine. Another plugin may ship either, at
-    // another version, so ours carry our namespace. The JDBC drivers stay where they are: they are found by name.
-    relocate("com.zaxxer.hikari", "com.uxplima.auth.libs.hikari")
-    relocate("com.github.benmanes.caffeine", "com.uxplima.auth.libs.caffeine")
-    // The MaxMind reader opens the country file. Another plugin may ship it at another version.
     relocate("com.maxmind.db", "com.uxplima.auth.libs.maxmind")
-    // ZXing draws the QR code of the second factor. Another plugin may ship it at another version.
     relocate("com.google.zxing", "com.uxplima.auth.libs.zxing")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC")
-
     dependencies {
-        // Paper already has slf4j, and a second copy of the API with no binding behind it makes
-        // logging go quiet rather than fail. Take the server's.
-        exclude(dependency("org.slf4j:.*:.*"))
-        // Annotations that a compiler reads and a runtime never loads. They arrive with the
-        // libraries above and only add weight.
-        exclude(dependency("com.google.errorprone:.*:.*"))
-        exclude(dependency("org.checkerframework:.*:.*"))
-        exclude(dependency("org.jspecify:.*:.*"))
-        // These come in relocated from redisLibraries; the copies under their own names stay out.
         exclude(dependency("io.lettuce:.*:.*"))
         exclude(dependency("io.netty:.*:.*"))
         exclude(dependency("io.projectreactor:.*:.*"))
         exclude(dependency("org.reactivestreams:.*:.*"))
         exclude(dependency("redis.clients.authentication:.*:.*"))
     }
-
-    // minimize() is deliberately not enabled. uxmLib reaches Brigadier, the registries
-    // and MiniMessage reflectively, and Configurate finds its codecs through the
-    // ServiceLoader. The minimizer cannot see either, and it strips what it cannot see.
 }
 
-tasks.assemble { dependsOn(tasks.shadowJar) }
-
-// The plain jar takes a classifier of its own. Both tasks used to write
-// build/libs/<name>.jar, so whichever ran last won, and a build that happened to end with
-// the plain jar shipped a small file with no library in it. The server then loaded the
-// plugin and failed at the first uxmLib class. Found on the first install of uxmBackup.
-tasks.jar { archiveClassifier.set("thin") }
-
-// Every builder of a plugin audited the jar by hand with unzip, and a hand audit is only
-// correct on the day somebody ran it. These are the packages that must never ship inside a
-// plugin jar: the server owns them, or they are shaded and must carry our namespace. The
-// SQLite driver is the one exception, and it is named as such.
-val forbiddenJarEntries =
-    listOf(
-        "net/kyori/" to "Paper owns Adventure. A shaded copy breaks the server's own serializers.",
-        "org/slf4j/" to "Paper owns slf4j. A second API with no binding makes logging go quiet.",
-        "com/uxplima/uxmlib/" to "uxmLib must be relocated. This entry is un-relocated.",
-        "org/spongepowered/" to "Configurate must be relocated.",
-        "com/typesafe/" to "Typesafe Config must be relocated.",
-        "io/leangen/" to "geantyref must be relocated.",
-        "org/bouncycastle/" to "BouncyCastle must be relocated, or two plugins that bundle it clash.",
-        "io/lettuce/" to "Lettuce must be relocated.",
-        "io/netty/" to "Netty must be relocated: the server ships its own, at another version.",
-        "reactor/" to "Reactor must be relocated.",
-        "org/reactivestreams/" to "Reactive Streams must be relocated.",
-        "com/zaxxer/hikari/" to "HikariCP must be relocated, or another plugin's copy is the one that loads.",
-        "com/github/benmanes/caffeine/" to "Caffeine must be relocated, or another plugin's copy is the one that loads.",
-        "com/maxmind/" to "The MaxMind reader must be relocated, or another plugin's copy is the one that loads.",
-        "com/google/zxing/" to "ZXing must be relocated, or another plugin's copy is the one that loads.",
-        "org/bstats/" to "bstats must be relocated when it is taken at all.",
-    )
-
-// What the jar must carry. A plugin that runs standalone holds a relocated copy of the
-// library, and a jar without one loads and dies at its first uxmLib class. The forbidden
-// list alone cannot see this: a jar that carries nothing passes it.
-val requiredJarEntries =
-    listOf(
-        "com/uxplima/auth/api/AuthApi.class" to "The API is missing, or relocated where no other plugin finds it.",
-        "com/uxplima/auth/libs/lettuce/" to "Lettuce is missing, and a network's bulletins ride it on Redis.",
-        "com/uxplima/auth/libs/maxmind/" to "The MaxMind reader is missing, and the country rule needs it.",
-        "com/uxplima/auth/libs/zxing/" to "ZXing is missing, and the second factor's QR code needs it.",
-        "com/uxplima/auth/libs/uxmlib/" to "uxmLib is missing. The jar is not the shaded one.",
-        "com/uxplima/auth/paper/bootstrap/" to "The plugin's own classes are missing.",
-        "org/sqlite/JDBC.class" to "The SQLite driver is missing, and it is the default database.",
-        "org/mariadb/jdbc/Driver.class" to "The MariaDB driver is missing, and it opens MySQL and MariaDB.",
-        "org/postgresql/Driver.class" to "The PostgreSQL driver is missing.",
-        "org/h2/Driver.class" to "The H2 driver is missing.",
-    )
-
-val verifyJar =
-    tasks.register("verifyJar") {
-        description = "Fail the build when the shaded jar carries a package it must not."
+// What the shared jar rules do not know: the libraries this plugin bundles beyond uxmLib's set, the JDBC drivers, and
+// the handshake's Netty.
+val verifyAuthJar =
+    tasks.register("verifyAuthJar") {
+        description = "Fails when the plugin jar carries an unrelocated library or lacks a driver."
         group = "verification"
-        // shadowJar writes over the plain jar, because its classifier is empty, so Gradle sees the
-        // file as the output of both tasks and refuses to guess which one has to run first.
-        dependsOn(tasks.shadowJar, tasks.jar)
         val jar = tasks.shadowJar.flatMap { shadow -> shadow.archiveFile }
+        dependsOn(tasks.shadowJar)
         inputs.file(jar)
         doLast {
-            val names = mutableListOf<String>()
+            val forbidden =
+                listOf(
+                    "org/bouncycastle/",
+                    "io/lettuce/",
+                    "io/netty/",
+                    "reactor/",
+                    "org/reactivestreams/",
+                    "com/maxmind/",
+                    "com/google/zxing/",
+                )
+            val required =
+                listOf(
+                    "com/uxplima/auth/libs/lettuce/",
+                    "com/uxplima/auth/libs/maxmind/",
+                    "com/uxplima/auth/libs/zxing/",
+                    "com/uxplima/auth/api/AuthApi.class",
+                    "org/sqlite/JDBC.class",
+                    "org/mariadb/jdbc/Driver.class",
+                    "org/postgresql/Driver.class",
+                    "org/h2/Driver.class",
+                )
+            val problems = mutableListOf<String>()
+            var serverNetty = 0
             ZipFile(jar.get().asFile).use { archive ->
-                val entries = archive.entries()
-                while (entries.hasMoreElements()) {
-                    names.add(entries.nextElement().name)
-                }
-            }
-            val found = mutableListOf<String>()
-            for ((prefix, why) in forbiddenJarEntries) {
-                var count = 0
-                for (name in names) {
-                    if (name.startsWith(prefix)) {
-                        count++
+                val names = archive.entries().toList().map { entry -> entry.name }
+                forbidden
+                    .filter { prefix -> names.any { name -> name.startsWith(prefix) } }
+                    .forEach { prefix -> problems.add("$prefix must be relocated") }
+                required
+                    .filter { prefix -> names.none { name -> name.startsWith(prefix) } }
+                    .forEach { prefix -> problems.add("$prefix is missing") }
+                // The handshake names the server's io.netty, never the relocated copy: the server refuses a channel
+                // listener whose types it does not know.
+                for (entry in archive.entries().toList()) {
+                    if (!entry.name.startsWith("com/uxplima/auth/handshake/") || !entry.name.endsWith(".class")) {
+                        continue
+                    }
+                    val text = archive.getInputStream(entry).use { it.readBytes() }.toString(Charsets.ISO_8859_1)
+                    if (text.contains("com/uxplima/auth/libs/netty/")) {
+                        problems.add("${entry.name} names the relocated Netty")
+                    }
+                    if (text.contains("io/netty/channel/")) {
+                        serverNetty++
                     }
                 }
-                if (count > 0) {
-                    found.add("  " + prefix + " (" + count + " entries): " + why)
-                }
             }
-            if (found.isNotEmpty()) {
-                throw GradleException("The jar carries packages it must not:\n" + found.joinToString("\n"))
+            if (serverNetty == 0) {
+                problems.add("the handshake does not name the server's io.netty")
             }
-            val missing = mutableListOf<String>()
-            for ((prefix, why) in requiredJarEntries) {
-                var count = 0
-                for (name in names) {
-                    if (name.startsWith(prefix)) {
-                        count++
-                    }
-                }
-                if (count == 0) {
-                    missing.add("  " + prefix + ": " + why)
-                }
+            if (problems.isNotEmpty()) {
+                throw GradleException("The plugin jar is wrong:\n" + problems.joinToString("\n") { "  $it" })
             }
-            if (missing.isNotEmpty()) {
-                throw GradleException("The jar is missing packages it must carry:\n" + missing.joinToString("\n"))
-            }
-            serverNetty(jar.get().asFile)
         }
     }
 
-// The handshake reaches into the server's own Netty pipeline, so its classes must name the server's io.netty. The
-// relocation that keeps Lettuce's Netty apart once rewrote them too, and the server then refused the handshake's
-// channel listener at every connection with an AbstractMethodError.
-fun serverNetty(jar: java.io.File) {
-    val relocated = mutableListOf<String>()
-    var server = 0
-    ZipFile(jar).use { archive ->
-        val entries = archive.entries()
-        while (entries.hasMoreElements()) {
-            val entry = entries.nextElement()
-            if (!entry.name.startsWith("com/uxplima/auth/handshake/") || !entry.name.endsWith(".class")) {
-                continue
-            }
-            val bytes = archive.getInputStream(entry).use { it.readBytes() }.toString(Charsets.ISO_8859_1)
-            if (bytes.contains("com/uxplima/auth/libs/netty/")) {
-                relocated.add("  " + entry.name)
-            }
-            if (bytes.contains("io/netty/channel/")) {
-                server++
-            }
-        }
-    }
-    if (relocated.isNotEmpty() || server == 0) {
-        throw GradleException(
-            "The handshake must speak the server's Netty, io.netty, but these classes name the relocated copy:\n" +
-                relocated.joinToString("\n"),
-        )
-    }
-}
-
-tasks.check { dependsOn(verifyJar) }
-
-tasks.runServer {
-    minecraftVersion("1.21.11")
-}
+tasks.check { dependsOn(verifyAuthJar) }
