@@ -4,8 +4,7 @@ main: com.uxplima.auth.paper.bootstrap.AuthPlugin
 api-version: '26.3'
 authors: ['UXPLIMA']
 description: 'Registration, login and premium identity, on one server or a whole network.'
-website: 'https://github.com/UXPLIMA/uxm-auth'
-
+website: 'https://www.uxplima.com'
 # Every scheduler call goes through the uxmLib Scheduler port, which routes to the
 # right global, region, entity or async scheduler. Nothing calls BukkitScheduler.
 folia-supported: true
