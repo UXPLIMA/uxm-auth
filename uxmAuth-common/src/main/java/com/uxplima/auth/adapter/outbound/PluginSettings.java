@@ -39,6 +39,13 @@ import org.jspecify.annotations.Nullable;
 public final class PluginSettings {
 
     /**
+     * The maps whose keys are names the operator chose. Each is the operator's whole: a start fills a missing key
+     * everywhere else, and an entry missing here is one they removed, so the shipped examples are never put back.
+     * The lines for one server of a network, keyed by that server's name.
+     */
+    private static final String[] OPERATOR_LISTS = {"effects.servers"};
+
+    /**
      * Add the keys this release ships to a file an operator already has.
      *
      * <p>It lives here because this is the one class that reads the configuration file, and the guard that
@@ -53,7 +60,7 @@ public final class PluginSettings {
         if (!Files.isRegularFile(file)) {
             return false;
         }
-        return HoconConfig.load(file).mergeDefaults("config.conf", resources);
+        return HoconConfig.load(file).mergeDefaults("config.conf", resources, OPERATOR_LISTS);
     }
 
     /** One immutable snapshot of the file. */
