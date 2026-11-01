@@ -9,7 +9,7 @@
 3. Run `/uxmauth doctor`. It prints one line per thing that can be wrong: the database, the premium sources,
    PlaceholderAPI, mail and the rest.
 
-A lone server needs nothing else. The default database is a SQLite file, `plugins/uxmAuth/auth.db`, and every
+A lone server needs nothing else. The default database is a SQLite file, `plugins/uxmAuth/data/auth.db`, and every
 JDBC driver the plugin supports is in the jar.
 
 A start that fails does not leave the server open: the plugin stays enabled with only a door that refuses

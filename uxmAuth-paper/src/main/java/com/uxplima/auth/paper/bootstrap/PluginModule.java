@@ -18,7 +18,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.CommandFile;
-import com.uxplima.auth.adapter.outbound.FeatureFiles;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
@@ -55,6 +54,7 @@ import com.uxplima.uxmlib.command.annotation.CommandMessages;
 import com.uxplima.uxmlib.command.annotation.ConfiguredCommands;
 import com.uxplima.uxmlib.command.annotation.ParamResolvers;
 import com.uxplima.uxmlib.command.annotation.annotations.FromConfig;
+import com.uxplima.uxmlib.config.FeatureFiles;
 import com.uxplima.uxmlib.hook.placeholder.PlaceholderExpansions;
 import com.uxplima.uxmlib.hook.placeholder.PlaceholderRegistry;
 import com.uxplima.uxmlib.scheduler.PaperScheduler;
@@ -510,7 +510,7 @@ final class PluginModule {
             if (PluginSettings.bringUpToDate(file, getClass().getClassLoader())) {
                 plugin.getSLF4JLogger()
                         .info("config.conf has the keys this release adds. Nothing you wrote changed, and the"
-                                + " file as it was is beside it as config.conf.bak.");
+                                + " file as it was is in backups/.");
             }
         } catch (RuntimeException unreadable) {
             // A merge that cannot run must not stop a server: the file the operator has still loads, and a
@@ -526,7 +526,7 @@ final class PluginModule {
             if (ScreenFile.bringUpToDate(file, getClass().getClassLoader())) {
                 plugin.getSLF4JLogger()
                         .info("screens.conf has the keys this release adds. Nothing you wrote changed, and the"
-                                + " file as it was is beside it as screens.conf.bak.");
+                                + " file as it was is in backups/.");
             }
         } catch (RuntimeException unreadable) {
             plugin.getSLF4JLogger().warn("screens.conf could not be brought up to date: {}", unreadable.getMessage());
@@ -540,7 +540,7 @@ final class PluginModule {
                     dataFolder.resolve("commands.conf"), getClass().getClassLoader())) {
                 plugin.getSLF4JLogger()
                         .info("commands.conf has the commands this release adds. Nothing you wrote changed, and the"
-                                + " file as it was is beside it as commands.conf.bak.");
+                                + " file as it was is in backups/.");
             }
         } catch (RuntimeException unreadable) {
             plugin.getSLF4JLogger().warn("commands.conf could not be brought up to date: {}", unreadable.getMessage());
@@ -568,7 +568,7 @@ final class PluginModule {
                 plugin.getSLF4JLogger()
                         .info(
                                 "{} have the keys this release adds. Nothing you wrote changed, and each file as it"
-                                        + " was is beside it as a .bak.",
+                                        + " was is in backups/.",
                                 added);
             }
         } catch (RuntimeException unreadable) {

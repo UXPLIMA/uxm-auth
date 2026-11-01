@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
+import com.uxplima.uxmlib.config.FeatureFiles;
 import com.uxplima.uxmlib.config.HoconConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
