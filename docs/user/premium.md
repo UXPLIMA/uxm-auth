@@ -1,8 +1,8 @@
 # Premium names and ownership
 
 A name that exists at Mojang can be held by a paid player or by a player without a paid account. These
-settings decide who gets the name and what happens when two players want it. They live in the `premium` and
-`ownership` blocks of `config.conf`.
+settings decide who gets the name and what happens when two players want it. They live in the `premium` block of
+`config.conf` and in `ownership.conf`.
 
 ## How a name is checked
 

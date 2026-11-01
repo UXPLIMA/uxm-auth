@@ -1,6 +1,7 @@
 # Protection and second factor
 
-Everything here is in `config.conf`. A reload applies it unless the block says otherwise.
+Everything here is in `config.conf`, except the `protection` block, which has its own `protection.conf`. A reload
+applies it unless the block says otherwise.
 
 ## Sessions
 

@@ -10,6 +10,7 @@ import java.util.Objects;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.CommandFile;
+import com.uxplima.auth.adapter.outbound.FeatureFiles;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
@@ -202,11 +203,38 @@ final class ProxyModule {
         } catch (RuntimeException unreadable) {
             logger.warn("config.conf could not be brought up to date: {}", unreadable.getMessage());
         }
+        splitFeatureFiles();
         mergeShippedCommands();
         copyIfAbsent("theme.conf", ThemeFiles.shared(folder, THEME_FOLDER));
         reportCorrectedLines(
                 LanguageFileUpdates.bringUpToDate(getClass().getClassLoader(), MESSAGES, folder.resolve(MESSAGES)));
         MailFiles.extractShipped(getClass().getClassLoader(), folder.resolve(MailFiles.FOLDER));
+    }
+
+    /**
+     * Give each large feature its own file beside config.conf, as a server does: a block an earlier release kept in
+     * config.conf moves out once, and each feature file then gets the keys this release adds.
+     */
+    private void splitFeatureFiles() {
+        try {
+            List<String> moved = FeatureFiles.moveOut(folder.resolve(CONFIG), PluginSettings.FEATURE_FILES);
+            if (!moved.isEmpty()) {
+                logger.info("Moved these settings out of config.conf into their own files: {}.", moved);
+            }
+            for (String block : PluginSettings.FEATURE_FILES) {
+                copyIfAbsent(FeatureFiles.file(block), folder.resolve(FeatureFiles.file(block)));
+            }
+            List<String> added =
+                    PluginSettings.bringFeatureFilesUpToDate(folder, getClass().getClassLoader());
+            if (!added.isEmpty()) {
+                logger.info(
+                        "{} have the keys this release adds. Nothing you wrote changed, and each file as it was"
+                                + " is beside it as a .bak.",
+                        added);
+            }
+        } catch (RuntimeException unreadable) {
+            logger.warn("The feature files could not be brought up to date: {}", unreadable.getMessage());
+        }
     }
 
     /** The commands a release adds reach an older commands.conf, so the operator can rename them too. */

@@ -19,7 +19,8 @@ every login, and the console names the cause. Fix it and restart.
 
 | File | What it holds |
 |---|---|
-| `config.conf` | Every setting. The proxy half on Velocity reads this same file. |
+| `config.conf` | Every setting but the four below. The proxy half on Velocity reads this same file. |
+| `protection.conf`, `ownership.conf`, `effects.conf`, `network.conf` | The four largest features, each under its own block name. A block an earlier release kept in `config.conf` moves here on the first start. The proxy reads them too. |
 | `commands.conf` | The names, aliases and switches of every command, with Turkish words. A change needs a restart. |
 | `screens.conf` | Where a waiting player stands and every dialog they read: register, login, code, recover, captcha, pin pad, rules. |
 | `theme.conf` | Colours and glyphs of the interface. |
@@ -53,7 +54,7 @@ and what is hidden from them. `timeouts` kicks a player who does not register or
 
 ## Effects
 
-`effects` in `config.conf` is a list of lines per moment: a join, a reminder, a wrong password, a registration, a
+`effects` in `effects.conf` is a list of lines per moment: a join, a reminder, a wrong password, a registration, a
 login. A line is `[message]`, `[actionbar]`, `[title]`, `[subtitle]`, `[bossbar]`, `[sound]`, `[particle]`,
 `[effect]`, `[console]` or `[player]`. An `@name` is a line from the messages folder, so the words stay in every
 language. `%player_name%`, `%player_uuid%` and `%uxmauth_time_left%` work in any line; other placeholders are

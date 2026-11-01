@@ -38,6 +38,14 @@ import org.jspecify.annotations.Nullable;
  */
 public final class PluginSettings {
 
+    /** The features large enough to keep their settings in a file of their own beside config.conf. */
+    public static final List<String> FEATURE_FILES = List.of("protection", "ownership", "effects", "network");
+
+    /** Add the keys this release ships to each feature file, keeping the operator's catalogues as they are. */
+    public static List<String> bringFeatureFilesUpToDate(Path folder, ClassLoader resources) {
+        return FeatureFiles.bringUpToDate(folder, FEATURE_FILES, resources, OPERATOR_LISTS);
+    }
+
     /**
      * The maps whose keys are names the operator chose. Each is the operator's whole: a start fills a missing key
      * everywhere else, and an entry missing here is one they removed, so the shipped examples are never put back.
@@ -323,6 +331,8 @@ public final class PluginSettings {
 
     private Snapshot read() {
         HoconConfig config = HoconConfig.load(file);
+        FeatureFiles.readInto(
+                config, Objects.requireNonNull(file.toAbsolutePath().getParent(), "folder"), FEATURE_FILES);
         AuthSettings.PasswordLists lists = SettingsReader.passwordLists(config);
         return new Snapshot(
                 language(config),

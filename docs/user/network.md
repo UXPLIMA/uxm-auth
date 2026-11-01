@@ -7,8 +7,8 @@ only with the right signature, so a player who reaches it some other way is aske
 ## Install
 
 1. Put the Velocity jar on the proxy and the Paper jar on every backend server. The proxy half reads the same
-   `config.conf` as a server, so one file can be copied to every machine. It uses the `language`, `storage`,
-   `premium`, `ownership` and `network` blocks; when players wait in its own world it also uses `names`,
+   `config.conf`, `ownership.conf` and `network.conf` as a server, so the files can be copied to every machine. It
+   uses the `language`, `storage`, `premium`, `ownership` and `network` blocks; when players wait in its own world it also uses `names`,
    `passwords`, `hashing`, `lane` and `timeouts`, and reads the words of `/login` and `/register` from
    `commands.conf`.
 2. Point `storage.jdbc-url` of the proxy and of every server at one MySQL, MariaDB or PostgreSQL database, so an
