@@ -18,6 +18,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.CommandFile;
+import com.uxplima.auth.adapter.outbound.FeatureFiles;
 import com.uxplima.auth.adapter.outbound.PluginHealth;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
@@ -546,10 +547,42 @@ final class PluginModule {
         }
     }
 
+    /**
+     * Give each large feature its own file beside config.conf. A block an earlier release kept in config.conf moves
+     * out once, after config.conf is brought up to date so its renames still apply, and each feature file then gets
+     * the keys this release adds.
+     */
+    private void splitFeatureFiles(Path dataFolder) {
+        try {
+            List<String> moved = FeatureFiles.moveOut(dataFolder.resolve("config.conf"), PluginSettings.FEATURE_FILES);
+            if (!moved.isEmpty()) {
+                plugin.getSLF4JLogger()
+                        .info("Moved these settings out of config.conf into their own files: {}.", moved);
+            }
+            for (String block : PluginSettings.FEATURE_FILES) {
+                saveIfAbsent(dataFolder, FeatureFiles.file(block));
+            }
+            List<String> added = PluginSettings.bringFeatureFilesUpToDate(
+                    dataFolder, getClass().getClassLoader());
+            if (!added.isEmpty()) {
+                plugin.getSLF4JLogger()
+                        .info(
+                                "{} have the keys this release adds. Nothing you wrote changed, and each file as it"
+                                        + " was is beside it as a .bak.",
+                                added);
+            }
+        } catch (RuntimeException unreadable) {
+            // As with config.conf: the files the operator has still load, so a server is never stopped by this.
+            plugin.getSLF4JLogger()
+                    .warn("The feature files could not be brought up to date: {}", unreadable.getMessage());
+        }
+    }
+
     /** Write the shipped defaults on first run. An existing file is never overwritten. */
     private void extractDefaults(Path dataFolder) {
         saveIfAbsent(dataFolder, "config.conf");
         mergeShippedConfig(dataFolder);
+        splitFeatureFiles(dataFolder);
         saveIfAbsent(dataFolder, "screens.conf");
         mergeShippedScreens(dataFolder);
         saveIfAbsent(dataFolder, "commands.conf");
