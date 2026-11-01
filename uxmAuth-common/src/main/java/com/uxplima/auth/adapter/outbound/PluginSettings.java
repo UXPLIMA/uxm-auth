@@ -25,6 +25,8 @@ import com.uxplima.auth.domain.hash.Pbkdf2Hasher;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.password.CommonPasswords;
 import com.uxplima.auth.domain.password.PasswordPolicy;
+import com.uxplima.uxmlib.config.DataFiles;
+import com.uxplima.uxmlib.config.FeatureFiles;
 import com.uxplima.uxmlib.config.HoconConfig;
 import com.uxplima.uxmlib.text.language.LanguageSettings;
 import org.jspecify.annotations.Nullable;
@@ -395,14 +397,15 @@ public final class PluginSettings {
     }
 
     /**
-     * An empty URL is the SQLite file beside this configuration, so a server that sets nothing has accounts
-     * that survive a restart without anybody installing a database.
+     * An empty URL is the SQLite file in data/ beside this configuration, so a server that sets nothing has accounts
+     * that survive a restart without anybody installing a database. A file an earlier release kept beside the
+     * configuration moves into data/ the first time.
      */
     private Storage storage(HoconConfig config) {
         String configured = config.getString("storage.jdbc-url", "").trim();
         Path folder = Objects.requireNonNull(file.toAbsolutePath().getParent(), "the configuration has no folder");
         return new Storage(
-                configured.isEmpty() ? "jdbc:sqlite:" + folder.resolve(SQLITE_FILE) : configured,
+                configured.isEmpty() ? "jdbc:sqlite:" + DataFiles.resolve(folder, SQLITE_FILE) : configured,
                 config.getString("storage.username", ""),
                 config.getString("storage.password", ""),
                 config.getInt("storage.pool-size", 4));

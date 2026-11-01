@@ -10,13 +10,13 @@ import java.util.Objects;
 
 import com.uxplima.auth.adapter.outbound.AuthDatabase;
 import com.uxplima.auth.adapter.outbound.CommandFile;
-import com.uxplima.auth.adapter.outbound.FeatureFiles;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
 import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyLocales;
+import com.uxplima.uxmlib.config.FeatureFiles;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.language.LanguageFileUpdates;
 import com.uxplima.uxmlib.text.language.Languages;
@@ -198,7 +198,7 @@ final class ProxyModule {
         try {
             if (PluginSettings.bringUpToDate(folder.resolve(CONFIG), getClass().getClassLoader())) {
                 logger.info("config.conf has the keys this release adds. Nothing you wrote changed, and the file as it"
-                        + " was is beside it as config.conf.bak.");
+                        + " was is in backups/.");
             }
         } catch (RuntimeException unreadable) {
             logger.warn("config.conf could not be brought up to date: {}", unreadable.getMessage());
@@ -229,7 +229,7 @@ final class ProxyModule {
             if (!added.isEmpty()) {
                 logger.info(
                         "{} have the keys this release adds. Nothing you wrote changed, and each file as it was"
-                                + " is beside it as a .bak.",
+                                + " is in backups/.",
                         added);
             }
         } catch (RuntimeException unreadable) {
@@ -242,7 +242,7 @@ final class ProxyModule {
         try {
             if (CommandFile.bringUpToDate(folder.resolve(COMMANDS), getClass().getClassLoader())) {
                 logger.info("commands.conf has the commands this release adds. Nothing you wrote changed, and the"
-                        + " file as it was is beside it as commands.conf.bak.");
+                        + " file as it was is in backups/.");
             }
         } catch (RuntimeException unreadable) {
             logger.warn("commands.conf could not be brought up to date: {}", unreadable.getMessage());
