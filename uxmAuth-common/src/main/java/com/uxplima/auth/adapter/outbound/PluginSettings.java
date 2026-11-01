@@ -60,7 +60,30 @@ public final class PluginSettings {
         if (!Files.isRegularFile(file)) {
             return false;
         }
-        return HoconConfig.load(file).mergeDefaults("config.conf", resources, OPERATOR_LISTS);
+        HoconConfig config = HoconConfig.load(file);
+        // Every plugin of ours calls this server's name server-name; the Discord block of an earlier release said
+        // server.
+        boolean moved = renamed(config, "discord.server", "discord.server-name");
+        boolean added = config.mergeDefaults("config.conf", resources, OPERATOR_LISTS);
+        if (moved && !added) {
+            config.save();
+        }
+        return moved || added;
+    }
+
+    /**
+     * Move what an earlier release wrote under {@code from} to {@code to}, value and all, when the file has the old
+     * name and not the new one. Answers whether anything moved.
+     */
+    static boolean renamed(HoconConfig config, String from, String to) {
+        org.spongepowered.configurate.ConfigurationNode old = config.nodeAt((Object[]) from.split("\\."));
+        org.spongepowered.configurate.ConfigurationNode now = config.nodeAt((Object[]) to.split("\\."));
+        if (old.virtual() || !now.virtual()) {
+            return false;
+        }
+        now.from(old);
+        Objects.requireNonNull(old.parent(), "parent").removeChild(old.key());
+        return true;
     }
 
     /** One immutable snapshot of the file. */
