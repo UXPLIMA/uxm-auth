@@ -86,6 +86,6 @@ public record DiscordSettings(String url, String server, Map<Event, Notice> even
                             config.getString(at + ".message", event.shipped)));
         }
         return new DiscordSettings(
-                config.getString("discord.url", ""), config.getString("discord.server", "server"), events);
+                config.getString("discord.url", ""), config.getString("discord.server-name", "server"), events);
     }
 }
