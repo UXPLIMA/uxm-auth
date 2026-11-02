@@ -1,0 +1,9 @@
+Subject: Ton code de connexion pour {server}
+
+Bonjour {player},
+
+Ton code de connexion pour {server} est :
+
+    {code}
+
+Tape-le avec /2fa {code}. Il fonctionne une fois, pendant {minutes} minutes. Si tu n’es pas en train de te connecter, quelqu’un d’autre connaît ton mot de passe : change-le.

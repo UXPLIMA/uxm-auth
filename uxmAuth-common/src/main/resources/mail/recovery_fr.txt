@@ -1,0 +1,9 @@
+Subject: Définir un nouveau mot de passe sur {server}
+
+Bonjour {player},
+
+Quelqu’un a demandé à définir un nouveau mot de passe pour ton compte sur {server}. Si c’était toi, tape :
+
+    /recover {code} <nouveau mot de passe>
+
+Le code fonctionne une fois, pendant {minutes} minutes. Si ce n’était pas toi, ignore ce mail : ton mot de passe reste tel quel.

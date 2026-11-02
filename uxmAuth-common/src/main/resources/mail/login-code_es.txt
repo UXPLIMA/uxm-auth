@@ -1,0 +1,9 @@
+Subject: Tu código de acceso para {server}
+
+Hola, {player}:
+
+Tu código de acceso para {server} es:
+
+    {code}
+
+Escríbelo con /2fa {code}. Sirve una vez, durante {minutes} minutos. Si no estás iniciando sesión ahora mismo, otra persona conoce tu contraseña: cámbiala.
