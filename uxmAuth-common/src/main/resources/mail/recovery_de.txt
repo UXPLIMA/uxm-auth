@@ -1,0 +1,9 @@
+Subject: Ein neues Passwort auf {server} setzen
+
+Hallo {player},
+
+jemand hat darum gebeten, ein neues Passwort für dein Konto auf {server} zu setzen. Wenn du das warst, gib ein:
+
+    /recover {code} <neues Passwort>
+
+Der Code funktioniert einmal, {minutes} Minuten lang. Wenn du das nicht warst, ignorier diese Mail: Dein Passwort bleibt, wie es ist.

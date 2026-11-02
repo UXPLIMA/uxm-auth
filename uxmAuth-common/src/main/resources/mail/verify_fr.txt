@@ -1,0 +1,9 @@
+Subject: Confirme ton adresse sur {server}
+
+Bonjour {player},
+
+Tape ce code sur {server} pour confirmer cette adresse :
+
+    /email confirm {code}
+
+Le code fonctionne pendant {minutes} minutes. Si tu ne l’as pas demandé, ignore ce mail : rien ne change tant que le code n’est pas tapé.

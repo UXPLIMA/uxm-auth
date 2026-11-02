@@ -1,0 +1,9 @@
+Subject: Defina uma nova senha em {server}
+
+Olá, {player},
+
+Alguém pediu para definir uma nova senha para sua conta em {server}. Se foi você, digite:
+
+    /recover {code} <nova senha>
+
+O código funciona uma vez, por {minutes} minutos. Se não foi você, ignore este e-mail: sua senha continua como está.

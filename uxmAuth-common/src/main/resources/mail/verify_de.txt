@@ -1,0 +1,9 @@
+Subject: Bestätige deine Adresse auf {server}
+
+Hallo {player},
+
+gib diesen Code auf {server} ein, um diese Adresse zu bestätigen:
+
+    /email confirm {code}
+
+Der Code funktioniert {minutes} Minuten lang. Wenn du ihn nicht angefordert hast, ignorier diese Mail: Nichts ändert sich, bis der Code eingegeben wird.

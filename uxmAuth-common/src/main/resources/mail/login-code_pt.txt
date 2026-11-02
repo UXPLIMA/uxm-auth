@@ -1,0 +1,9 @@
+Subject: Seu código de login para {server}
+
+Olá, {player},
+
+Seu código de login para {server} é:
+
+    {code}
+
+Digite com /2fa {code}. Ele funciona uma vez, por {minutes} minutos. Se você não está entrando agora, outra pessoa sabe sua senha: mude ela.

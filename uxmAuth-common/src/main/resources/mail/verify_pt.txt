@@ -1,0 +1,9 @@
+Subject: Confirme seu endereço em {server}
+
+Olá, {player},
+
+Digite este código em {server} para confirmar este endereço:
+
+    /email confirm {code}
+
+O código funciona por {minutes} minutos. Se você não pediu, ignore este e-mail: nada muda até o código ser digitado.

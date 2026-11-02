@@ -1,0 +1,9 @@
+Subject: Dein Anmeldecode für {server}
+
+Hallo {player},
+
+dein Anmeldecode für {server} lautet:
+
+    {code}
+
+Gib ihn mit /2fa {code} ein. Er funktioniert einmal, {minutes} Minuten lang. Wenn du dich gerade nicht anmeldest, kennt jemand anderes dein Passwort: Ändere es.

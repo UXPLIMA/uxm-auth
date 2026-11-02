@@ -1,0 +1,9 @@
+Subject: Pon una contraseña nueva en {server}
+
+Hola, {player}:
+
+Alguien pidió poner una contraseña nueva para tu cuenta en {server}. Si fuiste tú, escribe:
+
+    /recover {code} <contraseña nueva>
+
+El código sirve una vez, durante {minutes} minutos. Si no fuiste tú, ignora este correo: tu contraseña sigue como está.
