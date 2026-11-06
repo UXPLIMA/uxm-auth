@@ -54,7 +54,8 @@ names of `columns` when it is missing; an existing one is used as it is. Everyth
 ## Moving the database
 
 1. Fill `storage.move-to` with the target database, empty of this plugin's tables. A target that holds an
-   account is refused and nothing is written.
+   account is refused and nothing is written. A move that fails halfway empties the tables it copied again, so
+   it can simply run again; when even that fails, the console says to empty this plugin's tables at the target.
 2. Run `/uxmauth database move` from the console while nobody plays. The website table moves too when it is on.
 3. Put the target's three lines in place of `storage.jdbc-url`, `username` and `password`, empty `move-to`, and
    restart.
