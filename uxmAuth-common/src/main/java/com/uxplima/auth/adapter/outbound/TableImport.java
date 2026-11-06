@@ -48,7 +48,7 @@ public final class TableImport implements ImportSource {
 
         @Override
         public String toString() {
-            return "Address[jdbcUrl=" + jdbcUrl + ", username=" + username + ", password=hidden]";
+            return "Address[jdbcUrl=" + AuthDatabase.shown(jdbcUrl) + ", username=" + username + ", password=hidden]";
         }
     }
 

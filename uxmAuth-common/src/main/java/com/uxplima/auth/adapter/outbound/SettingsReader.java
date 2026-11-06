@@ -1,5 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -176,6 +178,16 @@ final class SettingsReader {
     /** Mojang refuses past this many requests in ten minutes. */
     private static final int MOJANG_LIMIT = 600;
 
+    /** The host an address names, for a message: the rest of an address may carry a key, so it is not repeated. */
+    private static String hostOf(String address) {
+        try {
+            String host = new URI(address.replace("{name}", "name")).getHost();
+            return host == null ? "no host" : host;
+        } catch (URISyntaxException notAnAddress) {
+            return "no host";
+        }
+    }
+
     static AuthSettings.Premium premium(HoconConfig config) {
         int cap = config.getInt("premium.mojang-cap-per-10-minutes", 550);
         if (cap < 1 || cap >= MOJANG_LIMIT) {
@@ -187,7 +199,8 @@ final class SettingsReader {
             String path = "premium.addresses." + source.key();
             String address = config.getString(path, source.shippedAddress());
             if (!address.contains("{name}")) {
-                throw new IllegalArgumentException(path + " must hold {name} where the name goes, got: " + address);
+                throw new IllegalArgumentException(path + " must hold {name} where the name goes, and the address on "
+                        + hostOf(address) + " holds none");
             }
             addresses.put(source, address);
         }
