@@ -215,6 +215,7 @@ public final class RegisterAccount {
             case AccountRepository.Inserted inserted ->
                 sessions.update(
                                 connection,
+                                generation,
                                 current -> current instanceof AuthState.Unregistered
                                         ? new AuthState.Authenticated(account, AuthMethod.REGISTERED)
                                         : current)
