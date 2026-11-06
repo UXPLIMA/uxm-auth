@@ -33,8 +33,9 @@ import org.jspecify.annotations.Nullable;
  * Brings another login plugin's accounts over, once.
  *
  * <p>The whole source is read before anything is written, so a source that fails halfway leaves nothing behind
- * and marks nothing complete; the next start reads it again. Every account is written by its name, so a second run
- * updates what the first wrote and never doubles it. An account the plugin held already keeps its own id.
+ * and marks nothing complete; the next start reads it again. Every account is written by its name, and each one the
+ * import makes is remembered under its source, so a second run updates what the first made and never doubles it. A
+ * name this plugin held before the import is left as it is and counted as held.
  */
 public final class ImportAccounts {
 
@@ -82,7 +83,7 @@ public final class ImportAccounts {
         if (tally.read == 0) {
             return tally.report(key);
         }
-        picked.values().forEach(one -> write(one, tally));
+        picked.values().forEach(one -> write(one, key, tally));
         marks.complete(key, clock.instant());
         return tally.report(key);
     }
@@ -110,16 +111,31 @@ public final class ImportAccounts {
         }
     }
 
-    private void write(Picked one, Tally tally) {
+    /**
+     * Writes one account. A name this plugin held before the import keeps its account as it is, and is counted:
+     * writing over it would give it another plugin's password, kind and premium id while its mail, factors and
+     * sessions stayed. Only an account this import made, in a run that failed before it completed, is written again.
+     */
+    private void write(Picked one, String key, Tally tally) {
         Optional<Account> existing = accounts.findByName(one.name());
+        if (existing.isPresent() && !marks.wrote(key, existing.get().id())) {
+            tally.held++;
+            return;
+        }
         Account account = accountFor(one, existing);
         if (existing.isPresent()) {
             accounts.update(account);
             tally.updated++;
+        } else if (accounts.findById(account.id()).isPresent()) {
+            // The source's id is an account under another name here, which is not this import's to change.
+            tally.held++;
+            return;
         } else if (accounts.insert(account) instanceof AccountRepository.Inserted) {
+            marks.written(key, account.id());
             tally.imported++;
         } else {
-            tally.duplicates++;
+            // Somebody registered the name while the import ran.
+            tally.held++;
             return;
         }
         if (one.row().password() instanceof LegacyHashes.Unknown unknown) {
@@ -175,6 +191,7 @@ public final class ImportAccounts {
         int imported;
         int updated;
         int duplicates;
+        int held;
         int refusedSecrets;
         int refusedNameCount;
         final List<String> refusedNames = new ArrayList<>();
@@ -195,6 +212,7 @@ public final class ImportAccounts {
                     imported,
                     updated,
                     duplicates,
+                    held,
                     refusedSecrets,
                     refusedNames,
                     refusedNameCount,

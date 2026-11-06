@@ -190,7 +190,8 @@ public final class StartupImport {
                     + " to stop this line";
         }
         return "imported from " + layout.display() + ": " + report.imported() + " new, " + report.updated()
-                + " updated, " + report.duplicates() + " duplicate names, " + report.refusedNameCount()
+                + " updated, " + report.duplicates() + " duplicate names, " + report.held()
+                + " names this server held already and left as they were, " + report.refusedNameCount()
                 + " names refused, " + report.refusedSecrets() + " authenticator secrets refused, hashes not read: "
                 + (report.unknownHashes().isEmpty() ? "none" : report.unknownHashes());
     }

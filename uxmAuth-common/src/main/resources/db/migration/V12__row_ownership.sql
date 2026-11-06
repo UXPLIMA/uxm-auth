@@ -4,3 +4,12 @@
 -- website after the first one went, and is not the account's. A link made before this column has no mark, and
 -- takes the mark of the row it finds first.
 ALTER TABLE uxmauth_website_link ADD COLUMN row_mark VARCHAR(64);
+
+-- The accounts an import made, one row each, under the source it read. A run that failed halfway runs again from
+-- the start and writes over what it made itself; an account under a name this plugin held before the import is
+-- never written over, because its mail, factors and sessions would stay with a password from another plugin.
+CREATE TABLE IF NOT EXISTS uxmauth_import_account (
+    source     VARCHAR(64) NOT NULL,
+    account_id VARCHAR(36) NOT NULL,
+    PRIMARY KEY (source, account_id)
+);

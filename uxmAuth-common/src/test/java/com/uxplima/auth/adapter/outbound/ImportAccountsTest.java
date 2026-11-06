@@ -15,11 +15,15 @@ import com.uxplima.auth.application.migrate.ImportAccounts;
 import com.uxplima.auth.application.migrate.ImportReport;
 import com.uxplima.auth.application.port.ImportSource;
 import com.uxplima.auth.application.port.ImportedAccount;
+import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.account.AccountKind;
 import com.uxplima.auth.domain.hash.LegacyHashes;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.NamePolicy;
+import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.uxmlib.storage.sql.Database;
+import com.uxplima.uxmlib.storage.sql.Sql;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -86,6 +90,60 @@ class ImportAccountsTest {
 
             assertThat(second.imported()).isEqualTo(1);
             assertThat(new SqlImportMarks(database).completed(SOURCE)).isPresent();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Backend.class)
+    void anAccountThisServerHeldIsLeftAsItIs(Backend backend) {
+        try (Database database = backend.open(folder)) {
+            SqlAccountRepository accounts = new SqlAccountRepository(database);
+            PlayerName steve = new PlayerName("Steve");
+            accounts.insert(new Account(
+                    UUID.randomUUID(),
+                    steve,
+                    AccountKind.CRACKED,
+                    null,
+                    new PasswordHash("$SHA$mine$1"),
+                    NOW,
+                    "198.51.100.1",
+                    null,
+                    null));
+
+            ImportReport report = importer(database)
+                    .run(source(List.of(
+                            row("steve", "$SHA$theirs$2", UUID.randomUUID(), null),
+                            row("Alex", "$SHA$alex$3", null, null))));
+
+            assertThat(report.held()).isEqualTo(1);
+            assertThat(report.imported()).isEqualTo(1);
+            Account kept = accounts.findByName(steve).orElseThrow();
+            assertThat(kept.password()).isEqualTo(new PasswordHash("$SHA$mine$1"));
+            assertThat(kept.kind()).isEqualTo(AccountKind.CRACKED);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Backend.class)
+    void aRunThatFailedHalfwayWritesAgainOverWhatItMade(Backend backend) {
+        try (Database database = backend.open(folder)) {
+            ImportAccounts importer = importer(database);
+            importer.run(source(List.of(row("Steve", "$SHA$first$1", null, null))));
+            // As if the run had stopped before it was marked complete.
+            new Sql(database)
+                    .update(
+                            "DELETE FROM uxmauth_meta WHERE meta_key = ?",
+                            statement -> statement.setString(1, "import." + SOURCE));
+
+            ImportReport again = importer.run(source(List.of(row("Steve", "$SHA$second$2", null, null))));
+
+            assertThat(again.updated()).isEqualTo(1);
+            assertThat(again.held()).isZero();
+            assertThat(new SqlAccountRepository(database)
+                            .findByName(new PlayerName("Steve"))
+                            .orElseThrow()
+                            .password())
+                    .isEqualTo(new PasswordHash("$SHA$second$2"));
         }
     }
 }

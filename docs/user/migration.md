@@ -14,7 +14,9 @@
   those.
 
 Passwords keep their hash and move to `hashing.algorithm` at the player's next login. Authenticator secrets and
-premium ids come across. The start prints how many accounts came over and how many were refused, never a
+premium ids come across. A name that already holds an account here is left as it is, with its password, mail and
+second factor, and counted as held; only an account the same import made in a run that failed is written again.
+The start prints how many accounts came over, how many names were held and how many were refused, never a
 password. An import runs once; every later start says it ran and does nothing. A failed import stops the plugin
 with its reason, marks nothing and runs again at the next start; a file that does not parse is such a failure. A
 source that holds no account at all is not marked either: the start says so and reads it again next time, until
