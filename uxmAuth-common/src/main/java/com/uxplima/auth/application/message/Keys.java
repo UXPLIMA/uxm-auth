@@ -159,6 +159,9 @@ public enum Keys implements MessageKey {
                     + " name is yours."),
     KICK_NETWORK_CLAIM(
             "kick.network-claim", "<body>This server could not confirm your login with the network. Join again."),
+    KICK_NETWORK_CHANNEL(
+            "kick.network-channel",
+            "<body>Your client closed a channel the network needs to follow your login. Join again."),
     KICK_NAME_CASE(
             "kick.name-case",
             "<body>This name is registered as <value><name><body>. Join again with exactly that spelling."),

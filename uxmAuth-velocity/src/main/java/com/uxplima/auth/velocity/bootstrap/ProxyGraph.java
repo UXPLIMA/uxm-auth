@@ -67,6 +67,7 @@ import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
 import com.uxplima.auth.domain.network.Nonces;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.adapter.inbound.ChannelGuard;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.EndedSessions;
@@ -356,6 +357,7 @@ final class ProxyGraph implements AutoCloseable {
         register(new ClaimWriter(sessions, claims, clock));
         proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
         register(new ReportListener(sessions, claims, clock, logger, routes::loggedIn));
+        register(new ChannelGuard(words));
         NetworkEvents bulletins = NetworkBulletins.open(
                 settings.current().network().redis(), new Bulletins(claims.get().orElseThrow()), logger::warn);
         bulletins.listen(new EndedSessions(sessions));

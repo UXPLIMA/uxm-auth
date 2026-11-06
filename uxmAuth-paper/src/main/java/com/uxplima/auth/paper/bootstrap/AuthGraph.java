@@ -285,7 +285,9 @@ final class AuthGraph implements AutoCloseable {
                 plugin,
                 () -> claims(settings),
                 () -> settings.current().network().serverName(),
-                Clock.systemUTC());
+                Clock.systemUTC(),
+                scheduler,
+                messages);
         Hashing hashing = boot.hashers().observed(timings::start, spent -> timings.record(Timings.Kind.HASHING, spent));
         AccountRepository accounts = new TimedAccounts(
                 WebsiteAccounts.beside(

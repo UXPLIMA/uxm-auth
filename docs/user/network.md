@@ -44,7 +44,9 @@ On the proxy:
 
 `network.claim-seconds` is how long a signed claim stays good; the proxy writes a fresh one before each
 connection to a server, for that server alone. A server takes each claim once, so a copy of one is refused, and
-takes the claim off the player's profile before anyone else can see it.
+takes the claim off the player's profile before anyone else can see it. A server tells the proxy, on the
+`uxmauth:network` channel the proxy opens on each player's connection, when a player waits again after a logout
+there; a client that closes that channel is sent away.
 
 ## Redis
 
