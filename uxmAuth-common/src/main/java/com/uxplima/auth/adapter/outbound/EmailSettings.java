@@ -16,11 +16,16 @@ import com.uxplima.uxmlib.config.HoconConfig;
  * @param codes how long a code lasts, how many tries it takes, how soon another may go, and its length
  * @param required whether a password account plays only with a confirmed address; off by default, since it needs
  *     working mail
+ * @param recoverPerHour how many recovery codes one address may ask inside an hour, over every account
  */
-public record EmailSettings(DomainRule domains, MailCodes.Settings codes, boolean required) {
+public record EmailSettings(DomainRule domains, MailCodes.Settings codes, boolean required, int recoverPerHour) {
     public EmailSettings {
         Objects.requireNonNull(domains, "domains");
         Objects.requireNonNull(codes, "codes");
+        if (recoverPerHour < 1 || recoverPerHour > 1000) {
+            throw new IllegalArgumentException(
+                    "email.recover-per-address-per-hour must be 1 to 1000, not " + recoverPerHour);
+        }
     }
 
     /** Reads the block, naming it in any value it refuses. */
@@ -33,7 +38,9 @@ public record EmailSettings(DomainRule domains, MailCodes.Settings codes, boolea
                         Duration.ofMinutes(config.getInt("email.code-minutes", 15)),
                         config.getInt("email.code-attempts", 5),
                         Duration.ofSeconds(config.getInt("email.cooldown-seconds", 60)),
-                        config.getInt("email.code-length", 6)),
-                config.getBoolean("email.required-at-registration", false));
+                        config.getInt("email.code-length", 6),
+                        config.getInt("email.codes-per-day", 5)),
+                config.getBoolean("email.required-at-registration", false),
+                config.getInt("email.recover-per-address-per-hour", 5));
     }
 }

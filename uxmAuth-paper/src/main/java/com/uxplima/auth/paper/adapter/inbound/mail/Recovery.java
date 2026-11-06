@@ -69,7 +69,7 @@ public final class Recovery {
         Objects.requireNonNull(player, "player");
         return replies.on(
                 player,
-                recover.request(player.getUniqueId(), messages.localeOf(player)),
+                recover.request(player.getUniqueId(), Addresses.of(player), messages.localeOf(player)),
                 outcome -> answer(player, outcome));
     }
 

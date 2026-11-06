@@ -340,16 +340,14 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>This server requires an address, so it cannot be removed. Link another with"
                     + " <value>/email add <address><body> to replace it."),
     EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
-    RECOVER_SENT(
-            "recover.sent",
-            "<good>A code went to <value><address><good>. Type <value>/recover <code> <new"
+    RECOVER_REQUESTED(
+            "recover.requested",
+            "<good>If this account has a confirmed address, a code went to it. Type <value>/recover <code> <new"
                     + " password><good> within <value><minutes><good> minutes."),
     RECOVER_COOLDOWN(
             "recover.cooldown",
-            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body> seconds."),
-    RECOVER_NO_ADDRESS(
-            "recover.no-address",
-            "<etag:'ERROR'> <body>No address is linked to this account, so no code can be sent. Ask" + " the staff."),
+            "<etag:'ERROR'> <body>Too many codes were asked from your address lately. Ask again in"
+                    + " <value><minutes><body> minutes."),
     RECOVER_NOT_WAITING(
             "recover.not-waiting", "<etag:'ERROR'> <body>A password is recovered at the login, before it is typed."),
     RECOVER_USAGE(

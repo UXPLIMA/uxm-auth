@@ -12,6 +12,7 @@ import javax.net.ssl.SSLSocketFactory;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.adapter.outbound.SqlEmails;
+import com.uxplima.auth.adapter.outbound.SqlMailSends;
 import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.adapter.outbound.mail.SmtpClient;
 import com.uxplima.auth.adapter.outbound.mail.SmtpMailer;
@@ -66,6 +67,7 @@ final class ProxyMail implements AutoCloseable {
         this.emails = new SqlEmails(database, Clock.systemUTC());
         this.codes = new MailCodes(
                 emails,
+                new SqlMailSends(database),
                 mailer,
                 boot.hashers(),
                 lane,

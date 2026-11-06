@@ -44,16 +44,15 @@ public final class RecoveryWords {
                 switch (Objects.requireNonNull(outcome, "outcome")) {
                     case RecoverPassword.Outcome.Sent sent ->
                         new Line(
-                                Keys.RECOVER_SENT,
-                                List.of(
-                                        Text.placeholder("address", sent.masked()),
-                                        Text.placeholder(
-                                                "minutes",
-                                                String.valueOf(sent.lasts().toMinutes()))));
+                                Keys.RECOVER_REQUESTED,
+                                List.of(Text.placeholder(
+                                        "minutes", String.valueOf(sent.lasts().toMinutes()))));
                     case RecoverPassword.Outcome.Cooldown cooldown ->
                         new Line(
                                 Keys.RECOVER_COOLDOWN,
-                                List.of(Text.placeholder("seconds", String.valueOf(seconds(cooldown)))));
+                                List.of(
+                                        Text.placeholder("seconds", String.valueOf(seconds(cooldown))),
+                                        Text.placeholder("minutes", String.valueOf(minutes(cooldown)))));
                     case RecoverPassword.Outcome.Wrong wrong ->
                         new Line(
                                 Keys.RECOVER_WRONG,
@@ -69,9 +68,13 @@ public final class RecoveryWords {
         return Math.max(1, (cooldown.left().toMillis() + 999) / 1000);
     }
 
+    /** The minutes left, a part of one counted whole, never fewer than one. */
+    private static long minutes(RecoverPassword.Outcome.Cooldown cooldown) {
+        return Math.max(1, (seconds(cooldown) + 59) / 60);
+    }
+
     private static Keys plain(RecoverPassword.Outcome outcome) {
         return switch (outcome) {
-            case RecoverPassword.Outcome.NoAddress none -> Keys.RECOVER_NO_ADDRESS;
             case RecoverPassword.Outcome.MailOff off -> Keys.EMAIL_MAIL_OFF;
             case RecoverPassword.Outcome.MailFailed failed -> Keys.EMAIL_MAIL_FAILED;
             case RecoverPassword.Outcome.NotWaiting notWaiting -> Keys.RECOVER_NOT_WAITING;

@@ -13,3 +13,17 @@ CREATE TABLE IF NOT EXISTS uxmauth_account_lock (
     revision     BIGINT      NOT NULL,
     PRIMARY KEY (account_id)
 );
+
+-- How often codes of each kind went to each account, apart from the code itself, so a code that is spent, runs out
+-- of tries or of time keeps its cooldown and the day's cap. last_sent is when the latest went, day_start when the
+-- day its count runs in began, sent_today how many went since; milliseconds since the epoch, 0 for never. A
+-- change bumps revision first, which locks the row on every database before it is read.
+CREATE TABLE IF NOT EXISTS uxmauth_mail_send (
+    account_id VARCHAR(36) NOT NULL,
+    purpose    VARCHAR(16) NOT NULL,
+    last_sent  BIGINT      NOT NULL,
+    day_start  BIGINT      NOT NULL,
+    sent_today INT         NOT NULL,
+    revision   BIGINT      NOT NULL,
+    PRIMARY KEY (account_id, purpose)
+);

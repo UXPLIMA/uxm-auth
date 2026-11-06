@@ -396,8 +396,7 @@ public final class LimboLogin {
                 .thenApply(result -> registered(reader, id, result));
     }
 
-    private CompletableFuture<Outcome> replaced(
-            Audience reader, UUID id, List<String> passwords, String address) {
+    private CompletableFuture<Outcome> replaced(Audience reader, UUID id, List<String> passwords, String address) {
         if (passwords.size() < 2) {
             return CompletableFuture.completedFuture(new Outcome.Stay(messages.render(reader, Keys.CHANGE_NEEDS_BOTH)));
         }

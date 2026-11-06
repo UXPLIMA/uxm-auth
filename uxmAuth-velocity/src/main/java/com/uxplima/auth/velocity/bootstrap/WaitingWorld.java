@@ -30,6 +30,7 @@ import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.mail.RecoveryAsks;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.AuthEvents;
@@ -260,7 +261,11 @@ final class WaitingWorld implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 guards.breaches(),
                 guards.remembered(),
-                guards.bulletins());
+                guards.bulletins(),
+                new RecoveryAsks(
+                        () -> settings.current().email().recoverPerHour(),
+                        () -> settings.current().protection().sharedAddresses(),
+                        Instant::now));
         return new LimboRecovery(recover, sessions, words);
     }
 

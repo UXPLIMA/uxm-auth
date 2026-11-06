@@ -87,6 +87,14 @@ cooldown and length, and `required-at-registration`, which holds a password acco
 address (it holds nobody while mail is off). Mail failures are told to the player and once to the console, never
 with the address.
 
+When a code went is kept apart from the code, so a code that is spent, used up or past its time keeps its
+cooldown, and `codes-per-day` caps how many codes of one kind an account is sent in a day; login codes, which only
+a right password sends, keep the cooldown but are not capped. `/recover` answers an ask the same way whether the
+account has an address, a code went, or the cooldown or cap held one back, and never shows the address, so
+nobody learns from it which accounts have one. One address may ask `recover-per-address-per-hour` times an hour
+over every account (not counted through a shared filter). The time an ask takes can still differ, since a code is
+hashed and mailed only for an account with an address.
+
 ## Purge
 
 `purge` removes accounts nobody logged in to for `after-days`, with everything kept under them, checking every
