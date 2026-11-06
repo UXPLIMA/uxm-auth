@@ -53,12 +53,19 @@ public record ProtectionSettings(
 
     /** What the console should say about these settings at every start and reload. */
     public List<String> problems() {
-        if (!sharedAddresses().unproven()) {
-            return List.of();
+        SharedAddresses shared = sharedAddresses();
+        if (shared.unproven()) {
+            return List.of("protection.shared-address-hosts lists hosts, but protection.shared-address-sources lists"
+                    + " no address, so no connection counts as through a filter: a host alone is the player's to"
+                    + " type. List the addresses the filter connects from.");
         }
-        return List.of("protection.shared-address-hosts lists hosts, but protection.shared-address-sources lists no"
-                + " address, so no connection counts as through a filter: a host alone is the player's to type."
-                + " List the addresses the filter connects from.");
+        if (shared.hostsNarrowNothing()) {
+            return List.of("protection.shared-address-hosts no longer narrows protection.shared-address-sources:"
+                    + " every connection from those addresses counts as through the filter, whatever host it"
+                    + " typed, so none of them is remembered or banned by address. Empty the hosts list to"
+                    + " silence this.");
+        }
+        return List.of();
     }
 
     /** The shared-address filters, to tell a connection through one from an ordinary one. */

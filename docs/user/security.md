@@ -28,11 +28,12 @@ player after that many wrong passwords on one connection.
 
 ## Shared addresses
 
-Behind a filter such as TCPShield every player arrives from the filter's address. `protection.shared-address-hosts`
-and `shared-address-sources` name the hosts the filter answers for and the addresses it connects from. A
-connection counts as through the filter only when one of those addresses made it, and sessions and every rule
-that reads the address are off for it. With hosts and no sources nothing counts and the console says so at
-every start. When the filter hands the server each player's own address, use that and leave both empty.
+Behind a filter such as TCPShield every player arrives from the filter's address. `protection.shared-address-sources`
+names the addresses the filter connects from. Every connection one of them made counts as through the filter,
+whatever host the player typed, since any player behind it may type any host; sessions and every rule that reads
+the address are off for it. `shared-address-hosts` is kept from older releases and narrows nothing: with hosts
+and no sources nothing counts, and with both the console asks you to empty the hosts. When the filter hands the
+server each player's own address, use that and leave both empty.
 
 ## Countries
 
