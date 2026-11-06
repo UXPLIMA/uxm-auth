@@ -72,6 +72,11 @@ final class ProxyModule {
     boolean wire() {
         extractDefaults();
         PluginSettings settings = new PluginSettings(folder.resolve(CONFIG));
+        // The words come before the database: a start the database fails still turns players away in the
+        // operator's language.
+        Messages words = new Messages(
+                catalog(settings), new ProxyLocales(() -> settings.current().language()));
+        this.messages = words;
         Database opened = AuthDatabase.open(settings.current().storage(), POOL);
         try {
             new RecordedScheme(opened).check(settings.current().ownership().uuidScheme());
@@ -91,9 +96,6 @@ final class ProxyModule {
                     + " behind the proxy instead.");
         }
         settings.current().protection().problems().forEach(logger::warn);
-        Messages words = new Messages(
-                catalog(settings), new ProxyLocales(() -> settings.current().language()));
-        this.messages = words;
         ProxyGraph network = new ProxyGraph(plugin, proxy, logger, folder);
         this.graph = network;
         if (!opened(network, settings, opened, words)) {
@@ -144,7 +146,10 @@ final class ProxyModule {
         return database;
     }
 
-    /** The catalogue every message on the proxy is read from, once the proxy half has started. */
+    /**
+     * The catalogue every message on the proxy is read from, once the start has read the words: a start that failed
+     * after that still has them.
+     */
     @Nullable Messages messages() {
         return messages;
     }

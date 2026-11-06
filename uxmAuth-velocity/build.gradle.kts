@@ -23,6 +23,9 @@ dependencies {
     implementation(project(":uxmAuth-api"))
     implementation(uxm.uxmlib.common)
     implementation(uxm.configurate.hocon)
+
+    // The events a test hands a listener are the proxy's own, with Adventure and slf4j as the proxy carries them.
+    testImplementation(libs.velocity.api)
 }
 
 // The waiting world exists for two LimboAPI lines that cannot share a classpath: 2 for the main source set and

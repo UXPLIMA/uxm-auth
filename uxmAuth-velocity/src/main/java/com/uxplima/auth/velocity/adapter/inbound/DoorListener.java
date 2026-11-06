@@ -218,11 +218,60 @@ public final class DoorListener {
 
     /** Whether one of the door's rules turned the connection away; it reads the address, never the name. */
     private boolean ruledOut(PreLoginEvent event, String host) {
-        Optional<Admission.Refused> ruled = admission.decide(new Admission.Arrival(
-                event.getConnection().getRemoteAddress().getAddress().getHostAddress(), host));
-        ruled.ifPresent(
-                refused -> event.setResult(PreLoginEvent.PreLoginComponentResult.denied(words.admission(refused))));
-        return ruled.isPresent();
+        Ruling ruling = rule(
+                admission,
+                new Admission.Arrival(
+                        event.getConnection().getRemoteAddress().getAddress().getHostAddress(), host));
+        switch (ruling) {
+            case Ruling.Passed passed -> {
+                return false;
+            }
+            case Ruling.Ruled ruled -> {
+                event.setResult(PreLoginEvent.PreLoginComponentResult.denied(words.admission(ruled.refused())));
+                return true;
+            }
+            case Ruling.Failed failed -> {
+                // A rule that cannot read its records (an address ban on a lost database) cannot vouch for the
+                // address: the connection is turned away, as a door that cannot answer turns everyone away.
+                logger.warn(
+                        "Could not check the address of {}; the connection is turned away.",
+                        printable(event.getUsername()),
+                        failed.failure());
+                event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
+                        words.refusal(Refusal.LOOKUP_FAILED, Optional.empty())));
+                return true;
+            }
+        }
+    }
+
+    /** What the door's rules made of an arrival. */
+    sealed interface Ruling {
+
+        /** Every rule let the connection in. */
+        record Passed() implements Ruling {}
+
+        /** A rule turned the connection away. */
+        record Ruled(Admission.Refused refused) implements Ruling {
+            public Ruled {
+                Objects.requireNonNull(refused, "refused");
+            }
+        }
+
+        /** A rule could not answer; the connection must not pass on that. */
+        record Failed(RuntimeException failure) implements Ruling {
+            public Failed {
+                Objects.requireNonNull(failure, "failure");
+            }
+        }
+    }
+
+    /** The rules' answer for an arrival, with a rule that throws (a lost database) answering as a failure. */
+    static Ruling rule(Admission admission, Admission.Arrival arrival) {
+        try {
+            return admission.decide(arrival).<Ruling>map(Ruling.Ruled::new).orElseGet(Ruling.Passed::new);
+        } catch (RuntimeException failure) {
+            return new Ruling.Failed(failure);
+        }
     }
 
     void profile(GameProfileRequestEvent event) {
