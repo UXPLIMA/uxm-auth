@@ -202,11 +202,15 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
                 .orElse(0);
     }
 
+    /**
+     * Nothing in the table keeps a premium id to one account, and a database from before the import refused a second
+     * one may hold two. The one that played last answers, the same one on every database and every call.
+     */
     @Override
     public Optional<Account> findByPremiumId(UUID premiumId) {
         Objects.requireNonNull(premiumId, "premiumId");
         return database.transaction(sql -> sql.queryFirst(
-                SELECT + "premium_id = ?",
+                SELECT + "premium_id = ? ORDER BY COALESCE(last_login_at, registered_at) DESC, id",
                 statement -> statement.setString(1, premiumId.toString()),
                 SqlAccountRepository::read));
     }

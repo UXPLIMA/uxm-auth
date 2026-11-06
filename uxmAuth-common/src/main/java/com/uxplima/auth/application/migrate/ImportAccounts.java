@@ -3,6 +3,7 @@ package com.uxplima.auth.application.migrate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +84,7 @@ public final class ImportAccounts {
         if (tally.read == 0) {
             return tally.report(key);
         }
+        onePerPremiumId(picked, tally);
         picked.values().forEach(one -> write(one, key, tally));
         marks.complete(key, clock.instant());
         return tally.report(key);
@@ -112,6 +114,29 @@ public final class ImportAccounts {
     }
 
     /**
+     * Keeps one name per premium id: a source that kept a paid player under two names, as an old name beside a new
+     * one, gives the id to the name that played last. Two accounts under one premium id would let the lookup by that
+     * id answer either.
+     */
+    private static void onePerPremiumId(Map<String, Picked> picked, Tally tally) {
+        Map<UUID, Picked> latest = new HashMap<>();
+        for (Picked one : picked.values()) {
+            UUID premiumId = one.row().premiumId();
+            if (premiumId != null) {
+                latest.merge(premiumId, one, (kept, next) -> next.seen().isAfter(kept.seen()) ? next : kept);
+            }
+        }
+        picked.values().removeIf(one -> {
+            UUID premiumId = one.row().premiumId();
+            boolean older = premiumId != null && !one.equals(latest.get(premiumId));
+            if (older) {
+                tally.duplicates++;
+            }
+            return older;
+        });
+    }
+
+    /**
      * Writes one account. A name this plugin held before the import keeps its account as it is, and is counted:
      * writing over it would give it another plugin's password, kind and premium id while its mail, factors and
      * sessions stayed. Only an account this import made, in a run that failed before it completed, is written again.
@@ -119,6 +144,17 @@ public final class ImportAccounts {
     private void write(Picked one, String key, Tally tally) {
         Optional<Account> existing = accounts.findByName(one.name());
         if (existing.isPresent() && !marks.wrote(key, existing.get().id())) {
+            tally.held++;
+            return;
+        }
+        UUID premiumId = one.row().premiumId();
+        if (premiumId != null
+                && accounts.findByPremiumId(premiumId)
+                        .filter(holder -> existing.map(Account::id)
+                                .filter(holder.id()::equals)
+                                .isEmpty())
+                        .isPresent()) {
+            // Another account here proved that premium id already.
             tally.held++;
             return;
         }

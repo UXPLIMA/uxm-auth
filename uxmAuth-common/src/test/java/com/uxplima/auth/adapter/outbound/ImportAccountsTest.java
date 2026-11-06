@@ -125,6 +125,65 @@ class ImportAccountsTest {
 
     @ParameterizedTest
     @EnumSource(Backend.class)
+    void aPremiumIdGoesToTheNameThatPlayedLast(Backend backend) {
+        try (Database database = backend.open(folder)) {
+            UUID paid = UUID.randomUUID();
+
+            ImportReport report = importer(database)
+                    .run(source(List.of(
+                            row("OldName", "$SHA$a$1", paid, NOW.minusSeconds(7200)),
+                            row("NewName", "$SHA$b$2", paid, NOW.minusSeconds(60)))));
+
+            assertThat(report.imported()).isEqualTo(1);
+            assertThat(report.duplicates()).isEqualTo(1);
+            SqlAccountRepository accounts = new SqlAccountRepository(database);
+            assertThat(accounts.findByPremiumId(paid).orElseThrow().name()).isEqualTo(new PlayerName("NewName"));
+            assertThat(accounts.findByName(new PlayerName("OldName"))).isEmpty();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Backend.class)
+    void aPremiumIdAnotherAccountProvedIsNotGivenTwice(Backend backend) {
+        try (Database database = backend.open(folder)) {
+            SqlAccountRepository accounts = new SqlAccountRepository(database);
+            UUID paid = UUID.randomUUID();
+            accounts.insert(new Account(
+                    paid, new PlayerName("Notch"), AccountKind.PREMIUM, paid, null, NOW, "198.51.100.1", null, null));
+
+            ImportReport report = importer(database).run(source(List.of(row("Alex", "$SHA$a$1", paid, null))));
+
+            assertThat(report.held()).isEqualTo(1);
+            assertThat(accounts.findByName(new PlayerName("Alex"))).isEmpty();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Backend.class)
+    void theLookupByPremiumIdAnswersTheAccountThatPlayedLast(Backend backend) {
+        try (Database database = backend.open(folder)) {
+            SqlAccountRepository accounts = new SqlAccountRepository(database);
+            UUID paid = UUID.randomUUID();
+            for (String name : List.of("First", "Second", "Third")) {
+                Instant played = name.equals("Second") ? NOW : NOW.minusSeconds(3600);
+                accounts.insert(new Account(
+                        UUID.randomUUID(),
+                        new PlayerName(name),
+                        AccountKind.PREMIUM,
+                        paid,
+                        null,
+                        NOW.minusSeconds(7200),
+                        "198.51.100.1",
+                        played,
+                        "198.51.100.1"));
+            }
+
+            assertThat(accounts.findByPremiumId(paid).orElseThrow().name()).isEqualTo(new PlayerName("Second"));
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Backend.class)
     void aRunThatFailedHalfwayWritesAgainOverWhatItMade(Backend backend) {
         try (Database database = backend.open(folder)) {
             ImportAccounts importer = importer(database);
