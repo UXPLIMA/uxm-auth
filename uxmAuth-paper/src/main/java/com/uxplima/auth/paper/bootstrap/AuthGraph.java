@@ -115,6 +115,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.SecretBranches;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
+import com.uxplima.auth.paper.adapter.inbound.hold.DeopWatch;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
@@ -226,6 +227,7 @@ final class AuthGraph implements AutoCloseable {
     private final ClosedDoor closedDoor;
     private final JoinMessages joinMessages;
     private final Rescue rescue;
+    private final DeopWatch deopWatch;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -336,6 +338,7 @@ final class AuthGraph implements AutoCloseable {
                 Player::teleportAsync,
                 rescue::safe,
                 player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)));
+        this.deopWatch = new DeopWatch(keeper, name -> onlineId(plugin, name));
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
         WaitingBars bars = new WaitingBars(sessions);
         MomentRunner moments = WaitingBars.endWithTheWait(
@@ -767,6 +770,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
+        plugin.getServer().getPluginManager().registerEvents(deopWatch, plugin);
         plugin.getServer().getPluginManager().registerEvents(chatAnswers, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         plugin.getServer().getPluginManager().registerEvents(factors.guard, plugin);
@@ -834,6 +838,19 @@ final class AuthGraph implements AutoCloseable {
                         bans.rule(),
                         new ConnectionWindow(
                                 () -> settings.current().protection().connections(), Instant::now)));
+    }
+
+    /** The id of the player online under this name, or the id the text is written as. */
+    private static Optional<UUID> onlineId(Plugin plugin, String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        if (online != null) {
+            return Optional.of(online.getUniqueId());
+        }
+        try {
+            return Optional.of(UUID.fromString(name));
+        } catch (IllegalArgumentException notAnId) {
+            return Optional.empty();
+        }
     }
 
     /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */

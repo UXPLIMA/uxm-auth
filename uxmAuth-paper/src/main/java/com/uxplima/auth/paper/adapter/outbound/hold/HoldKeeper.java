@@ -40,6 +40,13 @@ import org.jspecify.annotations.Nullable;
  * player away, which gives everything back as they leave, rather than keeping them stripped with nothing on disk.
  * The disk is touched on the async scheduler and the player only on their own thread, so this is safe on Folia.
  *
+ * <p>Operator status is given back with care, because it is the one thing taken that is worth stealing. A file a
+ * crash left behind never makes anybody an operator: it is read at a join, before any login, where a stranger
+ * under the name would get it, and it may be older than a {@code /deop}. The console is told instead. Taking it
+ * off a player takes them off the server's operator list, so a {@code /deop} while they wait changes nothing
+ * there; the hold hears one and then does not give it back. A player made an operator while they wait keeps it,
+ * and a game mode staff changed while they wait is kept.
+ *
  * <p>The disk work of one player runs in one chain, in the order it was asked for. Two async tasks are
  * otherwise free to finish in any order, and a write that landed after the delete of a quick login would
  * leave a file that hands back an old inventory and an old operator status at some later join.
@@ -47,6 +54,9 @@ import org.jspecify.annotations.Nullable;
 public final class HoldKeeper {
 
     private static final float STILL = 0.0f;
+
+    /** The game mode a waiting player whose stats are hidden is kept in. */
+    private static final GameMode HELD_MODE = GameMode.ADVENTURE;
 
     private final Plugin plugin;
     private final Scheduler scheduler;
@@ -60,6 +70,9 @@ public final class HoldKeeper {
     private final Map<UUID, HeldState> taken = new ConcurrentHashMap<>();
     private final Set<UUID> blinded = ConcurrentHashMap.newKeySet();
     private final Map<UUID, CompletableFuture<Void>> disk = new ConcurrentHashMap<>();
+    /** The waiting players staff took operator status from while they waited, who do not get it back. */
+    private final Set<UUID> deopped = ConcurrentHashMap.newKeySet();
+
     private final Consumer<Player> unwritten;
 
     public HoldKeeper(
@@ -177,13 +190,26 @@ public final class HoldKeeper {
         return taken.containsKey(Objects.requireNonNull(player, "player").getUniqueId());
     }
 
+    /** Staff took operator status from this waiting player, so the hold does not give it back. */
+    public void withdrawOp(UUID player) {
+        Objects.requireNonNull(player, "player");
+        if (taken.containsKey(player)) {
+            deopped.add(player);
+        }
+    }
+
+    /** Staff took operator status from players the hold cannot name, so no waiting player gets it back. */
+    public void withdrawEveryOp() {
+        deopped.addAll(taken.keySet());
+    }
+
     private void settle(Player player, Optional<HeldState> leftover, Optional<HeldPlace> left) {
         UUID id = player.getUniqueId();
         if (!player.isOnline()) {
             // Gone before the hold was set up. A leftover stays on disk for their next join.
             return;
         }
-        leftover.ifPresent(state -> apply(player, state, true));
+        leftover.ifPresent(state -> giveBackLeftover(player, state));
         hideTheWaitingFrom(player);
         if (!isHeld.test(player)) {
             left.flatMap(place -> place.on(plugin.getServer())).ifPresent(target -> move(player, target));
@@ -228,6 +254,21 @@ public final class HoldKeeper {
         });
     }
 
+    /**
+     * Gives back what a crash kept, at a join and before any login. Everything comes back but operator status:
+     * whoever joined has not proved the name yet, and the file may be older than a {@code /deop}.
+     */
+    private void giveBackLeftover(Player player, HeldState state) {
+        apply(player, state, true);
+        player.setGameMode(state.gameMode());
+        if (state.op() && !player.isOp()) {
+            plugin.getLogger()
+                    .warning(player.getName() + " was an operator when the server stopped while they waited to log"
+                            + " in. Operator status is not given back from the file; use /op if they should"
+                            + " have it.");
+        }
+    }
+
     /** Takes what the switches say, if the player still waits. A login that came first leaves them whole. */
     private void strip(Player player) {
         if (!player.isOnline() || !isHeld.test(player)) {
@@ -262,7 +303,7 @@ public final class HoldKeeper {
             player.setAllowFlight(false);
             player.setWalkSpeed(STILL);
             player.setFlySpeed(STILL);
-            player.setGameMode(GameMode.ADVENTURE);
+            player.setGameMode(HELD_MODE);
         }
         if (switches.movement()) {
             // Every move of a held player is cancelled, falling too, and Paper kicks a player who hangs in the
@@ -281,8 +322,10 @@ public final class HoldKeeper {
     private void restore(Player player, boolean leaving) {
         UUID id = player.getUniqueId();
         HeldState state = taken.remove(id);
+        boolean withdrawn = deopped.remove(id);
         if (state != null) {
             apply(player, state, !leaving);
+            giveBackStanding(player, state, withdrawn);
         }
         if (blinded.remove(id)) {
             player.removePotionEffect(PotionEffectType.BLINDNESS);
@@ -388,9 +431,21 @@ public final class HoldKeeper {
                 place);
     }
 
+    /**
+     * Gives back operator status and game mode from the state kept in memory. Operator status comes back unless
+     * staff took it while the player waited, and is never taken here, so a player made an operator meanwhile keeps
+     * it. The game mode comes back only while it is still the one the hold set, so a mode staff chose is kept.
+     */
+    private static void giveBackStanding(Player player, HeldState state, boolean withdrawn) {
+        if (state.op() && !withdrawn) {
+            player.setOp(true);
+        }
+        if (player.getGameMode() == HELD_MODE) {
+            player.setGameMode(state.gameMode());
+        }
+    }
+
     private void apply(Player player, HeldState state, boolean moveBack) {
-        player.setOp(state.op());
-        player.setGameMode(state.gameMode());
         player.setAllowFlight(state.allowFlight());
         player.setFlying(state.allowFlight() && state.flying());
         player.setWalkSpeed(state.walkSpeed());
