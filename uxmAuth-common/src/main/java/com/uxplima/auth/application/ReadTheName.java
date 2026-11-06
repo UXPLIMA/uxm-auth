@@ -2,6 +2,7 @@ package com.uxplima.auth.application;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -94,6 +95,21 @@ public final class ReadTheName {
      */
     public Optional<NameVerdict> readBedrock(String raw) {
         return policy.get().blockedIn(Objects.requireNonNull(raw, "raw")).map(NameVerdict.Blocked::new);
+    }
+
+    /**
+     * The id a new name plays under, from the one the server or the scheme would give it. An account under another
+     * name may still hold that id: one that moved away from the name when its paid owner proved it keeps the
+     * offline id of its old name. A newcomer under that id would open the other account's inventory, rank and
+     * operator status, and stand in for it online, so it is given a fresh id nobody holds instead. This reads the
+     * database.
+     */
+    public UUID newcomerId(UUID wanted) {
+        UUID id = Objects.requireNonNull(wanted, "wanted");
+        while (accounts.findById(id).isPresent()) {
+            id = UUID.randomUUID();
+        }
+        return id;
     }
 
     /** What a connection under a name the door already let through waits for: its password, or an account. */

@@ -69,6 +69,10 @@ inventories, ranks and money:
 | `mojang` | Every paid player gets the Mojang UUID. A cracked account that later proves a paid name moves to it. |
 | `random` | Every new player gets a random UUID, kept from then on. |
 
+An account that moved away from a name keeps its UUID. A new player under that name, cracked or paid, whose
+scheme would give them that same UUID gets a random one nobody holds instead, so they never open the moved
+account's inventory, rank or operator status.
+
 The scheme is written into the database at the first start. A later start under another scheme is refused,
 because it would put every player into an empty inventory. To change it, run `/uxmauth uuidscheme <scheme>` from
 the console while nobody plays, write the scheme in `ownership.uuid-scheme` and restart. Accounts that would

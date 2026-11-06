@@ -22,15 +22,15 @@ import org.jspecify.annotations.Nullable;
  * Accounts in memory that refuse what the database refuses: a name held in any case, and an id held already, which
  * the database answers with an error rather than an outcome.
  */
-final class MemoryAccounts implements AccountRepository {
+public final class MemoryAccounts implements AccountRepository {
 
-    static final Instant THEN = Instant.parse("2030-01-01T12:00:00Z");
+    public static final Instant THEN = Instant.parse("2030-01-01T12:00:00Z");
 
     private final Map<UUID, Account> byId = new LinkedHashMap<>();
     private final Map<String, PlayerName> movedFrom = new HashMap<>();
 
     /** A cracked account with a password, under this id and name. */
-    Account cracked(UUID id, String name) {
+    public Account cracked(UUID id, String name) {
         Account account = new Account(
                 id,
                 new PlayerName(name),
@@ -45,7 +45,7 @@ final class MemoryAccounts implements AccountRepository {
         return account;
     }
 
-    List<Account> all() {
+    public List<Account> all() {
         return new ArrayList<>(byId.values());
     }
 
@@ -169,7 +169,7 @@ final class MemoryAccounts implements AccountRepository {
     }
 
     /** No name is in dispute, and none is ever raised. */
-    static final class NoDisputes implements Disputes {
+    public static final class NoDisputes implements Disputes {
 
         @Override
         public void raise(PlayerName name, UUID premiumId, Instant at) {}

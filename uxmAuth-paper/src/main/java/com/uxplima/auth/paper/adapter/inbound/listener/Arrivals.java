@@ -316,7 +316,9 @@ public final class Arrivals {
      * The id and name a player with a password plays under: an account's own, waiting or resumed by its session,
      * or the scheme's for a new name.
      * An offline server already derives the offline id from the name as typed, so a new name keeps it unless it
-     * carries the mark or the scheme hands out its own.
+     * carries the mark or the scheme hands out its own, or an account under another name still holds it. The
+     * profile then carries the id the player plays under, so the server loads that player's data and nobody
+     * else's.
      */
     private Arrival played(
             AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices, Optional<String> visit) {
@@ -336,7 +338,9 @@ public final class Arrivals {
             name = ((AuthState.Unregistered) state).name();
             boolean derived =
                     networked || (scheme != UuidScheme.RANDOM && name.value().equals(event.getName()));
-            id = derived ? event.getUniqueId() : scheme.idFor(name, Optional.empty(), Optional.empty());
+            UUID wanted = derived ? event.getUniqueId() : scheme.idFor(name, Optional.empty(), Optional.empty());
+            // The proxy chose a free id for the network already; alone, this door does.
+            id = networked ? wanted : names.newcomerId(wanted);
         }
         PlayerProfile profile = null;
         if (!id.equals(event.getUniqueId()) || !name.value().equals(event.getName())) {
