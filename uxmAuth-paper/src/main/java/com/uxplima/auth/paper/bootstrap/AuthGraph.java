@@ -312,6 +312,7 @@ final class AuthGraph implements AutoCloseable {
         LogIn.Failures failures = alerts.watching(bans);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
+        Set<String> runnable = PlayerCommandLabels.enabled(commands);
 
         Passes passes = new Passes();
         LoginSpot loginSpot =
@@ -320,9 +321,10 @@ final class AuthGraph implements AutoCloseable {
         this.hold = new HoldListener(
                 sessions,
                 () -> settings.current().hold(),
-                () -> labels,
+                () -> runnable,
                 plugin.getName().toLowerCase(Locale.ROOT),
-                passes::isPassing);
+                passes::isPassing,
+                PlayerCommandLabels.ownedBy(plugin));
         // Paper reads config/ under the directory it was started in.
         this.nameMarks = NameMarkCheck.warnings(
                 NameMarkCheck.paperChecksNames(Path.of("").toAbsolutePath()), boot.ownership());

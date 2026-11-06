@@ -80,24 +80,31 @@ public final class HoldListener implements Listener {
     private final Supplier<AuthSettings.Hold> hold;
     private final Supplier<Set<String>> ownCommands;
     private final String namespace;
+    private final Predicate<String> ownedHere;
 
     /**
-     * @param ownCommands every label and alias of this plugin's player commands, in lower case, which a
-     *     waiting player must always be able to run
+     * @param ownCommands every label and alias of this plugin's player commands that are on, in lower case, which
+     *     a waiting player must always be able to run
      * @param namespace the prefix the server puts before this plugin's commands, in lower case
      */
     public HoldListener(
             Sessions sessions, Supplier<AuthSettings.Hold> hold, Supplier<Set<String>> ownCommands, String namespace) {
-        this(sessions, hold, ownCommands, namespace, player -> false);
+        this(sessions, hold, ownCommands, namespace, player -> false, label -> false);
     }
 
-    /** @param passing whether a teleport of this player is the plugin's own, into the login world or back */
+    /**
+     * @param passing whether a teleport of this player is the plugin's own, into the login world or back
+     * @param ownedHere whether the server runs this plugin's command under a bare label, rather than another
+     *     plugin's that took the label first
+     */
     public HoldListener(
             Sessions sessions,
             Supplier<AuthSettings.Hold> hold,
             Supplier<Set<String>> ownCommands,
             String namespace,
-            Predicate<UUID> passing) {
+            Predicate<UUID> passing,
+            Predicate<String> ownedHere) {
+        this.ownedHere = Objects.requireNonNull(ownedHere, "ownedHere");
         this.passing = Objects.requireNonNull(passing, "passing");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.hold = Objects.requireNonNull(hold, "hold");
@@ -395,16 +402,18 @@ public final class HoldListener implements Listener {
     }
 
     /**
-     * Whether a waiting player may run this label. This plugin's own commands pass bare or under this plugin's
-     * own namespace, never under another plugin's. An operator's allowed command is compared whole, so
-     * {@code spawn} allows {@code /spawn} and only {@code essentials:spawn} allows {@code /essentials:spawn}.
+     * Whether a waiting player may run this label. This plugin's own commands pass under this plugin's own
+     * namespace, never under another plugin's, and bare only while the server runs this plugin's command under
+     * the label: a land plugin that took {@code claim} first would otherwise run its own for a stranger. An
+     * operator's allowed command is compared whole, so {@code spawn} allows {@code /spawn} and only
+     * {@code essentials:spawn} allows {@code /essentials:spawn}.
      */
     private boolean allowed(String label) {
         int colon = label.indexOf(':');
         String bare = colon < 0 ? label : label.substring(colon + 1);
-        boolean ours = colon < 0 || label.substring(0, colon).equals(namespace);
-        return (ours && ownCommands.get().contains(bare))
-                || hold.get().allowedCommands().stream().anyMatch(command -> command.equalsIgnoreCase(label));
+        boolean ours = ownCommands.get().contains(bare)
+                && (colon < 0 ? ownedHere.test(bare) : label.substring(0, colon).equals(namespace));
+        return ours || hold.get().allowedCommands().stream().anyMatch(command -> command.equalsIgnoreCase(label));
     }
 
     /** The command's label in lower case, without its slash, with its namespace if it was written. */
