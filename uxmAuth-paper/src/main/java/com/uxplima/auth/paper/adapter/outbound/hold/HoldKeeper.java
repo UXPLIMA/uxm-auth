@@ -221,6 +221,11 @@ public final class HoldKeeper {
             }
             return;
         }
+        if (taken.containsKey(id)) {
+            // Held already, as a player whose sessions ended goes back to the password: the state kept from
+            // before the hold is the one to give back, and what they hold now is not taken a second time.
+            return;
+        }
         // A player still on their way back from the login world stood where the leftover says, not here.
         HeldPlace place = room.get().isEmpty() ? null : placeOf(player, leftover, left);
         // The crafting grid and the cursor are no inventory slots; closing the window puts them back into it.

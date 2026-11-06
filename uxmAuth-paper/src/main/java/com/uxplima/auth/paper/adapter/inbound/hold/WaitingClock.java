@@ -3,7 +3,10 @@ package com.uxplima.auth.paper.adapter.inbound.hold;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -34,6 +37,8 @@ public final class WaitingClock {
     private final MomentRunner moments;
     private final Messages messages;
     private final WaitingTimes times;
+    /** The clock that runs for each waiting player; one started later replaces it. */
+    private final Map<UUID, Object> running = new ConcurrentHashMap<>();
 
     public WaitingClock(
             Scheduler scheduler,
@@ -69,7 +74,16 @@ public final class WaitingClock {
         Instant arrived = clock.instant();
         times.arrived(player.getUniqueId(), arrived);
         AtomicReference<Instant> reminded = new AtomicReference<>(arrived);
-        scheduler.entityTimer(player, BEAT, BEAT, handle -> beat(player, arrived, reminded, handle));
+        // A player sent back to the password while their clock still runs starts over; the old clock stops.
+        Object run = new Object();
+        running.put(player.getUniqueId(), run);
+        scheduler.entityTimer(player, BEAT, BEAT, handle -> {
+            if (running.get(player.getUniqueId()) != run) {
+                handle.cancel();
+                return;
+            }
+            beat(player, arrived, reminded, handle);
+        });
     }
 
     private void beat(Player player, Instant arrived, AtomicReference<Instant> reminded, TaskHandle handle) {
@@ -80,7 +94,7 @@ public final class WaitingClock {
                 || state instanceof AuthState.Authenticated
                 || state instanceof AuthState.SettingUp) {
             handle.cancel();
-            times.gone(player.getUniqueId());
+            stopped(player);
             return;
         }
         boolean registering = state instanceof AuthState.Unregistered;
@@ -88,7 +102,7 @@ public final class WaitingClock {
         Instant now = clock.instant();
         if (Duration.between(arrived, now).compareTo(registering ? limits.register() : limits.login()) >= 0) {
             handle.cancel();
-            times.gone(player.getUniqueId());
+            stopped(player);
             try {
                 moments.fire(player, AuthSettings.Moment.TIMEOUT);
             } finally {
@@ -101,6 +115,12 @@ public final class WaitingClock {
             reminded.set(now);
             moments.fire(player, reminder(state));
         }
+    }
+
+    /** The clock of this player stopped: nothing of it is kept. */
+    private void stopped(Player player) {
+        running.remove(player.getUniqueId());
+        times.gone(player.getUniqueId());
     }
 
     /** What a waiting player is reminded of: to register, to type the password, or to type the app's code. */

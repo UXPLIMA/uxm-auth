@@ -108,7 +108,10 @@ public final class Door {
         this.duty = Objects.requireNonNull(duty, "duty");
     }
 
-    /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
+    /**
+     * A player arrived, logged out, or was sent back to the password: anything a crash left is given back, a waiting
+     * player is held, and their clock and their screen start over.
+     */
     public void hold(Player player) {
         Objects.requireNonNull(player, "player");
         keeper.arrive(player);

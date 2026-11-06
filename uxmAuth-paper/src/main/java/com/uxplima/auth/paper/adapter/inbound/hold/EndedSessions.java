@@ -19,8 +19,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * What a server does when an account's sessions end: a player of it logged in here reads why and stands at the
- * door again, unless this is the session that made the change. A bulletin arrives on whatever thread brought it, so the
- * player is reached on their own.
+ * door again, unless this is the session that made the change. A player past the old password but not in yet, asked
+ * for a new password, a code or the app, goes back to the password too: the old one proved nothing any more. A
+ * bulletin arrives on whatever thread brought it, so the player is reached on their own.
  */
 public final class EndedSessions implements Consumer<Bulletin> {
 
@@ -77,8 +78,8 @@ public final class EndedSessions implements Consumer<Bulletin> {
     }
 
     private void end(Player player) {
-        switch (logOut.run(player.getUniqueId())) {
-            case NOT_LOGGED_IN -> {}
+        switch (logOut.end(player.getUniqueId())) {
+            case UNTOUCHED -> {}
             // No password to come back with: the way back in is a new join.
             case NO_PASSWORD -> player.kick(messages.render(player, Keys.LOGOUT_SESSIONS_ENDED));
             case LOGGED_OUT -> {
@@ -86,6 +87,11 @@ public final class EndedSessions implements Consumer<Bulletin> {
                 door.hold(player);
                 messages.send(player, Keys.LOGOUT_SESSIONS_ENDED);
                 moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
+            }
+            // Held still, and asked for the password again rather than what came after the old one.
+            case BACK_TO_PASSWORD -> {
+                door.hold(player);
+                messages.send(player, Keys.LOGOUT_SESSIONS_ENDED);
             }
         }
     }
