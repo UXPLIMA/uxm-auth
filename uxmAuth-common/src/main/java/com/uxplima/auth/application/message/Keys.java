@@ -432,6 +432,9 @@ public enum Keys implements MessageKey {
             "staff.registered-you",
             "<tag:'AUTH'> <body>Staff made your account. Log in with the password they gave you."),
     STAFF_NAME_TAKEN("staff.name-taken", "<etag:'ERROR'> <body>An account holds <value><name><body> already."),
+    STAFF_NAME_CASE(
+            "staff.name-case",
+            "<etag:'ERROR'> <body><value><name><body> is online here as <value><online><body>. Write the name exactly that way."),
     STAFF_NAME_REFUSED(
             "staff.name-refused", "<etag:'ERROR'> <body><value><name><body> breaks the name rules of config.conf."),
     STAFF_FACTOR_OFF(

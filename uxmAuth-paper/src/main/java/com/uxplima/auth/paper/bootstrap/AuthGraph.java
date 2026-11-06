@@ -718,7 +718,7 @@ final class AuthGraph implements AutoCloseable {
                                 clock)),
                 new StaffDesk.Reach(
                         name -> Optional.ofNullable(plugin.getServer().getPlayerExact(name))
-                                .map(Player::getUniqueId),
+                                .map(player -> new StaffDesk.Online(player.getUniqueId(), player.getName())),
                         new WaitingAccounts(
                                 plugin.getServer()::getPlayerExact,
                                 sessions,
