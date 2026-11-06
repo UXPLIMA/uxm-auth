@@ -23,6 +23,8 @@ import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.domain.premium.WhenUnknown;
+import com.uxplima.auth.domain.protection.AddressRanges;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 import org.junit.jupiter.api.Test;
 
 class AtTheDoorTest {
@@ -35,18 +37,35 @@ class AtTheDoorTest {
     private final Clock clock = Clock.fixed(MemoryAccounts.THEN, ZoneOffset.UTC);
     private final MemoryAccounts accounts = new MemoryAccounts();
     private PremiumAnswer web = new PremiumAnswer.Premium(NOTCH, "Notch");
+    private int asked;
 
     private AtTheDoor door(NameRule rule) {
+        return door(rule, 0, List.of());
+    }
+
+    /**
+     * @param lookups the names one address may have the web asked about, 0 for no limit
+     * @param filters the addresses of a shared-address filter
+     */
+    private AtTheDoor door(NameRule rule, int lookups, List<String> filters) {
         return new AtTheDoor(
                 accounts,
                 () -> new NamePolicy(Pattern.compile("[A-Za-z0-9_]+"), 3, 16, List.of()),
-                new PremiumLookup(() -> List.of(name -> web), () -> Duration.ofMinutes(30), clock),
+                new PremiumLookup(
+                        () -> List.of(name -> {
+                            asked++;
+                            return web;
+                        }),
+                        () -> Duration.ofMinutes(30),
+                        clock),
                 () -> new NameOwnership(
                         rule, WhenUnknown.CRACKED, new HostPatterns(List.of()), new HostPatterns(List.of())),
                 new NameMemory(() -> Duration.ofMinutes(5), clock),
                 new NameMemory(() -> Duration.ofMinutes(10), clock),
                 new NameMemory(() -> Duration.ofMinutes(10), clock),
-                new MemoryAccounts.NoDisputes());
+                new MemoryAccounts.NoDisputes(),
+                () -> new SharedAddresses(new HostPatterns(List.of()), new AddressRanges(filters)),
+                new LookupBudget(() -> lookups, clock));
     }
 
     private LetPremiumIn letIn(UuidScheme scheme) {
@@ -108,5 +127,50 @@ class AtTheDoorTest {
         assertThat(accounts.findById(NOTCH))
                 .map(account -> account.name().value())
                 .isEqualTo(Optional.of("Notch"));
+    }
+
+    @Test
+    void anAddressPastItsBudgetMeetsTheRuleForANameNobodyCouldLookUp() {
+        web = new PremiumAnswer.Cracked();
+        AtTheDoor automatic = door(NameRule.AUTOMATIC, 2, List.of());
+
+        assertThat(automatic.decide("Alpha", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+        assertThat(automatic.decide("Bravo", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+        assertThat(automatic.decide("Charlie", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(true, false));
+        assertThat(asked).isEqualTo(2);
+    }
+
+    @Test
+    void underTheStrictRuleAFloodOfNamesFromOneAddressIsRefusedNotLetIn() {
+        web = new PremiumAnswer.Cracked();
+        AtTheDoor strict = door(NameRule.STRICT, 1, List.of());
+
+        strict.decide("Alpha", SQUATTER, HOST);
+
+        assertThat(strict.decide("Notch", SQUATTER, HOST)).isEqualTo(new Decision.Refuse(Refusal.LOOKUP_FAILED));
+        assertThat(strict.decide("Bravo", OWNER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+    }
+
+    @Test
+    void aNameTheWebAnsweredLatelyCostsNothing() {
+        web = new PremiumAnswer.Cracked();
+        AtTheDoor automatic = door(NameRule.AUTOMATIC, 1, List.of());
+
+        automatic.decide("Alpha", SQUATTER, HOST);
+        automatic.decide("Alpha", SQUATTER, HOST);
+
+        assertThat(automatic.decide("Alpha", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+        assertThat(asked).isEqualTo(1);
+    }
+
+    @Test
+    void aSharedAddressFilterIsHeldToNoBudget() {
+        web = new PremiumAnswer.Cracked();
+        AtTheDoor automatic = door(NameRule.AUTOMATIC, 1, List.of(SQUATTER));
+
+        automatic.decide("Alpha", SQUATTER, HOST);
+
+        assertThat(automatic.decide("Bravo", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+        assertThat(asked).isEqualTo(2);
     }
 }

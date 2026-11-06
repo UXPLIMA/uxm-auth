@@ -217,7 +217,18 @@ final class SettingsReader {
                 word(config, "ownership.conflict", "rename", ConflictStrategy.class),
                 renameMark(config),
                 crackedMark(config),
-                config.getBoolean("ownership.premium-password-fallback", true));
+                config.getBoolean("ownership.premium-password-fallback", true),
+                lookupsPerAddress(config));
+    }
+
+    /** How many names one address may have the web asked about in ten minutes; 0 lifts the limit. */
+    private static int lookupsPerAddress(HoconConfig config) {
+        int lookups = config.getInt("ownership.lookups-per-address-per-10-minutes", 30);
+        if (lookups < 0) {
+            throw new IllegalArgumentException(
+                    "ownership.lookups-per-address-per-10-minutes must be 0 or more, got: " + lookups);
+        }
+        return lookups;
     }
 
     private static DomainMark crackedMark(HoconConfig config) {

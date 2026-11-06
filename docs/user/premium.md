@@ -12,6 +12,12 @@ can answer decides; one that is down, slow or refusing passes the name to the ne
 keeps requests under Mojang's limit so the mirrors answer the rest. `premium.addresses` points a source at a
 mirror of your own.
 
+One address may have the sources asked about `ownership.lookups-per-address-per-10-minutes` names it has not
+asked about lately; past that a new name from it counts as one no source could answer. Players behind a
+shared-address filter are not counted. On a lone server the address rules (countries, bans, connections per
+address) are met at the first packet that names the player, before any source is asked, so a refused address
+never spends Mojang's cap.
+
 A premium player who has no password gets a random one at the first premium login, shown once and stored as a
 hash (`premium.backup-password`). With `ownership.premium-password-fallback` it lets the player in when the
 handshake fails because Mojang is down or the Mojang account is lost.

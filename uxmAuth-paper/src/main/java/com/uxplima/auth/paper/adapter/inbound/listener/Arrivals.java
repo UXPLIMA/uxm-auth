@@ -97,7 +97,7 @@ public final class Arrivals {
     private final Supplier<DomainMark> mark;
     private final UuidScheme scheme;
     private final NetworkDoor network;
-    private final Admission admission;
+    private final AddressRules rules;
     private final Resume resume;
     private final SecondStep secondStep;
 
@@ -105,7 +105,8 @@ public final class Arrivals {
      * @param mark the domain rule's mark, for a connection through the cracked address
      * @param scheme the UUID scheme this start recorded, which a cracked player plays under too
      * @param network the proxy's word, on a server behind it
-     * @param admission the rules a connection meets before its name is read, on a server alone
+     * @param rules the address rules a connection meets before its name is read, on a server alone; where the
+     *     handshake runs they met it at its hello already
      * @param resume whether an account back from this address through this host is let in by its session
      */
     public Arrivals(
@@ -118,7 +119,7 @@ public final class Arrivals {
             Supplier<DomainMark> mark,
             UuidScheme scheme,
             NetworkDoor network,
-            Admission admission,
+            AddressRules rules,
             Resume resume) {
         this(
                 names,
@@ -130,7 +131,7 @@ public final class Arrivals {
                 mark,
                 scheme,
                 network,
-                admission,
+                rules,
                 resume,
                 SecondStep.NONE);
     }
@@ -146,7 +147,7 @@ public final class Arrivals {
             Supplier<DomainMark> mark,
             UuidScheme scheme,
             NetworkDoor network,
-            Admission admission,
+            AddressRules rules,
             Resume resume,
             SecondStep secondStep) {
         this.names = Objects.requireNonNull(names, "names");
@@ -158,7 +159,7 @@ public final class Arrivals {
         this.mark = Objects.requireNonNull(mark, "mark");
         this.scheme = Objects.requireNonNull(scheme, "scheme");
         this.network = Objects.requireNonNull(network, "network");
-        this.admission = Objects.requireNonNull(admission, "admission");
+        this.rules = Objects.requireNonNull(rules, "rules");
         this.resume = Objects.requireNonNull(resume, "resume");
         this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
     }
@@ -170,7 +171,9 @@ public final class Arrivals {
         NetworkDoor.Reading vouched = network.read(event);
         // Behind a proxy the proxy's door already met the connection; alone, this door does.
         Optional<Admission.Refused> ruled = vouched instanceof NetworkDoor.Reading.None
-                ? admission.decide(new Admission.Arrival(event.getAddress().getHostAddress(), event.getHostname()))
+                ? rules.atPreLogin(
+                        clientAddress(event),
+                        new Admission.Arrival(event.getAddress().getHostAddress(), event.getHostname()))
                 : Optional.empty();
         if (ruled.isPresent()) {
             return new Arrival.Refused(words.admission(ruled.get()));

@@ -17,6 +17,7 @@ import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.Refusal;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 
 /**
  * A connection at the hello, before the server makes a profile for it: is it asked for the handshake?
@@ -25,8 +26,10 @@ import com.uxplima.auth.domain.premium.Refusal;
  * refuse anyway for its spelling is never asked about: the name check at the pre-login says why, and the web and
  * Mojang's cap are not spent on it. A name registered here in another case is asked about once it arrives in a
  * spelling of its own, because that may be its paid owner in Mojang's spelling, whom the pre-login would
- * otherwise send back to the holder's spelling forever. This may wait on the database and the network, so it
- * never runs on a thread the server needs.
+ * otherwise send back to the holder's spelling forever. A name the web has not answered lately costs the
+ * address that brought it one lookup of its budget; past that the name counts as one nobody could look up. A
+ * shared-address filter is everybody's address, so no budget holds it. This may wait on the database and the
+ * network, so it never runs on a thread the server needs.
  */
 public final class AtTheDoor {
 
@@ -38,7 +41,10 @@ public final class AtTheDoor {
     private final NameMemory claims;
     private final NameMemory ownerClaims;
     private final Disputes disputes;
+    private final Supplier<SharedAddresses> shared;
+    private final LookupBudget budget;
 
+    /** No shared-address filter, and no budget for an address. */
     public AtTheDoor(
             AccountRepository accounts,
             Supplier<NamePolicy> names,
@@ -48,6 +54,36 @@ public final class AtTheDoor {
             NameMemory claims,
             NameMemory ownerClaims,
             Disputes disputes) {
+        this(
+                accounts,
+                names,
+                lookup,
+                ownership,
+                failed,
+                claims,
+                ownerClaims,
+                disputes,
+                SharedAddresses::none,
+                LookupBudget.unlimited());
+    }
+
+    /**
+     * @param shared the filters every player of which arrives from the filter's own address
+     * @param budget how many names one address may have the web asked about
+     */
+    public AtTheDoor(
+            AccountRepository accounts,
+            Supplier<NamePolicy> names,
+            PremiumLookup lookup,
+            Supplier<NameOwnership> ownership,
+            NameMemory failed,
+            NameMemory claims,
+            NameMemory ownerClaims,
+            Disputes disputes,
+            Supplier<SharedAddresses> shared,
+            LookupBudget budget) {
+        this.shared = Objects.requireNonNull(shared, "shared");
+        this.budget = Objects.requireNonNull(budget, "budget");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.names = Objects.requireNonNull(names, "names");
         this.lookup = Objects.requireNonNull(lookup, "lookup");
@@ -78,8 +114,11 @@ public final class AtTheDoor {
         Holder holder = holder(account);
         AtomicReference<PremiumAnswer> answered = new AtomicReference<>();
         Arrival arrival = new Arrival(raw, holder, otherCase, asked, failed.holds(address, name), host);
+        boolean throughAFilter = shared.get().through(address, host);
         Decision decision = ownership.get().decide(arrival, () -> {
-            PremiumAnswer answer = lookup.lookup(name);
+            PremiumAnswer answer = lookup.known(name)
+                    .orElseGet(() ->
+                            throughAFilter || budget.take(address) ? lookup.lookup(name) : new PremiumAnswer.Unknown());
             answered.set(answer);
             return answer;
         });

@@ -51,6 +51,7 @@ import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.LetPremiumIn;
+import com.uxplima.auth.application.premium.LookupBudget;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
@@ -460,7 +461,9 @@ final class ProxyGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().failedMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
-                disputes);
+                disputes,
+                () -> settings.current().protection().sharedAddresses(),
+                new LookupBudget(() -> settings.current().ownership().lookupsPerAddress(), clock));
     }
 
     /** The command lines of the login moments, run as the proxy's own commands. */

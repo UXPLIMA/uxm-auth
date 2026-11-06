@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -44,6 +45,15 @@ public final class PremiumLookup {
         this.keepFor = Objects.requireNonNull(keepFor, "keepFor");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.timings = Objects.requireNonNull(timings, "timings");
+    }
+
+    /** What the web said about this name lately, while the answer is kept; empty when only the web can say. */
+    public Optional<PremiumAnswer> known(PlayerName name) {
+        Objects.requireNonNull(name, "name");
+        Kept known = kept.get(name.key());
+        return known != null && clock.instant().isBefore(known.until())
+                ? Optional.of(known.answer())
+                : Optional.empty();
     }
 
     /** What the web says about this name. It may wait on the network. */

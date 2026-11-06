@@ -67,6 +67,7 @@ import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.application.premium.LetPremiumIn;
+import com.uxplima.auth.application.premium.LookupBudget;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
@@ -128,6 +129,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.WaitingBars;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingTimes;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
+import com.uxplima.auth.paper.adapter.inbound.listener.AddressRules;
 import com.uxplima.auth.paper.adapter.inbound.listener.Arrivals;
 import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
 import com.uxplima.auth.paper.adapter.inbound.listener.ClosedDoor;
@@ -363,8 +365,10 @@ final class AuthGraph implements AutoCloseable {
                 clock,
                 timings);
         AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
+        // Met at the hello where the handshake runs, before the web is asked, and at the pre-login otherwise.
+        AddressRules addressRules = new AddressRules(admission(settings, bans, countries, plugin.getLogger()), clock);
         this.hellos = ServerHellos.startOn(
-                new PremiumHelloDoor(atTheDoor, scheduler),
+                new PremiumHelloDoor(atTheDoor, addressRules, scheduler),
                 plugin.getLogger(),
                 settings.current().ownership().rule());
         ClaimName claims = new ClaimName(
@@ -589,7 +593,7 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
                         new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        admission(settings, bans, countries, plugin.getLogger()),
+                        addressRules,
                         remember::resumes,
                         factors.secondStep),
                 notices,
@@ -908,7 +912,9 @@ final class AuthGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().failedMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
-                disputes);
+                disputes,
+                () -> settings.current().protection().sharedAddresses(),
+                new LookupBudget(() -> settings.current().ownership().lookupsPerAddress(), clock));
     }
 
     /** The console's move of every account to another database: one at a time, off the server's threads. */
