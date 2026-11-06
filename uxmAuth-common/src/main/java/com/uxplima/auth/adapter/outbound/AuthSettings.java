@@ -71,8 +71,9 @@ public final class AuthSettings {
     /**
      * Who owns a name: the rule, what a name nobody could look up is taken for, how long a failed handshake is
      * remembered, how long a claim waits for its next connection, the addresses of the domain rule, the UUID a
-     * player plays under, what happens to a cracked account whose name its paid owner proves, and whether a premium
-     * account that keeps a password logs in with it after a failed handshake.
+     * player plays under, what happens to a cracked account whose name its paid owner proves, whether a premium
+     * account that keeps a password logs in with it after a failed handshake, and how many names one address may
+     * have the web asked about in ten minutes, 0 for no limit.
      */
     public record Ownership(
             NameRule rule,
@@ -85,7 +86,8 @@ public final class AuthSettings {
             ConflictStrategy conflict,
             String renameMark,
             DomainMark crackedMark,
-            boolean passwordFallback) {
+            boolean passwordFallback,
+            int lookupsPerAddress) {
         public Ownership {
             Objects.requireNonNull(uuidScheme, "uuidScheme");
             Objects.requireNonNull(conflict, "conflict");
@@ -97,6 +99,21 @@ public final class AuthSettings {
             Objects.requireNonNull(claimMemory, "claimMemory");
             premiumDomains = List.copyOf(Objects.requireNonNull(premiumDomains, "premiumDomains"));
             crackedDomains = List.copyOf(Objects.requireNonNull(crackedDomains, "crackedDomains"));
+        }
+
+        /**
+         * What the start says about these settings: a line for each value that is read otherwise than written.
+         * Under the strict rule a name nobody could look up is never taken for cracked, so {@code cracked} there
+         * is read as {@code refuse}.
+         */
+        public List<String> warnings() {
+            if (rule == NameRule.STRICT && whenUnknown == WhenUnknown.CRACKED) {
+                return List.of("ownership.when-every-source-fails is cracked under the strict rule. A new name no"
+                        + " premium source could look up is refused instead, so a cracked player cannot take a paid"
+                        + " name while the sources are down or Mojang's cap is spent. Write refuse, or premium, in"
+                        + " ownership.conf to say so.");
+            }
+            return List.of();
         }
 
         /** The decision the door makes under this rule. */

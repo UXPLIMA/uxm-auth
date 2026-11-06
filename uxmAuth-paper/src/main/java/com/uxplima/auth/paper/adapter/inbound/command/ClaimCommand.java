@@ -68,6 +68,7 @@ public final class ClaimCommand {
                 case ASKED -> player.kick(messages.render(player, Keys.KICK_CLAIMED));
                 case ALREADY_PREMIUM -> messages.send(player, Keys.CLAIM_ALREADY_PREMIUM);
                 case NOT_THIS_RULE -> messages.send(player, Keys.CLAIM_NOT_THIS_RULE);
+                case SHARED_ADDRESS -> messages.send(player, Keys.CLAIM_SHARED_ADDRESS);
                 case GONE -> {
                     // The player is leaving; there is nobody to answer.
                 }

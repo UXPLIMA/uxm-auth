@@ -62,7 +62,8 @@ with `@name`.
 A lone server in offline mode can ask a client to prove its name through Mojang. `Handshake` puts
 `HelloInterceptor` on every new connection through Paper's channel initialize listener. The interceptor holds the
 first hello until the door decides, then asks the client for its key or hands the hello to the server as it came.
-Anything a client sends while its hello waits, a second hello above all, closes the connection. A door that fails
+Anything a client sends while its hello waits closes the connection, and so does a second hello whenever it
+comes. A door that fails
 refuses the connection at pre-login; it never lets it in unchecked. In online mode the server proves players
 itself, and behind a proxy the proxy does; the handshake installs nothing there and the console says why.
 

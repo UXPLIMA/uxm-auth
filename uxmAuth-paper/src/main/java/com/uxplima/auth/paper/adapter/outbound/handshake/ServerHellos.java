@@ -73,6 +73,11 @@ public final class ServerHellos implements Hellos, AutoCloseable {
     }
 
     @Override
+    public boolean takeBedrock(InetSocketAddress address) {
+        return results.takeBedrock(Objects.requireNonNull(address, "address"));
+    }
+
+    @Override
     public void close() {
         if (installed) {
             Handshake.uninstall();

@@ -229,14 +229,17 @@ public final class ProxyDoor {
                 : ((AuthState.Unregistered) state).name();
     }
 
-    /** An account's own id; a new name the scheme's, which an offline proxy already gave an unmarked one. */
+    /**
+     * An account's own id; a new name the scheme's, which an offline proxy already gave an unmarked one, unless an
+     * account under another name still holds it, as one that moved away from the name does.
+     */
     private UUID idOf(AuthState state, UUID given, String typed) {
         if (state instanceof AuthState.Registered registered) {
             return registered.account().id();
         }
         PlayerName name = ((AuthState.Unregistered) state).name();
         boolean derived = scheme != UuidScheme.RANDOM && name.value().equals(typed);
-        return derived ? given : scheme.idFor(name, Optional.empty(), Optional.empty());
+        return names.newcomerId(derived ? given : scheme.idFor(name, Optional.empty(), Optional.empty()));
     }
 
     private void letGo() {

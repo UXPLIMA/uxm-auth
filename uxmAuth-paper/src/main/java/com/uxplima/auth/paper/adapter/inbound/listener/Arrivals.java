@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  * What the pre-login of a connection comes to: the state it opens with and the id it plays under, or the reason
  * it is turned away.
  *
- * <p>A connection Floodgate vouches for takes the Bedrock door. Every other one reads its hello first: proved by
+ * <p>A connection Floodgate vouches for takes the Bedrock door, where the hello says it is that very connection
+ * Floodgate means rather than a Java one under a linked player's id. Every other one reads its hello first: proved by
  * Mojang, it is in its premium account; let through, it goes to the name check and the password; refused, it
  * reads why. This runs on the thread the server gives the pre-login, which may wait on the database.
  */
@@ -97,7 +98,7 @@ public final class Arrivals {
     private final Supplier<DomainMark> mark;
     private final UuidScheme scheme;
     private final NetworkDoor network;
-    private final Admission admission;
+    private final AddressRules rules;
     private final Resume resume;
     private final SecondStep secondStep;
 
@@ -105,7 +106,8 @@ public final class Arrivals {
      * @param mark the domain rule's mark, for a connection through the cracked address
      * @param scheme the UUID scheme this start recorded, which a cracked player plays under too
      * @param network the proxy's word, on a server behind it
-     * @param admission the rules a connection meets before its name is read, on a server alone
+     * @param rules the address rules a connection meets before its name is read, on a server alone; where the
+     *     handshake runs they met it at its hello already
      * @param resume whether an account back from this address through this host is let in by its session
      */
     public Arrivals(
@@ -118,7 +120,7 @@ public final class Arrivals {
             Supplier<DomainMark> mark,
             UuidScheme scheme,
             NetworkDoor network,
-            Admission admission,
+            AddressRules rules,
             Resume resume) {
         this(
                 names,
@@ -130,7 +132,7 @@ public final class Arrivals {
                 mark,
                 scheme,
                 network,
-                admission,
+                rules,
                 resume,
                 SecondStep.NONE);
     }
@@ -146,7 +148,7 @@ public final class Arrivals {
             Supplier<DomainMark> mark,
             UuidScheme scheme,
             NetworkDoor network,
-            Admission admission,
+            AddressRules rules,
             Resume resume,
             SecondStep secondStep) {
         this.names = Objects.requireNonNull(names, "names");
@@ -158,7 +160,7 @@ public final class Arrivals {
         this.mark = Objects.requireNonNull(mark, "mark");
         this.scheme = Objects.requireNonNull(scheme, "scheme");
         this.network = Objects.requireNonNull(network, "network");
-        this.admission = Objects.requireNonNull(admission, "admission");
+        this.rules = Objects.requireNonNull(rules, "rules");
         this.resume = Objects.requireNonNull(resume, "resume");
         this.secondStep = Objects.requireNonNull(secondStep, "secondStep");
     }
@@ -170,12 +172,14 @@ public final class Arrivals {
         NetworkDoor.Reading vouched = network.read(event);
         // Behind a proxy the proxy's door already met the connection; alone, this door does.
         Optional<Admission.Refused> ruled = vouched instanceof NetworkDoor.Reading.None
-                ? admission.decide(new Admission.Arrival(event.getAddress().getHostAddress(), event.getHostname()))
+                ? rules.atPreLogin(
+                        clientAddress(event),
+                        new Admission.Arrival(event.getAddress().getHostAddress(), event.getHostname()))
                 : Optional.empty();
         if (ruled.isPresent()) {
             return new Arrival.Refused(words.admission(ruled.get()));
         }
-        if (bedrock.vouches(event.getUniqueId())) {
+        if (bedrock.vouches(event.getUniqueId()) && hellos.bedrockConnection(clientAddress(event))) {
             return bedrockArrival(event);
         }
         return vouched(event, vouched);
@@ -313,7 +317,9 @@ public final class Arrivals {
      * The id and name a player with a password plays under: an account's own, waiting or resumed by its session,
      * or the scheme's for a new name.
      * An offline server already derives the offline id from the name as typed, so a new name keeps it unless it
-     * carries the mark or the scheme hands out its own.
+     * carries the mark or the scheme hands out its own, or an account under another name still holds it. The
+     * profile then carries the id the player plays under, so the server loads that player's data and nobody
+     * else's.
      */
     private Arrival played(
             AsyncPlayerPreLoginEvent event, AuthState state, List<Notice> notices, Optional<String> visit) {
@@ -333,7 +339,9 @@ public final class Arrivals {
             name = ((AuthState.Unregistered) state).name();
             boolean derived =
                     networked || (scheme != UuidScheme.RANDOM && name.value().equals(event.getName()));
-            id = derived ? event.getUniqueId() : scheme.idFor(name, Optional.empty(), Optional.empty());
+            UUID wanted = derived ? event.getUniqueId() : scheme.idFor(name, Optional.empty(), Optional.empty());
+            // The proxy chose a free id for the network already; alone, this door does.
+            id = networked ? wanted : names.newcomerId(wanted);
         }
         PlayerProfile profile = null;
         if (!id.equals(event.getUniqueId()) || !name.value().equals(event.getName())) {
