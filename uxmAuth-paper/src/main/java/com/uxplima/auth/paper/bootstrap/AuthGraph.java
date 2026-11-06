@@ -235,6 +235,8 @@ final class AuthGraph implements AutoCloseable {
     private final BedrockLink bedrock;
     /** What the start says of a name mark Paper refuses, read once with the settings of the start. */
     private final List<String> nameMarks;
+    /** What the start says of an ownership value it reads otherwise than written, read with the settings of the start. */
+    private final List<String> ownershipWarnings;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -321,6 +323,7 @@ final class AuthGraph implements AutoCloseable {
                 plugin.getName().toLowerCase(Locale.ROOT),
                 passes::isPassing);
         // Paper reads config/ under the directory it was started in.
+        this.ownershipWarnings = boot.ownership().warnings();
         this.nameMarks = NameMarkCheck.warnings(
                 NameMarkCheck.paperChecksNames(Path.of("").toAbsolutePath()), boot.ownership());
         this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
@@ -757,6 +760,7 @@ final class AuthGraph implements AutoCloseable {
                                 + " name too, and an unlinked Bedrock player could then reach a Java player's account."
                                 + " Set it in Floodgate's config.yml to a character no Java name has, such as a dot."));
         nameMarks.forEach(plugin.getLogger()::warning);
+        ownershipWarnings.forEach(plugin.getLogger()::warning);
         // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(closedDoor, plugin);

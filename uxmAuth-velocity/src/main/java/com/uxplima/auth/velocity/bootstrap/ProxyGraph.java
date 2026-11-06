@@ -195,6 +195,7 @@ final class ProxyGraph implements AutoCloseable {
                 settleEarly,
                 guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
         logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
+        settings.current().ownership().warnings().forEach(logger::warn);
     }
 
     /** The bulletins as they are when one is published: the network's, once the proxy has opened it. */

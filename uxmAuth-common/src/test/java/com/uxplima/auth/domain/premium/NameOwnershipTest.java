@@ -67,4 +67,28 @@ class NameOwnershipTest {
 
         assertThat(decision).isEqualTo(new Decision.Refuse(Refusal.PAID_SPELLING));
     }
+
+    @Test
+    void underTheStrictRuleANameNobodyCouldLookUpIsNeverTakenForCracked() {
+        Decision decision = under(NameRule.STRICT, WhenUnknown.CRACKED)
+                .decide(arriving("Notch", Holder.NOBODY, false), PremiumAnswer.Unknown::new);
+
+        assertThat(decision).isEqualTo(new Decision.Refuse(Refusal.LOOKUP_FAILED));
+    }
+
+    @Test
+    void underTheStrictRuleAnOperatorWhoChosePremiumAsksForTheHandshake() {
+        Decision decision = under(NameRule.STRICT, WhenUnknown.PREMIUM)
+                .decide(arriving("Notch", Holder.CRACKED_UNVERIFIED, false), PremiumAnswer.Unknown::new);
+
+        assertThat(decision).isEqualTo(new Decision.Handshake());
+    }
+
+    @Test
+    void underTheStrictRuleACrackedAccountTheWebClearedKeepsItsPasswordThroughAnOutage() {
+        Decision decision = under(NameRule.STRICT, WhenUnknown.CRACKED)
+                .decide(arriving("Steve", Holder.CRACKED, false), PremiumAnswer.Unknown::new);
+
+        assertThat(decision).isInstanceOf(Decision.Cracked.class);
+    }
 }

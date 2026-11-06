@@ -34,7 +34,10 @@ a name in another case, a connection in Mojang's own spelling is asked for the h
 `domain`, and once it passes the holder meets `ownership.conflict` like any other.
 
 `when-every-source-fails` says what a new name is taken for when no source could answer: `cracked` (marked
-unverified and asked again next time), `premium` or `refuse`. `failed-memory-seconds` remembers a connection that
+unverified and asked again next time), `premium` or `refuse`. Under `strict` a name no source could answer is never
+taken for cracked, because sources that are down or a Mojang cap spent by a flood of names would otherwise let a
+cracked player take a paid name: `cracked` is read as `refuse` there and the start says so, and a cracked account
+the web cleared when it was made keeps logging in with its password. `failed-memory-seconds` remembers a connection that
 failed the handshake so it is told why. `claim-minutes` is how long a claim waits for the next connection from
 the same address.
 

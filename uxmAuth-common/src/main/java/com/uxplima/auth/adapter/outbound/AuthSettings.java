@@ -99,6 +99,21 @@ public final class AuthSettings {
             crackedDomains = List.copyOf(Objects.requireNonNull(crackedDomains, "crackedDomains"));
         }
 
+        /**
+         * What the start says about these settings: a line for each value that is read otherwise than written.
+         * Under the strict rule a name nobody could look up is never taken for cracked, so {@code cracked} there
+         * is read as {@code refuse}.
+         */
+        public List<String> warnings() {
+            if (rule == NameRule.STRICT && whenUnknown == WhenUnknown.CRACKED) {
+                return List.of("ownership.when-every-source-fails is cracked under the strict rule. A new name no"
+                        + " premium source could look up is refused instead, so a cracked player cannot take a paid"
+                        + " name while the sources are down or Mojang's cap is spent. Write refuse, or premium, in"
+                        + " ownership.conf to say so.");
+            }
+            return List.of();
+        }
+
         /** The decision the door makes under this rule. */
         public NameOwnership decision() {
             return new NameOwnership(

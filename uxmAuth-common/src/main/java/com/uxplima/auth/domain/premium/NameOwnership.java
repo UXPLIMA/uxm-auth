@@ -103,8 +103,21 @@ public final class NameOwnership {
         };
     }
 
+    /**
+     * Every paid name passes the handshake. A cracked player never holds a paid name here, so a name nobody could
+     * look up is never taken for a cracked one, whatever {@code when-every-source-fails} says: sources that are
+     * down, or a Mojang cap spent by a flood of random names, are no way in. Such a name is refused until a source
+     * answers, or asked for the handshake where the operator chose premium. A cracked account the web cleared
+     * when it was made keeps the operator's choice, so an outage does not lock every such player out.
+     */
     private Decision strict(Arrival arrival, Supplier<PremiumAnswer> lookup) {
-        Decision web = fromTheWeb(lookup.get(), arrival);
+        PremiumAnswer answer = lookup.get();
+        if (answer instanceof PremiumAnswer.Unknown
+                && arrival.holder() != Holder.CRACKED
+                && whenUnknown != WhenUnknown.PREMIUM) {
+            return new Decision.Refuse(Refusal.LOOKUP_FAILED);
+        }
+        Decision web = fromTheWeb(answer, arrival);
         if (web instanceof Decision.Handshake && arrival.failedBefore()) {
             return new Decision.Refuse(Refusal.PAID_NAME);
         }
