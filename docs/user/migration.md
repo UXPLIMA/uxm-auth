@@ -36,6 +36,10 @@ names of `columns` when it is missing; an existing one is used as it is. Everyth
 - A row counts as an account's only once the plugin wrote it, adopted it, or found the account's own hash in it.
   A row someone made on the website under the name of an account the plugin held first opens nothing and is never
   written.
+- That link is bound to the row itself, by its registration date, or by its `id` when it has no date. A row the
+  website deletes and someone registers again under the name is theirs, and the account keeps the plugin's own
+  password. A table with neither a date nor an `id` tells its rows apart only by the password, so a password
+  changed on such a website no longer opens the account in game.
 - Premium and Bedrock accounts never read or write a row, and a registration in game never writes over one.
 - Removing an account in game removes its row. The plugin's own row is still kept, so turning the table off loses
   only what the website changed since.
