@@ -99,3 +99,8 @@ With `bedrock.auto-login`, a Bedrock player that Floodgate vouched for through X
 password, into their own Bedrock account or the Java account Floodgate linked them to. An unlinked Bedrock
 player under a Java account's name is still asked for that account's password. Off, every Bedrock player uses a
 password through a native form.
+
+Floodgate also answers for a linked player by the Java account's UUID, which a Java client on an offline server
+can arrive under. Where the lone server runs the handshake, a connection is taken for a Bedrock player only when
+Floodgate marked that very connection at its first packet; a Java client under a linked name logs in with the
+Java account's password.

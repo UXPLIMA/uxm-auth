@@ -65,6 +65,9 @@ final class HelloInterceptor extends ChannelInboundHandlerAdapter {
         }
         Login mine = found.get();
         if (mine.bedrock()) {
+            // Xbox Live proved the player; the pre-login reads the mark to know this connection is the Bedrock one.
+            login = mine;
+            results.bedrock(mine.address());
             ctx.fireChannelRead(msg);
             return;
         }

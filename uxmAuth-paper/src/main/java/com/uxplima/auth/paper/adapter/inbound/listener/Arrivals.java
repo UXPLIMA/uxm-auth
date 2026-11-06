@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  * What the pre-login of a connection comes to: the state it opens with and the id it plays under, or the reason
  * it is turned away.
  *
- * <p>A connection Floodgate vouches for takes the Bedrock door. Every other one reads its hello first: proved by
+ * <p>A connection Floodgate vouches for takes the Bedrock door, where the hello says it is that very connection
+ * Floodgate means rather than a Java one under a linked player's id. Every other one reads its hello first: proved by
  * Mojang, it is in its premium account; let through, it goes to the name check and the password; refused, it
  * reads why. This runs on the thread the server gives the pre-login, which may wait on the database.
  */
@@ -178,7 +179,7 @@ public final class Arrivals {
         if (ruled.isPresent()) {
             return new Arrival.Refused(words.admission(ruled.get()));
         }
-        if (bedrock.vouches(event.getUniqueId())) {
+        if (bedrock.vouches(event.getUniqueId()) && hellos.bedrockConnection(clientAddress(event))) {
             return bedrockArrival(event);
         }
         return vouched(event, vouched);

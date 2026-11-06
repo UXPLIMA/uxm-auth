@@ -115,6 +115,17 @@ public final class HelloAtTheDoor {
         };
     }
 
+    /**
+     * Whether a connection Floodgate vouches for by its profile id is the Bedrock one. Floodgate finds a linked
+     * player by the Java account's id too, which a Java client on an offline server can arrive under while the
+     * Bedrock player is online. Where the handshake runs, every hello is seen, and only a connection whose own
+     * channel Floodgate marked is the Bedrock one. Elsewhere no hello is seen, and Floodgate's word on the id is
+     * all there is: in online mode Mojang proved the Java id, and behind a proxy the proxy met the connection.
+     */
+    public boolean bedrockConnection(InetSocketAddress address) {
+        return !hellos.installed() || hellos.takeBedrock(address);
+    }
+
     /** The move of this account its player has not read yet, where there is a handshake to move accounts. */
     public Optional<AccountRepository.Renamed> untoldMove(UUID accountId) {
         Moves mine = moves;
