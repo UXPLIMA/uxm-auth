@@ -22,6 +22,7 @@ import com.uxplima.auth.adapter.outbound.CommandFile;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
+import com.uxplima.auth.application.LogOut;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
@@ -45,6 +46,7 @@ import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
 import com.uxplima.auth.velocity.adapter.inbound.LimboRecovery;
@@ -214,6 +216,18 @@ final class WaitingWorld implements AutoCloseable {
         Sessions sessions = new Sessions();
         Clock clock = Clock.systemUTC();
         this.force = new ForceLogin(accounts, sessions, guards.bulletins(), clock);
+        // Sessions ended elsewhere, by staff or a recovery, send a connection waiting here past the old password,
+        // for its app code or its setup, back to the password, as a server does: the old one no longer counts.
+        LogOut ending =
+                new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), guards.remembered());
+        guards.bulletins().listen(bulletin -> {
+            if (bulletin instanceof Bulletin.SessionsEnded ended
+                    && (ended.keep().isEmpty()
+                            || !ended.keep()
+                                    .equals(sessions.held(ended.account()).map(Sessions.Held::visit)))) {
+                ending.end(ended.account());
+            }
+        });
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), clock::instant);
         return new LimboLogin(
