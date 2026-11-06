@@ -1,5 +1,7 @@
 package com.uxplima.auth.paper.adapter.outbound.migrate;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -11,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import com.uxplima.auth.adapter.outbound.ImportLayout;
@@ -52,7 +55,18 @@ public final class YamlImport implements ImportSource {
         if (!Files.isRegularFile(file)) {
             throw new IllegalStateException(layout.display() + "'s file " + file + " is not there");
         }
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file.toFile());
+        // Bukkit's loadConfiguration answers an empty file for one it cannot parse, which would mark the import done
+        // with nothing brought over; a file that does not parse stops the import instead.
+        YamlConfiguration yaml = new YamlConfiguration();
+        try {
+            yaml.load(file.toFile());
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(layout.display() + "'s file " + file + " cannot be read", unreadable);
+        } catch (InvalidConfigurationException broken) {
+            throw new IllegalStateException(
+                    layout.display() + "'s file " + file + " is not YAML this server reads: " + broken.getMessage(),
+                    broken);
+        }
         List<ImportedAccount> rows = new ArrayList<>();
         for (String key : yaml.getKeys(false)) {
             ConfigurationSection entry = yaml.getConfigurationSection(key);

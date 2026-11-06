@@ -184,6 +184,11 @@ public final class StartupImport {
         if (report.alreadyDone()) {
             return done(layout);
         }
+        if (report.empty()) {
+            return layout.display() + " held no account, so nothing was imported and nothing was marked complete; the"
+                    + " next start reads it again. Check the import's address, table or file, or empty import.source"
+                    + " to stop this line";
+        }
         return "imported from " + layout.display() + ": " + report.imported() + " new, " + report.updated()
                 + " updated, " + report.duplicates() + " duplicate names, " + report.refusedNameCount()
                 + " names refused, " + report.refusedSecrets() + " authenticator secrets refused, hashes not read: "

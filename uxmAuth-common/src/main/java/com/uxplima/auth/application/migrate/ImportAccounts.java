@@ -60,7 +60,12 @@ public final class ImportAccounts {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** Imports the source unless it was imported before, and says what it did. A failure marks nothing. */
+    /**
+     * Imports the source unless it was imported before, and says what it did. A failure marks nothing, and neither
+     * does a source that held no row at all: a file or table that came up empty, by a wrong path or a source that has
+     * not written yet, must not be marked done before any account came over. An empty source is only read again at
+     * every start until the operator empties {@code import.source}, which costs nothing.
+     */
     public ImportReport run(ImportSource source) {
         String key = Objects.requireNonNull(source, "source").key();
         if (marks.completed(key).isPresent()) {
@@ -69,7 +74,13 @@ public final class ImportAccounts {
         Tally tally = new Tally();
         Map<String, Picked> picked = new LinkedHashMap<>();
         try (Stream<ImportedAccount> rows = source.read()) {
-            rows.forEach(row -> pick(row, picked, tally));
+            rows.forEach(row -> {
+                tally.read++;
+                pick(row, picked, tally);
+            });
+        }
+        if (tally.read == 0) {
+            return tally.report(key);
         }
         picked.values().forEach(one -> write(one, tally));
         marks.complete(key, clock.instant());
@@ -160,6 +171,7 @@ public final class ImportAccounts {
 
     /** The counts of one run, kept on the one thread that runs it. */
     private static final class Tally {
+        int read;
         int imported;
         int updated;
         int duplicates;
@@ -179,6 +191,7 @@ public final class ImportAccounts {
             return new ImportReport(
                     key,
                     false,
+                    read,
                     imported,
                     updated,
                     duplicates,

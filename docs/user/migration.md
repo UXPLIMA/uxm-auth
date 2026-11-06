@@ -16,7 +16,9 @@
 Passwords keep their hash and move to `hashing.algorithm` at the player's next login. Authenticator secrets and
 premium ids come across. The start prints how many accounts came over and how many were refused, never a
 password. An import runs once; every later start says it ran and does nothing. A failed import stops the plugin
-with its reason, marks nothing and runs again at the next start. On a network every server may name the same
+with its reason, marks nothing and runs again at the next start; a file that does not parse is such a failure. A
+source that holds no account at all is not marked either: the start says so and reads it again next time, until
+it holds accounts or `source` is emptied. On a network every server may name the same
 source: the first to start imports and the others wait and find it done.
 
 `import.premium` reads a list of premium names another plugin kept, such as `fastlogin`, after the accounts, with
