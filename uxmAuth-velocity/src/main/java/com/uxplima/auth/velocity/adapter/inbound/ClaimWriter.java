@@ -16,8 +16,8 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.util.GameProfile;
 
 /**
- * Writes a fresh claim into the profile the proxy forwards, before every connection to a server. The server
- * reads it at its pre-login and takes it off the profile there, so no client ever sees it.
+ * Writes a fresh claim into the profile the proxy forwards, before every connection to a server, for that server
+ * alone. The server reads it at its pre-login and takes it off the profile there, so no client ever sees it.
  */
 public final class ClaimWriter {
 
@@ -41,30 +41,45 @@ public final class ClaimWriter {
     @Subscribe(priority = LATE)
     public void onPreConnect(ServerPreConnectEvent event) {
         if (event.getResult().isAllowed()) {
-            claim(event.getPlayer());
+            claim(
+                    event.getPlayer(),
+                    event.getResult()
+                            .getServer()
+                            .map(server -> server.getServerInfo().getName())
+                            .orElse(""));
         }
     }
 
-    /** One claim on the player's profile: this connection's, or none for a player the proxy does not know. */
-    void claim(Player player) {
+    /**
+     * One claim on the player's profile, written for the server the connection goes to: this connection's, or
+     * none for a player the proxy does not know.
+     */
+    void claim(Player player, String server) {
+        List<GameProfile.Property> properties = without(player);
+        Optional<Claims> signer = claims.get();
+        Optional<Claim.Standing> standing = sessions.nextStanding(player.getUniqueId());
+        if (signer.isPresent() && standing.isPresent() && !server.isBlank()) {
+            Claim claim = new Claim(
+                    player.getUniqueId(),
+                    player.getUsername(),
+                    server,
+                    standing.get(),
+                    clock.instant(),
+                    UUID.randomUUID().toString());
+            properties.add(new GameProfile.Property(PROPERTY, signer.get().sign(claim, Claim.Direction.TO_SERVER), ""));
+            sessions.wrote(player.getUniqueId(), claim.nonce());
+        }
+        player.setGameProfileProperties(properties);
+    }
+
+    /** The player's profile properties without a claim. */
+    private static List<GameProfile.Property> without(Player player) {
         List<GameProfile.Property> properties = new ArrayList<>();
         for (GameProfile.Property property : player.getGameProfileProperties()) {
             if (!property.getName().equals(PROPERTY)) {
                 properties.add(property);
             }
         }
-        Optional<Claims> signer = claims.get();
-        Optional<Claim.Standing> standing = sessions.nextStanding(player.getUniqueId());
-        if (signer.isPresent() && standing.isPresent()) {
-            Claim claim = new Claim(
-                    player.getUniqueId(),
-                    player.getUsername(),
-                    standing.get(),
-                    clock.instant(),
-                    UUID.randomUUID().toString());
-            properties.add(new GameProfile.Property(PROPERTY, signer.get().sign(claim), ""));
-            sessions.wrote(player.getUniqueId(), claim.nonce());
-        }
-        player.setGameProfileProperties(properties);
+        return properties;
     }
 }

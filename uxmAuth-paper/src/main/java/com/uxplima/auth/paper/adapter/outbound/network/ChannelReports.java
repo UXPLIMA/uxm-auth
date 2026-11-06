@@ -23,13 +23,15 @@ import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.paper.adapter.inbound.hold.Reports;
 
 /**
- * Tells the proxy, through the player's own connection, what the door here did: signed with the network's
- * secret, so the proxy takes it only from a server that holds the secret.
+ * Tells the proxy, through the player's own connection, what the door here did: signed with the reports' key of
+ * the network's secret and naming this server, so the proxy takes it only from a server that holds the secret, and
+ * only on a connection to the server it names.
  */
 public final class ChannelReports implements Reports, Listener {
 
     private final Plugin plugin;
     private final Supplier<Optional<Claims>> claims;
+    private final Supplier<String> here;
     private final Clock clock;
     private final Map<UUID, Claim.Standing> waiting = new ConcurrentHashMap<>();
 
@@ -61,10 +63,15 @@ public final class ChannelReports implements Reports, Listener {
         left(event.getPlayer());
     }
 
-    /** @param claims the signer, or empty while this server stands alone */
-    public ChannelReports(Plugin plugin, Supplier<Optional<Claims>> claims, Clock clock) {
+    /**
+     * @param claims the signer, or empty while this server stands alone
+     * @param here this server's name in the proxy's list, which every report names, so the proxy takes it only on
+     *     a connection to this server
+     */
+    public ChannelReports(Plugin plugin, Supplier<Optional<Claims>> claims, Supplier<String> here, Clock clock) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.claims = Objects.requireNonNull(claims, "claims");
+        this.here = Objects.requireNonNull(here, "here");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -92,12 +99,15 @@ public final class ChannelReports implements Reports, Listener {
                 .ifPresent(signer -> player.sendPluginMessage(
                         plugin,
                         Claims.CHANNEL,
-                        signer.sign(new Claim(
-                                        player.getUniqueId(),
-                                        player.getName(),
-                                        standing,
-                                        clock.instant(),
-                                        UUID.randomUUID().toString()))
+                        signer.sign(
+                                        new Claim(
+                                                player.getUniqueId(),
+                                                player.getName(),
+                                                here.get(),
+                                                standing,
+                                                clock.instant(),
+                                                UUID.randomUUID().toString()),
+                                        Claim.Direction.TO_PROXY)
                                 .getBytes(StandardCharsets.UTF_8)));
     }
 }

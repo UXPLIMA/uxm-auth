@@ -65,6 +65,7 @@ import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
+import com.uxplima.auth.domain.network.Nonces;
 import com.uxplima.auth.domain.premium.UuidScheme;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
@@ -427,9 +428,13 @@ final class ProxyGraph implements AutoCloseable {
         return loaded.secret();
     }
 
-    /** The signer of the claims every server behind this proxy reads. */
+    /**
+     * The signer of the claims every server behind this proxy reads, and the reader of their reports, which
+     * remembers the reports it took so a copy is never taken twice.
+     */
     private static Supplier<Optional<Claims>> claims(PluginSettings settings, NetworkSecret secret) {
-        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor()));
+        Nonces seen = new Nonces();
+        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor(), seen));
     }
 
     /** The network secret and the step after the password, which the door and the claims read. */
