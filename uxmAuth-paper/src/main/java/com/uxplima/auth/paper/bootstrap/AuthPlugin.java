@@ -2,7 +2,13 @@ package com.uxplima.auth.paper.bootstrap;
 
 import java.util.logging.Level;
 
+import org.bukkit.entity.Player;
+import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+
+import net.kyori.adventure.text.Component;
 
 import com.uxplima.auth.adapter.outbound.ImportFailed;
 import com.uxplima.auth.adapter.outbound.SchemeChanged;
@@ -44,13 +50,20 @@ public class AuthPlugin extends JavaPlugin {
             getLogger().severe(refused.getMessage());
             lock(wired);
             return;
-        } catch (RuntimeException failed) {
+        } catch (Throwable failed) {
+            // An Error as much as an exception: a class that does not load or link leaves no login running either.
+            // Nothing is thrown on, an out-of-memory error included, because Paper disables a plugin whose enable
+            // throws, and that takes the locked door away with it.
             getLogger().log(Level.SEVERE, "uxmAuth could not start: " + failed.getMessage(), failed);
             lock(wired);
             return;
         }
         module = wired;
-        startMetrics();
+        try {
+            startMetrics();
+        } catch (RuntimeException uncounted) {
+            getLogger().log(Level.WARNING, "The anonymous counts could not start", uncounted);
+        }
     }
 
     @Override
@@ -63,17 +76,44 @@ public class AuthPlugin extends JavaPlugin {
     /**
      * A start that failed shuts the door rather than the plugin. Disabled, the plugin left an offline server open to
      * anybody under any name; enabled with only this, it refuses every login until its staff fix the cause.
+     *
+     * <p>Every step is guarded on its own, so one that fails never skips the next. Whoever is online is sent away
+     * too: after a failed reload nothing holds the players who were waiting to log in.
      */
     private void lock(@Nullable PluginModule wired) {
         try {
             if (wired != null) {
                 wired.shutdown();
             }
-        } catch (RuntimeException halfBuilt) {
+        } catch (Throwable halfBuilt) {
             getLogger().log(Level.WARNING, "What the failed start had opened did not all close", halfBuilt);
         }
-        getServer().getPluginManager().registerEvents(new LockedDoor(), this);
+        try {
+            // What the failed start registered answers out of a graph that is not whole.
+            HandlerList.unregisterAll(this);
+        } catch (Throwable stuck) {
+            getLogger().log(Level.WARNING, "The listeners of the failed start could not all be removed", stuck);
+        }
+        try {
+            getServer().getPluginManager().registerEvents(new LockedDoor(), this);
+        } catch (Throwable unregistered) {
+            getLogger().log(Level.SEVERE, "The locked door could not be put up", unregistered);
+        }
+        sendEveryoneAway();
         getLogger().severe("Every login is refused until uxmAuth starts. Fix the cause above, then restart.");
+    }
+
+    /** Sends every online player away with the locked door's words, each on their own thread. */
+    private void sendEveryoneAway() {
+        Component reason = LockedDoor.reason();
+        try {
+            for (Player online : getServer().getOnlinePlayers()) {
+                // The module's scheduler may be what failed, so the player's own scheduler is asked directly.
+                ScheduledTask unused = online.getScheduler().run(this, task -> online.kick(reason), null);
+            }
+        } catch (Throwable unreached) {
+            getLogger().log(Level.SEVERE, "The players online could not all be sent away", unreached);
+        }
     }
 
     /** Start the anonymous counts, unless this plugin has no id yet. */

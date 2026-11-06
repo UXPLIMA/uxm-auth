@@ -57,6 +57,7 @@ import com.uxplima.auth.application.account.SwitchToCracked;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.migrate.ChangeScheme;
 import com.uxplima.auth.application.migrate.MoveDatabase;
 import com.uxplima.auth.application.perf.TimedAccounts;
@@ -117,6 +118,8 @@ import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.SecretBranches;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
+import com.uxplima.auth.paper.adapter.inbound.hold.DeopWatch;
+import com.uxplima.auth.paper.adapter.inbound.hold.DialogWaits;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
@@ -229,6 +232,7 @@ final class AuthGraph implements AutoCloseable {
     private final ClosedDoor closedDoor;
     private final JoinMessages joinMessages;
     private final Rescue rescue;
+    private final DeopWatch deopWatch;
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -336,6 +340,7 @@ final class AuthGraph implements AutoCloseable {
         LogIn.Failures failures = alerts.watching(bans);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
+        Set<String> runnable = PlayerCommandLabels.enabled(commands);
 
         Passes passes = new Passes();
         LoginSpot loginSpot =
@@ -344,9 +349,10 @@ final class AuthGraph implements AutoCloseable {
         this.hold = new HoldListener(
                 sessions,
                 () -> settings.current().hold(),
-                () -> labels,
+                () -> runnable,
                 plugin.getName().toLowerCase(Locale.ROOT),
-                passes::isPassing);
+                passes::isPassing,
+                PlayerCommandLabels.ownedBy(plugin));
         // Paper reads config/ under the directory it was started in.
         this.ownershipWarnings = boot.ownership().warnings();
         this.nameMarks = NameMarkCheck.warnings(
@@ -361,7 +367,9 @@ final class AuthGraph implements AutoCloseable {
                 () -> loginWorld.room().or(loginSpot::where),
                 passes,
                 Player::teleportAsync,
-                rescue::safe);
+                rescue::safe,
+                player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)));
+        this.deopWatch = new DeopWatch(keeper, name -> onlineId(plugin, name));
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
         WaitingBars bars = new WaitingBars(sessions);
         MomentRunner moments = WaitingBars.endWithTheWait(
@@ -642,8 +650,8 @@ final class AuthGraph implements AutoCloseable {
         LogOut logOut =
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), remembered);
         this.logout = new LogoutCommand(logOut, door, moments, messages);
-        events.listen(
-                new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
+        events.listen(new EndedSessions(
+                plugin.getServer()::getPlayer, gate, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         ProofForm proofForm = new BedrockProofForm(BedrockScreen.forServer(plugin.getServer()), messages);
@@ -709,8 +717,8 @@ final class AuthGraph implements AutoCloseable {
                 id -> bedrock.player(id).isPresent());
         this.staff = staffing.view;
         ForceLogin force = new ForceLogin(accounts, sessions, events, clock);
-        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
-        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
+        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, gate, force, lane, replies, door, messages));
+        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, gate, scheduler, messages));
         events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
         this.databases = databaseDesk(plugin, scheduler, settings, database, replies, messages);
         this.closedDoor = new ClosedDoor(databases::busy, messages);
@@ -747,14 +755,16 @@ final class AuthGraph implements AutoCloseable {
                                 clock)),
                 new StaffDesk.Reach(
                         name -> Optional.ofNullable(plugin.getServer().getPlayerExact(name))
-                                .map(Player::getUniqueId),
+                                .map(player -> new StaffDesk.Online(player.getUniqueId(), player.getName())),
                         new WaitingAccounts(
                                 plugin.getServer()::getPlayerExact,
                                 sessions,
                                 () -> settings.current().passwords().maxAttempts(),
                                 door,
                                 scheduler,
-                                messages)),
+                                messages),
+                        name -> waitsHere(plugin, gate, name),
+                        () -> claims(settings).isPresent()),
                 action -> settings.current().staff().allowsInGame(action),
                 alerts::staffActed);
         this.recover =
@@ -802,6 +812,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
+        plugin.getServer().getPluginManager().registerEvents(deopWatch, plugin);
         plugin.getServer().getPluginManager().registerEvents(chatAnswers, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         plugin.getServer().getPluginManager().registerEvents(factors.guard, plugin);
@@ -870,6 +881,25 @@ final class AuthGraph implements AutoCloseable {
                         bans.rule(),
                         new ConnectionWindow(
                                 () -> settings.current().protection().connections(), Instant::now)));
+    }
+
+    /** The id of the player online under this name, or the id the text is written as. */
+    private static Optional<UUID> onlineId(Plugin plugin, String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        if (online != null) {
+            return Optional.of(online.getUniqueId());
+        }
+        try {
+            return Optional.of(UUID.fromString(name));
+        } catch (IllegalArgumentException notAnId) {
+            return Optional.empty();
+        }
+    }
+
+    /** Whether a connection under this name waits to log in on this server, in the world or at the dialog. */
+    private boolean waitsHere(Plugin plugin, DialogWaits dialogs, String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        return online != null ? hold.isHeld(online) : dialogs.waitsAs(name);
     }
 
     /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */

@@ -19,12 +19,14 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * What a server does when an account's sessions end: a player of it logged in here reads why and stands at the
- * door again, unless this is the session that made the change. A bulletin arrives on whatever thread brought it, so the
- * player is reached on their own.
+ * door again, unless this is the session that made the change. A player past the old password but not in yet, asked
+ * for a new password, a code or the app, goes back to the password too: the old one proved nothing any more. A
+ * bulletin arrives on whatever thread brought it, so the player is reached on their own.
  */
 public final class EndedSessions implements Consumer<Bulletin> {
 
     private final Function<UUID, @Nullable Player> online;
+    private final DialogWaits dialogs;
     private final Sessions sessions;
     private final Scheduler scheduler;
     private final LogOut logOut;
@@ -32,9 +34,13 @@ public final class EndedSessions implements Consumer<Bulletin> {
     private final MomentRunner moments;
     private final Messages messages;
 
-    /** @param online the player of this account on this server, when there is one */
+    /**
+     * @param online the player of this account on this server, when there is one
+     * @param dialogs the connections waiting at the dialog, which have no player
+     */
     public EndedSessions(
             Function<UUID, @Nullable Player> online,
+            DialogWaits dialogs,
             Sessions sessions,
             Scheduler scheduler,
             LogOut logOut,
@@ -42,6 +48,7 @@ public final class EndedSessions implements Consumer<Bulletin> {
             MomentRunner moments,
             Messages messages) {
         this.online = Objects.requireNonNull(online, "online");
+        this.dialogs = Objects.requireNonNull(dialogs, "dialogs");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.logOut = Objects.requireNonNull(logOut, "logOut");
@@ -57,6 +64,8 @@ public final class EndedSessions implements Consumer<Bulletin> {
                 Player player = online.apply(ended.account());
                 if (player != null) {
                     scheduler.entity(player, () -> endUnlessKept(player, ended.keep()));
+                } else {
+                    endAtTheDialog(ended.account(), ended.keep());
                 }
             }
             // Staff letting a player in is ForcedLogins' bulletin.
@@ -76,15 +85,35 @@ public final class EndedSessions implements Consumer<Bulletin> {
         }
     }
 
+    /**
+     * A connection at the dialog before the world shows a screen chosen for the step it stood at, so one sent back
+     * to the password is sent away to join again; one that had not passed the password waits on.
+     */
+    private void endAtTheDialog(UUID connection, Optional<String> keep) {
+        if (dialogs.address(connection).isEmpty()
+                || keep.equals(sessions.held(connection).map(Sessions.Held::visit))) {
+            return;
+        }
+        if (logOut.end(connection) != LogOut.Ended.UNTOUCHED) {
+            dialogs.sendAway(connection, Keys.LOGOUT_SESSIONS_ENDED);
+        }
+    }
+
     private void end(Player player) {
-        switch (logOut.run(player.getUniqueId())) {
-            case NOT_LOGGED_IN -> {}
+        switch (logOut.end(player.getUniqueId())) {
+            case UNTOUCHED -> {}
             // No password to come back with: the way back in is a new join.
             case NO_PASSWORD -> player.kick(messages.render(player, Keys.LOGOUT_SESSIONS_ENDED));
             case LOGGED_OUT -> {
+                // Held first, so no effect an operator wrote can leave a logged-out player free.
+                door.hold(player);
                 messages.send(player, Keys.LOGOUT_SESSIONS_ENDED);
                 moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
+            }
+            // Held still, and asked for the password again rather than what came after the old one.
+            case BACK_TO_PASSWORD -> {
                 door.hold(player);
+                messages.send(player, Keys.LOGOUT_SESSIONS_ENDED);
             }
         }
     }

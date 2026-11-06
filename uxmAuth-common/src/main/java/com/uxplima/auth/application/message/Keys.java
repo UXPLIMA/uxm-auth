@@ -121,6 +121,9 @@ public enum Keys implements MessageKey {
     KICK_TIMEOUT_REGISTER("kick.timeout-register", "<body>You took too long to register. Join again to try once more."),
     KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
+    KICK_HOLD_UNSAVED(
+            "kick.hold-unsaved",
+            "<body>This server could not keep your things safe while you log in, so you were sent away with them. Join again."),
     KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),
     KICK_NAME_TOO_SHORT(
             "kick.name-too-short",
@@ -419,6 +422,9 @@ public enum Keys implements MessageKey {
     STAFF_FORCED_LOGIN(
             "staff.forced-login",
             "<tag:'AUTH'> <body>Every server was told to let <value><name><body> in, wherever they wait."),
+    STAFF_FORCED_NOBODY(
+            "staff.forced-nobody",
+            "<etag:'ERROR'> <body>Nobody waits to log in as <value><name><body> on this server, so nobody was let in."),
     STAFF_LET_IN("staff.let-in", "<tag:'AUTH'> <body>Staff let you in."),
     STAFF_UNBANNED("staff.unbanned", "<tag:'AUTH'> <body><value><address><body> is no longer banned."),
     STAFF_NOT_BANNED(
@@ -440,6 +446,9 @@ public enum Keys implements MessageKey {
             "staff.registered-you",
             "<tag:'AUTH'> <body>Staff made your account. Log in with the password they gave you."),
     STAFF_NAME_TAKEN("staff.name-taken", "<etag:'ERROR'> <body>An account holds <value><name><body> already."),
+    STAFF_NAME_CASE(
+            "staff.name-case",
+            "<etag:'ERROR'> <body><value><name><body> is online here as <value><online><body>. Write the name exactly that way."),
     STAFF_NAME_REFUSED(
             "staff.name-refused", "<etag:'ERROR'> <body><value><name><body> breaks the name rules of config.conf."),
     STAFF_FACTOR_OFF(

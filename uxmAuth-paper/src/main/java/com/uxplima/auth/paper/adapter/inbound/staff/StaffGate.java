@@ -4,6 +4,8 @@ import java.util.Objects;
 import java.util.function.Predicate;
 
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.RemoteConsoleCommandSender;
 import org.bukkit.entity.Player;
 
 import com.uxplima.auth.application.message.Keys;
@@ -14,6 +16,9 @@ import com.uxplima.uxmlib.text.message.Messages;
 /**
  * The console runs every staff command; a player runs a destructive one only when the operator opened it in game.
  * A hijacked staff account then cannot unregister the rest.
+ *
+ * <p>The console is the server's own and the remote one, nothing else. A command block or a minecart with one is no
+ * console: anybody who can build or reach one could run it, so it is refused whatever the settings say.
  */
 public final class StaffGate {
 
@@ -30,7 +35,10 @@ public final class StaffGate {
     public boolean allows(CommandSender sender, StaffAction action) {
         Objects.requireNonNull(sender, "sender");
         Objects.requireNonNull(action, "action");
-        if (!(sender instanceof Player) || openInGame.test(action)) {
+        if (sender instanceof ConsoleCommandSender || sender instanceof RemoteConsoleCommandSender) {
+            return true;
+        }
+        if (sender instanceof Player && openInGame.test(action)) {
             return true;
         }
         messages.send(sender, Keys.STAFF_CONSOLE_ONLY, Text.placeholder("command", action.key()));

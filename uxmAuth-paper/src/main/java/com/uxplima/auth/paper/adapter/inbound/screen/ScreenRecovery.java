@@ -19,6 +19,9 @@ import com.uxplima.uxmlib.text.message.Messages;
  * "Forgot password" on the login screen, for a player in the dialog before the world who cannot type /recover. A
  * code that went out, or one still on its way, opens the recovery screen; a wrong code or a refused password stays
  * there with the reason; anything else goes back to the login screen with what happened on top.
+ *
+ * <p>The answer is shown through the guest, on the thread the guest is served from: a player in the world is kicked
+ * or shown a screen on their own thread, never on the one the mail work finished on.
  */
 public final class ScreenRecovery implements RecoveryOffer {
 
@@ -42,7 +45,7 @@ public final class ScreenRecovery implements RecoveryOffer {
     @Override
     public CompletableFuture<Void> forgot(Guest guest) {
         Audience reader = Objects.requireNonNull(guest, "guest").audience();
-        return recover.request(guest.id(), messages.localeOf(reader)).thenAccept(outcome -> shown(guest, outcome));
+        return guest.after(recover.request(guest.id(), messages.localeOf(reader)), outcome -> shown(guest, outcome));
     }
 
     @Override
@@ -56,8 +59,9 @@ public final class ScreenRecovery implements RecoveryOffer {
             return CompletableFuture.completedFuture(null);
         }
         String host = sessions.held(guest.id()).map(Sessions.Held::host).orElse("");
-        return recover.recover(guest.id(), code.strip(), Password.of(fresh), guest.address(), host)
-                .thenAccept(outcome -> shown(guest, outcome));
+        return guest.after(
+                recover.recover(guest.id(), code.strip(), Password.of(fresh), guest.address(), host),
+                outcome -> shown(guest, outcome));
     }
 
     private void shown(Guest guest, RecoverPassword.Outcome outcome) {

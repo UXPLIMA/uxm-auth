@@ -23,11 +23,12 @@ import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader;
 
 /**
- * One file per held player, {@code held/<uuid>.conf}, written before anything is taken and deleted after it
+ * One file per held player, {@code held/<uuid>.conf}, written as soon as anything is taken and deleted after it
  * is given back.
  *
  * <p>A server that dies while a player waits leaves the file behind, and the player's next join reads it and
- * gives back their operator status, their flight and their inventory. Without it a crash would keep them.
+ * gives back their game mode, their flight and their inventory. Without it a crash would keep them. The
+ * operator status it records is never given back from it; the hold says so in the console.
  *
  * <p>Every method blocks on the disk. The hold calls them from the async scheduler.
  */

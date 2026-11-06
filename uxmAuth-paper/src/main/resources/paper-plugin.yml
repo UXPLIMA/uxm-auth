@@ -83,10 +83,30 @@ permissions:
     default: true
 
   # What an operator does. Off unless the server grants it, and admin.* grants the family
-  # in one line.
+  # in one line. The family is written out under children, so a permission plugin that
+  # does not read the * as a wildcard grants it too.
   uxmauth.admin.*:
     description: Everything an operator does with this plugin
     default: op
+    children:
+      uxmauth.admin.doctor: true
+      uxmauth.admin.version: true
+      uxmauth.admin.reload: true
+      uxmauth.admin.info: true
+      uxmauth.admin.history: true
+      uxmauth.admin.forcelogin: true
+      uxmauth.admin.unban: true
+      uxmauth.admin.unregister: true
+      uxmauth.admin.setpassword: true
+      uxmauth.admin.forceregister: true
+      uxmauth.admin.disable2fa: true
+      uxmauth.admin.markpremium: true
+      uxmauth.admin.markcracked: true
+      uxmauth.admin.resolve: true
+      uxmauth.admin.alerts: true
+      uxmauth.admin.perf: true
+      uxmauth.admin.database: true
+      uxmauth.admin.language: true
   uxmauth.admin.doctor:
     description: Ask how this plugin is
     default: op
