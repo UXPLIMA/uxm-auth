@@ -412,6 +412,8 @@ public final class LimboLogin {
                         .orElseGet(() -> reminder(reader, id)));
             case ChangeResult.NotLoggedIn notYet -> new Outcome.Stay(reminder(reader, id));
             case ChangeResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
+            case ChangeResult.ChangedElsewhere elsewhere ->
+                new Outcome.Out(messages.render(reader, Keys.LOGOUT_SESSIONS_ENDED));
         };
     }
 

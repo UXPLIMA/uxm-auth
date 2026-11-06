@@ -91,6 +91,8 @@ public final class ChangePasswordCommand {
             case ChangeResult.Rejected rejected ->
                 PasswordWords.reason(messages, player, rejected.verdict()).ifPresent(player::sendMessage);
             case ChangeResult.NotLoggedIn notLoggedIn -> messages.send(player, Keys.CHANGE_NOT_LOGGED_IN);
+            case ChangeResult.ChangedElsewhere elsewhere ->
+                player.kick(messages.render(player, Keys.LOGOUT_SESSIONS_ENDED));
             case ChangeResult.Gone gone -> {}
         }
     }

@@ -510,6 +510,8 @@ public final class ScreenAnswers {
             case ChangeResult.Changed changed -> shower.close(reader);
             case ChangeResult.NotLoggedIn notLoggedIn -> shower.show(reader, screens.login(reader, null));
             case ChangeResult.WrongOld wrongOld -> shower.show(reader, screens.login(reader, null));
+            case ChangeResult.ChangedElsewhere elsewhere ->
+                guest.kick(messages.render(reader, Keys.LOGOUT_SESSIONS_ENDED));
             case ChangeResult.Gone gone -> {}
         }
     }

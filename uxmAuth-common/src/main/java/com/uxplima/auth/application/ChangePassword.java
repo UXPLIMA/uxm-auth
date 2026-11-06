@@ -129,7 +129,18 @@ public final class ChangePassword {
         }
         long generation = held.generation();
         UUID id = owner.get();
-        return lane.submit(() -> change(connection, generation, id, old, fresh));
+        PasswordHash proven = old == null ? proven(held.state()) : null;
+        return lane.submit(() -> change(connection, generation, id, old, fresh, proven));
+    }
+
+    /**
+     * The hash a player held to replace a weak password proved at the login, which a change that asks no old
+     * password must still find in the row; nothing for anyone else.
+     */
+    private static @Nullable PasswordHash proven(AuthState state) {
+        return state instanceof AuthState.Replacing replacing
+                ? replacing.account().password()
+                : null;
     }
 
     /** The account a logged-in player, or one held to replace a weak password, may change the password of. */
@@ -149,8 +160,18 @@ public final class ChangePassword {
      * The old password is checked against the row as it is now, and the new one replaces exactly that row's
      * value. A change made on another server in between wins, and this one answers that the old password
      * was wrong, which by then it is.
+     *
+     * <p>A player held to replace a weak password types no old one, so the new one replaces only the hash they
+     * proved at the login. When staff or another server changed it since, that change stands and the player is
+     * told to log in again, rather than the fresh row being taken as theirs to overwrite.
      */
-    private ChangeResult change(UUID connection, long generation, UUID id, @Nullable Password old, Password fresh) {
+    private ChangeResult change(
+            UUID connection,
+            long generation,
+            UUID id,
+            @Nullable Password old,
+            Password fresh,
+            @Nullable PasswordHash proven) {
         if (!sessions.isOpen(connection, generation)) {
             return new ChangeResult.Gone();
         }
@@ -158,6 +179,10 @@ public final class ChangePassword {
         PasswordHash stored = current == null ? null : current.password();
         if (current == null || (old != null && (stored == null || wrong(old, stored)))) {
             return new ChangeResult.WrongOld();
+        }
+        boolean pinned = old == null && proven != null;
+        if (old == null && proven != null && !proven.equals(stored)) {
+            return new ChangeResult.ChangedElsewhere();
         }
         if (breaches.breached(fresh)) {
             return new ChangeResult.Rejected(new PasswordVerdict.Breached());
@@ -168,7 +193,7 @@ public final class ChangePassword {
         }
         if (!accounts.replacePassword(id, stored, hash)) {
             // Changed on another server between the read and this write. That change stands.
-            return new ChangeResult.WrongOld();
+            return pinned ? new ChangeResult.ChangedElsewhere() : new ChangeResult.WrongOld();
         }
         boolean replaced = loggedIn(connection, generation, current.withPassword(hash));
         endOtherSessions(connection, id);

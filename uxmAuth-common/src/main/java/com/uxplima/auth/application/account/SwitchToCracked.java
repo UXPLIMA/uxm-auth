@@ -100,6 +100,7 @@ public final class SwitchToCracked {
             case ChangeResult.WrongOld wrongOld -> new Switched.WrongPassword();
             case ChangeResult.NotLoggedIn notLoggedIn -> new Switched.NotLoggedIn();
             case ChangeResult.Gone gone -> new Switched.NotLoggedIn();
+            case ChangeResult.ChangedElsewhere elsewhere -> new Switched.NotLoggedIn();
         };
     }
 

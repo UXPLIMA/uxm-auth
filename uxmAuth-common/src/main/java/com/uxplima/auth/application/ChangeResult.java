@@ -24,6 +24,12 @@ public sealed interface ChangeResult {
 
     record NotLoggedIn() implements ChangeResult {}
 
+    /**
+     * The password the login was held up by was changed elsewhere, by staff or on another server, before the new
+     * one came: that change stands, nothing was written, and the player logs in again.
+     */
+    record ChangedElsewhere() implements ChangeResult {}
+
     /** The player left before the answer was ready. Nothing was written. */
     record Gone() implements ChangeResult {}
 }
