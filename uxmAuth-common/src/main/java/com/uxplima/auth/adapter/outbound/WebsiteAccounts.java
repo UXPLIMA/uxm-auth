@@ -302,6 +302,18 @@ public final class WebsiteAccounts implements AccountRepository {
         gone.ifPresent(account -> rows.delete(account.name()));
     }
 
+    /** Removes the idle account as {@link #delete} does, and its website row only once the account went. */
+    @Override
+    public boolean deleteIfInactive(UUID id, Instant before) {
+        Optional<Account> withRow = accounts.findById(Objects.requireNonNull(id, "id"))
+                .filter(account -> ours(account, rows.find(account.name())).isPresent());
+        boolean removed = accounts.deleteIfInactive(id, before);
+        if (removed) {
+            withRow.ifPresent(account -> rows.delete(account.name()));
+        }
+        return removed;
+    }
+
     @Override
     public void moveId(UUID from, UUID to) {
         accounts.moveId(from, to);

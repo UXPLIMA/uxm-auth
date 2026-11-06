@@ -68,6 +68,20 @@ public interface AccountRepository {
     /** Removes an account and what is remembered of its moves. */
     void delete(UUID id);
 
+    /**
+     * Removes the account as {@link #delete} does, but only while nobody has logged in to it, nor registered it,
+     * since {@code before}, and answers whether it went. A store that can decide that in the same step as the removal
+     * does, so a login that lands after the purge chose the account still keeps it; this default reads, then removes.
+     */
+    default boolean deleteIfInactive(UUID id, Instant before) {
+        Objects.requireNonNull(before, "before");
+        Optional<Account> idle = findById(id)
+                .filter(account -> Objects.requireNonNullElse(account.lastLoginAt(), account.registeredAt())
+                        .isBefore(before));
+        idle.ifPresent(account -> delete(account.id()));
+        return idle.isPresent();
+    }
+
     /** Gives an account another id, as a scheme that follows Mojang's does when a cracked account turns premium. */
     void moveId(UUID from, UUID to);
 

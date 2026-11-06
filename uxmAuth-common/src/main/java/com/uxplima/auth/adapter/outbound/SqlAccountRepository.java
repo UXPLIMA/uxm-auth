@@ -29,10 +29,14 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             + " registration_address, last_login_at, last_address, unverified, registration_key";
     private static final String SELECT = "SELECT " + COLUMNS + " FROM uxmauth_account WHERE ";
     private static final String ALL = "SELECT " + COLUMNS + " FROM uxmauth_account";
-    private static final String INACTIVE =
-            "SELECT id FROM uxmauth_account WHERE COALESCE(last_login_at, registered_at) < ? ORDER BY id LIMIT ?";
+    private static final String INACTIVE = "SELECT id FROM uxmauth_account"
+            + " WHERE COALESCE(last_login_at, registered_at) < ? AND id > ? ORDER BY id LIMIT ?";
     private static final String INACTIVE_NOT_PREMIUM = "SELECT id FROM uxmauth_account"
-            + " WHERE COALESCE(last_login_at, registered_at) < ? AND kind <> 'PREMIUM' ORDER BY id LIMIT ?";
+            + " WHERE COALESCE(last_login_at, registered_at) < ? AND kind <> 'PREMIUM' AND id > ? ORDER BY id LIMIT ?";
+    /** The removal of an idle account decides again, in its own statement, that nobody logged in meanwhile. */
+    private static final String DELETE_INACTIVE =
+            "DELETE FROM uxmauth_account WHERE id = ? AND COALESCE(last_login_at, registered_at) < ?";
+
     private static final String INSERT =
             "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
@@ -112,13 +116,16 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
     }
 
     @Override
-    public List<UUID> inactiveSince(Instant before, boolean keepPremium, int limit) {
+    public List<UUID> inactiveSince(Instant before, boolean keepPremium, @Nullable UUID after, int limit) {
         Objects.requireNonNull(before, "before");
+        // Every id is longer than the empty text, so the first batch starts at the first id.
+        String from = after == null ? "" : after.toString();
         return database.transaction(sql -> sql.query(
                 keepPremium ? INACTIVE_NOT_PREMIUM : INACTIVE,
                 statement -> {
                     statement.setLong(1, before.toEpochMilli());
-                    statement.setInt(2, limit);
+                    statement.setString(2, from);
+                    statement.setInt(3, limit);
                 },
                 row -> UUID.fromString(row.getString("id"))));
     }
@@ -284,6 +291,32 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
                 sql.update(drop, statement -> statement.setString(1, id.toString()));
             }
             sql.update(DELETE, statement -> statement.setString(1, id.toString()));
+        });
+    }
+
+    /**
+     * The account row goes first, and only while it is still idle; a login recorded between the purge's read and this
+     * removal keeps it, and with it everything it keeps. The rest goes in the same transaction.
+     */
+    @Override
+    public boolean deleteIfInactive(UUID id, Instant before) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(before, "before");
+        return database.transaction(sql -> {
+            int removed = sql.update(DELETE_INACTIVE, statement -> {
+                statement.setString(1, id.toString());
+                statement.setLong(2, before.toEpochMilli());
+            });
+            if (removed == 0) {
+                return false;
+            }
+            sql.update(DELETE_RENAMES, statement -> statement.setString(1, id.toString()));
+            sql.update(DROP_SESSIONS, statement -> statement.setString(1, id.toString()));
+            sql.update(DROP_CHOICE, statement -> statement.setString(1, id.toString()));
+            for (String drop : DROP_KEPT) {
+                sql.update(drop, statement -> statement.setString(1, id.toString()));
+            }
+            return true;
         });
     }
 

@@ -529,6 +529,7 @@ final class AuthGraph implements AutoCloseable {
         PurgeInactive purge = new PurgeInactive(
                 new SqlAccountRepository(database),
                 accounts,
+                sessions::holdsAccount,
                 () -> settings.current().purge(),
                 clock);
         // It looks every hour and runs when its check is due, so a reload of check-hours counts.
