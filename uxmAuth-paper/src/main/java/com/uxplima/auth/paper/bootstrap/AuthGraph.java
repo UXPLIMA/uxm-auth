@@ -116,6 +116,7 @@ import com.uxplima.auth.paper.adapter.inbound.command.SecretBranches;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
 import com.uxplima.auth.paper.adapter.inbound.hold.DeopWatch;
+import com.uxplima.auth.paper.adapter.inbound.hold.DialogWaits;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
@@ -613,8 +614,8 @@ final class AuthGraph implements AutoCloseable {
         LogOut logOut =
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), remembered);
         this.logout = new LogoutCommand(logOut, door, moments, messages);
-        events.listen(
-                new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
+        events.listen(new EndedSessions(
+                plugin.getServer()::getPlayer, gate, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         ProofForm proofForm = new BedrockProofForm(BedrockScreen.forServer(plugin.getServer()), messages);
@@ -680,8 +681,8 @@ final class AuthGraph implements AutoCloseable {
                 id -> bedrock.player(id).isPresent());
         this.staff = staffing.view;
         ForceLogin force = new ForceLogin(accounts, sessions, events, clock);
-        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
-        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
+        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, gate, force, lane, replies, door, messages));
+        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, gate, scheduler, messages));
         events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
         this.databases = databaseDesk(plugin, scheduler, settings, database, replies, messages);
         this.closedDoor = new ClosedDoor(databases::busy, messages);
@@ -725,7 +726,9 @@ final class AuthGraph implements AutoCloseable {
                                 () -> settings.current().passwords().maxAttempts(),
                                 door,
                                 scheduler,
-                                messages)),
+                                messages),
+                        name -> waitsHere(plugin, gate, name),
+                        () -> claims(settings).isPresent()),
                 action -> settings.current().staff().allowsInGame(action),
                 alerts::staffActed);
         this.recover =
@@ -853,6 +856,12 @@ final class AuthGraph implements AutoCloseable {
         } catch (IllegalArgumentException notAnId) {
             return Optional.empty();
         }
+    }
+
+    /** Whether a connection under this name waits to log in on this server, in the world or at the dialog. */
+    private boolean waitsHere(Plugin plugin, DialogWaits dialogs, String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        return online != null ? hold.isHeld(online) : dialogs.waitsAs(name);
     }
 
     /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */

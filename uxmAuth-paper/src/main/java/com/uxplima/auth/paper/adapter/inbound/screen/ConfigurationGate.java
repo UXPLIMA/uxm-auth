@@ -35,7 +35,9 @@ import com.uxplima.auth.adapter.outbound.ScreenSettings;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.state.AuthState;
+import com.uxplima.auth.paper.adapter.inbound.hold.DialogWaits;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
+import com.uxplima.uxmlib.text.message.MessageKey;
 import com.uxplima.uxmlib.text.message.Messages;
 import org.jspecify.annotations.Nullable;
 
@@ -46,7 +48,7 @@ import org.jspecify.annotations.Nullable;
  * <p>The wait always ends: a close completes it at once and the timeout from config.conf completes it at the
  * latest. A client too old to draw a dialog is not held here; the world holds it, with the commands.
  */
-public final class ConfigurationGate implements Listener {
+public final class ConfigurationGate implements Listener, DialogWaits {
 
     /** How a wait ended. */
     public enum Outcome {
@@ -164,6 +166,42 @@ public final class ConfigurationGate implements Listener {
         Waiting entry = waiting.get(Objects.requireNonNull(connection, "connection"));
         InetSocketAddress address = entry == null ? null : entry.connection().getClientAddress();
         return Optional.ofNullable(address == null ? null : address.getAddress());
+    }
+
+    @Override
+    public Optional<String> address(UUID connection) {
+        Waiting entry = waiting.get(Objects.requireNonNull(connection, "connection"));
+        return entry == null ? Optional.empty() : Optional.of(new ConnectingGuest(entry, this).address());
+    }
+
+    @Override
+    public boolean waitsAs(String name) {
+        Objects.requireNonNull(name, "name");
+        return waiting.values().stream()
+                .map(entry -> entry.connection().getProfile().getName())
+                .anyMatch(name::equalsIgnoreCase);
+    }
+
+    @Override
+    public boolean letIn(UUID connection, AuthSettings.Moment moment) {
+        Objects.requireNonNull(moment, "moment");
+        Waiting entry = waiting.get(Objects.requireNonNull(connection, "connection"));
+        if (entry == null) {
+            return false;
+        }
+        letIn(entry, moment);
+        return true;
+    }
+
+    @Override
+    public boolean sendAway(UUID connection, MessageKey reason) {
+        Objects.requireNonNull(reason, "reason");
+        Waiting entry = waiting.get(Objects.requireNonNull(connection, "connection"));
+        if (entry == null) {
+            return false;
+        }
+        new ConnectingGuest(entry, this).kick(messages.render(entry.reader(), reason));
+        return true;
     }
 
     /** Shows the screen and starts the wait; empty when this connection does not wait here. */

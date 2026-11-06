@@ -26,6 +26,7 @@ import org.jspecify.annotations.Nullable;
 public final class EndedSessions implements Consumer<Bulletin> {
 
     private final Function<UUID, @Nullable Player> online;
+    private final DialogWaits dialogs;
     private final Sessions sessions;
     private final Scheduler scheduler;
     private final LogOut logOut;
@@ -33,9 +34,13 @@ public final class EndedSessions implements Consumer<Bulletin> {
     private final MomentRunner moments;
     private final Messages messages;
 
-    /** @param online the player of this account on this server, when there is one */
+    /**
+     * @param online the player of this account on this server, when there is one
+     * @param dialogs the connections waiting at the dialog, which have no player
+     */
     public EndedSessions(
             Function<UUID, @Nullable Player> online,
+            DialogWaits dialogs,
             Sessions sessions,
             Scheduler scheduler,
             LogOut logOut,
@@ -43,6 +48,7 @@ public final class EndedSessions implements Consumer<Bulletin> {
             MomentRunner moments,
             Messages messages) {
         this.online = Objects.requireNonNull(online, "online");
+        this.dialogs = Objects.requireNonNull(dialogs, "dialogs");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.logOut = Objects.requireNonNull(logOut, "logOut");
@@ -58,6 +64,8 @@ public final class EndedSessions implements Consumer<Bulletin> {
                 Player player = online.apply(ended.account());
                 if (player != null) {
                     scheduler.entity(player, () -> endUnlessKept(player, ended.keep()));
+                } else {
+                    endAtTheDialog(ended.account(), ended.keep());
                 }
             }
             // Staff letting a player in is ForcedLogins' bulletin.
@@ -74,6 +82,20 @@ public final class EndedSessions implements Consumer<Bulletin> {
         Optional<String> visit = sessions.held(player.getUniqueId()).map(Sessions.Held::visit);
         if (!keep.equals(visit)) {
             end(player);
+        }
+    }
+
+    /**
+     * A connection at the dialog before the world shows a screen chosen for the step it stood at, so one sent back
+     * to the password is sent away to join again; one that had not passed the password waits on.
+     */
+    private void endAtTheDialog(UUID connection, Optional<String> keep) {
+        if (dialogs.address(connection).isEmpty()
+                || keep.equals(sessions.held(connection).map(Sessions.Held::visit))) {
+            return;
+        }
+        if (logOut.end(connection) != LogOut.Ended.UNTOUCHED) {
+            dialogs.sendAway(connection, Keys.LOGOUT_SESSIONS_ENDED);
         }
     }
 

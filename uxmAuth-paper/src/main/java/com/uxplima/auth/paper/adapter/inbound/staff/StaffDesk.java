@@ -4,8 +4,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -64,11 +66,19 @@ public final class StaffDesk implements StaffActions {
      *
      * @param online the player online here under this name in any case, when there is one
      * @param registered tells a player waiting under a made account's name to log in
+     * @param waiting whether a connection under this name waits to log in here, in the world or at the dialog
+     * @param networked whether other servers hear the bulletins too, so a player may wait on one of them
      */
-    public record Reach(Function<String, Optional<Online>> online, Consumer<Account> registered) {
+    public record Reach(
+            Function<String, Optional<Online>> online,
+            Consumer<Account> registered,
+            Predicate<String> waiting,
+            BooleanSupplier networked) {
         public Reach {
             Objects.requireNonNull(online, "online");
             Objects.requireNonNull(registered, "registered");
+            Objects.requireNonNull(waiting, "waiting");
+            Objects.requireNonNull(networked, "networked");
         }
     }
 
@@ -137,9 +147,15 @@ public final class StaffDesk implements StaffActions {
         if (!gate.allows(Objects.requireNonNull(sender, "sender"), StaffAction.FORCE_LOGIN)) {
             return CompletableFuture.completedFuture(null);
         }
+        // Read before the ask: on a server alone the ask lets the player in at once, and they wait no longer.
+        boolean reachable = reach.networked().getAsBoolean() || reach.waiting().test(name);
         return replies.on(sender, lane.submit(() -> cases.force().ask(new PlayerName(name))), asked -> {
             if (asked == ForceLogin.Asked.UNKNOWN) {
                 messages.send(sender, Keys.STAFF_UNKNOWN, Text.placeholder("name", name));
+                return;
+            }
+            if (!reachable) {
+                messages.send(sender, Keys.STAFF_FORCED_NOBODY, Text.placeholder("name", name));
                 return;
             }
             messages.send(sender, Keys.STAFF_FORCED_LOGIN, Text.placeholder("name", name));

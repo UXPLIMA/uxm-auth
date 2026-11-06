@@ -411,6 +411,9 @@ public enum Keys implements MessageKey {
     STAFF_FORCED_LOGIN(
             "staff.forced-login",
             "<tag:'AUTH'> <body>Every server was told to let <value><name><body> in, wherever they wait."),
+    STAFF_FORCED_NOBODY(
+            "staff.forced-nobody",
+            "<etag:'ERROR'> <body>Nobody waits to log in as <value><name><body> on this server, so nobody was let in."),
     STAFF_LET_IN("staff.let-in", "<tag:'AUTH'> <body>Staff let you in."),
     STAFF_UNBANNED("staff.unbanned", "<tag:'AUTH'> <body><value><address><body> is no longer banned."),
     STAFF_NOT_BANNED(
