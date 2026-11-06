@@ -36,7 +36,19 @@ A stranger can lock somebody else's account on purpose, so the lock is a short, 
 premium and Bedrock logins and remembered sessions are never held back, nor is the owner back on the address
 they last logged in from (its /64 for IPv6) unless a filter shares it, and the right password works as soon as
 the lock runs out. The cost is that an owner who types their password from somewhere new may wait a few minutes
-while somebody is guessing at their account.
+while somebody is guessing at their account, and behind a shared filter, where no address is the owner's, every
+password player can be delayed this way. A password set through `/recover` lifts the lock at once, and the owner
+asking `/recover` from the address they last logged in or registered from is not held back by the mail's daily cap
+that strangers can spend. `failures = 0` turns the lock off.
+
+`protection.bans.failures-per-48` can also ban a whole IPv6 /48 after that many wrong passwords across it. It
+ships at 0, off: mobile carriers give every phone a /64 of one shared /48, and one person hopping between them
+would ban everybody there.
+
+On a proxy with its own waiting world, the first connection under a name holds that name until it logs in, leaves
+or runs out of time; a second connection under the same name is turned away rather than sharing the first one's
+login. With `kick-existing-players` on, a stranger who keeps reconnecting under a password player's name can
+therefore keep the owner waiting until their wait runs out; a premium name is proved by Mojang and is not affected.
 
 ## Limits
 

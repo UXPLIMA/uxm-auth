@@ -22,12 +22,15 @@ public final class LookupBudget {
 
     private static final Duration WINDOW = Duration.ofMinutes(10);
 
-    /** Past this many addresses, every new request first lets the ones that went quiet go. */
+    /** Past this many addresses, the ones that went quiet are let go, at most once a second. */
     private static final int SWEEP_PAST = 256;
+
+    private static final Duration SWEEP_EVERY = Duration.ofSeconds(1);
 
     private final IntSupplier perAddress;
     private final Clock clock;
     private final Map<String, Deque<Instant>> spent = new HashMap<>();
+    private Instant nextSweep = Instant.MIN;
 
     /** @param perAddress the lookups one address may cause in ten minutes; 0 or less for no limit */
     public LookupBudget(IntSupplier perAddress, Clock clock) {
@@ -49,9 +52,11 @@ public final class LookupBudget {
         }
         Instant now = clock.instant();
         Instant oldest = now.minus(WINDOW);
-        if (spent.size() > SWEEP_PAST) {
+        // A flood of addresses would otherwise scan the whole map at every new connection.
+        if (spent.size() > SWEEP_PAST && !now.isBefore(nextSweep)) {
             spent.values()
                     .removeIf(times -> times.isEmpty() || !times.peekLast().isAfter(oldest));
+            nextSweep = now.plus(SWEEP_EVERY);
         }
         Deque<Instant> times = spent.computeIfAbsent(AddressKey.of(address), key -> new ArrayDeque<>());
         while (!times.isEmpty() && !times.peekFirst().isAfter(oldest)) {

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.uxplima.auth.application.protection.Admission;
 
@@ -35,6 +36,7 @@ public final class AddressRules {
     private final Admission admission;
     private final Clock clock;
     private final Map<InetSocketAddress, Kept> kept = new ConcurrentHashMap<>();
+    private final AtomicReference<Instant> nextSweep = new AtomicReference<>(Instant.MIN);
 
     public AddressRules(Admission admission, Clock clock) {
         this.admission = Objects.requireNonNull(admission, "admission");
@@ -49,7 +51,9 @@ public final class AddressRules {
                 admission.decide(new Admission.Arrival(connection.getAddress().getHostAddress(), host));
         Instant now = clock.instant();
         kept.put(connection, new Kept(refused, now));
-        if (kept.size() > SWEEP_PAST) {
+        // At most once a second: a flood of connections would otherwise scan every entry at each hello.
+        Instant due = nextSweep.get();
+        if (kept.size() > SWEEP_PAST && !now.isBefore(due) && nextSweep.compareAndSet(due, now.plusSeconds(1))) {
             kept.values().removeIf(old -> old.at().isBefore(now.minus(KEEP)));
         }
         return refused;
