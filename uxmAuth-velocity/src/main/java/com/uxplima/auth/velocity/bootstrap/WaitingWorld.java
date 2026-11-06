@@ -277,7 +277,8 @@ final class WaitingWorld implements AutoCloseable {
                 new RecoveryAsks(
                         () -> settings.current().email().recoverPerHour(),
                         () -> settings.current().protection().sharedAddresses(),
-                        Instant::now));
+                        Instant::now),
+                guards.lockout()::passed);
         return new LimboRecovery(recover, sessions, words);
     }
 

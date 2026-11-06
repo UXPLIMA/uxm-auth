@@ -85,4 +85,9 @@ public final class RecoveryAsks {
                     key, (address, kept) -> now.isBefore(kept.start().plus(HOUR)) ? kept : null);
         }
     }
+
+    /** Whether a connection from this address, through this host, comes through a shared-address filter. */
+    public boolean shared(String address, String host) {
+        return shared.get().through(address, host);
+    }
 }

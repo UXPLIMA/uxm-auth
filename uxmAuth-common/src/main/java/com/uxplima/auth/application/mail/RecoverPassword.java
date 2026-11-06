@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.Sessions;
@@ -25,8 +26,10 @@ import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.auth.domain.protection.AddressKey;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthState;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A forgotten password. A player at the login asks a code at the linked address, and the code with a new password
@@ -87,8 +90,11 @@ public final class RecoverPassword {
     /** Where the password rules and the breach list are read. */
     private record Rules(Supplier<PasswordPolicy> policy, BreachedPasswords breaches) {}
 
-    /** Where the end of every session is said. */
-    private record Ending(RememberedSessions remembered, NetworkEvents events) {}
+    /**
+     * Where the end of every session is said, and the account's lock of wrong tries is lifted: the owner proved
+     * the mailbox, so a stranger's wrong passwords no longer keep them from the new one.
+     */
+    private record Ending(RememberedSessions remembered, NetworkEvents events, Consumer<UUID> unlock) {}
 
     private final Sessions sessions;
     private final Emails emails;
@@ -112,6 +118,23 @@ public final class RecoverPassword {
             RememberedSessions remembered,
             NetworkEvents events,
             RecoveryAsks asks) {
+        this(sessions, emails, codes, accounts, hashing, lane, policy, breaches, remembered, events, asks, id -> {});
+    }
+
+    /** @param unlock lifts the account's lock of wrong tries once the owner set a new password through the mail */
+    public RecoverPassword(
+            Sessions sessions,
+            Emails emails,
+            MailCodes codes,
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Supplier<PasswordPolicy> policy,
+            BreachedPasswords breaches,
+            RememberedSessions remembered,
+            NetworkEvents events,
+            RecoveryAsks asks,
+            Consumer<UUID> unlock) {
         this.asks = Objects.requireNonNull(asks, "asks");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.emails = Objects.requireNonNull(emails, "emails");
@@ -120,8 +143,10 @@ public final class RecoverPassword {
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.rules = new Rules(Objects.requireNonNull(policy, "policy"), Objects.requireNonNull(breaches, "breaches"));
-        this.ending =
-                new Ending(Objects.requireNonNull(remembered, "remembered"), Objects.requireNonNull(events, "events"));
+        this.ending = new Ending(
+                Objects.requireNonNull(remembered, "remembered"),
+                Objects.requireNonNull(events, "events"),
+                Objects.requireNonNull(unlock, "unlock"));
     }
 
     /**
@@ -146,7 +171,10 @@ public final class RecoverPassword {
             if (to.isEmpty()) {
                 return done(new Outcome.Sent(codes.codeTime()));
             }
-            return codes.issue(
+            // The owner asking from home is held by the cooldown alone: strangers under the name spend the day's
+            // cap, and must not keep the owner from the code.
+            MailCodes.Issuer issuer = fromHome(owner, address, host) ? codes::issueUncapped : codes::issue;
+            return issuer.issue(
                             owner.id(),
                             Emails.Purpose.RECOVERY,
                             to.get(),
@@ -155,6 +183,21 @@ public final class RecoverPassword {
                             Map.of("player", owner.name().value()))
                     .thenApply(this::issued);
         });
+    }
+
+    /** Whether the ask comes from the address the account last logged in or registered from, and no filter shares it. */
+    private boolean fromHome(Account owner, String address, String host) {
+        if (!AddressKey.isAddress(address) || asks.shared(address, host)) {
+            return false;
+        }
+        String here = AddressKey.of(address);
+        return isKey(owner.lastAddress(), here) || isKey(owner.registrationAddress(), here);
+    }
+
+    private static boolean isKey(@Nullable String known, String here) {
+        return known != null
+                && AddressKey.isAddress(known)
+                && AddressKey.of(known).equals(here);
     }
 
     /** The account's cooldown and cap answer as a sent code does, so nobody learns that an address is linked. */
@@ -237,6 +280,7 @@ public final class RecoverPassword {
                                 now, Attempts.fresh(held.attempts().max()))
                         : state);
         ending.remembered().forget(id);
+        ending.unlock().accept(id);
         ending.events().publish(new Bulletin.SessionsEnded(id, Optional.empty()));
         return new Outcome.Recovered();
     }

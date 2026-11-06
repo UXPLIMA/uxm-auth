@@ -150,6 +150,18 @@ public final class MailCodes {
         return settings.get().codeTime();
     }
 
+    /** One way of sending a code: {@link #issue} or {@link #issueUncapped}. */
+    @FunctionalInterface
+    public interface Issuer {
+        CompletableFuture<Issued> issue(
+                UUID account,
+                Emails.Purpose purpose,
+                EmailAddress to,
+                Mailer.Kind kind,
+                Locale language,
+                Map<String, String> values);
+    }
+
     /**
      * Sends a fresh code of this purpose to the address, in place of any before it, unless one went out inside
      * the cooldown or the day's cap is reached. The mail carries {@code code} and {@code minutes} beside the values given.
@@ -161,7 +173,22 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values) {
-        return issue(account, purpose, to, kind, language, values, false);
+        return issue(account, purpose, to, kind, language, values, false, true);
+    }
+
+    /**
+     * As {@link #issue}, for an ask the account's owner made from where they last logged in or registered: the
+     * cooldown holds, the day's cap does not. Strangers under the owner's name can spend the cap from anywhere, and
+     * must not keep the owner from the code they ask for at home.
+     */
+    public CompletableFuture<Issued> issueUncapped(
+            UUID account,
+            Emails.Purpose purpose,
+            EmailAddress to,
+            Mailer.Kind kind,
+            Locale language,
+            Map<String, String> values) {
+        return issue(account, purpose, to, kind, language, values, false, false);
     }
 
     /**
@@ -175,7 +202,7 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values) {
-        return issue(account, purpose, to, kind, language, values, true);
+        return issue(account, purpose, to, kind, language, values, true, true);
     }
 
     private CompletableFuture<Issued> issue(
@@ -185,7 +212,8 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values,
-            boolean keepLive) {
+            boolean keepLive,
+            boolean capped) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(purpose, "purpose");
         Objects.requireNonNull(to, "to");
@@ -194,7 +222,7 @@ public final class MailCodes {
         Map<String, String> filled = new HashMap<>(Objects.requireNonNull(values, "values"));
         Settings now = settings.get();
         String code = digits(now.codeLength());
-        return lane.submit(() -> stored(account, purpose, to, code, now, keepLive))
+        return lane.submit(() -> stored(account, purpose, to, code, now, keepLive, capped))
                 .thenCompose(stored -> {
                     if (stored.isPresent()) {
                         return CompletableFuture.completedFuture(stored.get());
@@ -211,7 +239,13 @@ public final class MailCodes {
      * The send is counted before the code is hashed, so a refused ask costs no hash.
      */
     private Optional<Issued> stored(
-            UUID account, Emails.Purpose purpose, EmailAddress to, String code, Settings now, boolean keepLive) {
+            UUID account,
+            Emails.Purpose purpose,
+            EmailAddress to,
+            String code,
+            Settings now,
+            boolean keepLive,
+            boolean capped) {
         Instant at = clock.get();
         if (keepLive) {
             Optional<Emails.Code> out =
@@ -220,7 +254,7 @@ public final class MailCodes {
                 return Optional.of(new Issued.Live(out.get().to()));
             }
         }
-        Duration wait = counted(account, purpose, at, now);
+        Duration wait = counted(account, purpose, at, now, capped);
         if (!wait.isZero()) {
             return Optional.of(new Issued.Cooldown(wait));
         }
@@ -237,8 +271,8 @@ public final class MailCodes {
     }
 
     /** Counts a send of this purpose unless the cooldown or the day's cap refuses it, and answers the wait. */
-    private Duration counted(UUID account, Emails.Purpose purpose, Instant at, Settings now) {
-        int cap = purpose == Emails.Purpose.LOGIN ? Integer.MAX_VALUE : now.perDay();
+    private Duration counted(UUID account, Emails.Purpose purpose, Instant at, Settings now, boolean capped) {
+        int cap = purpose == Emails.Purpose.LOGIN || !capped ? Integer.MAX_VALUE : now.perDay();
         AtomicReference<Duration> wait = new AtomicReference<>(Duration.ZERO);
         sends.change(account, purpose, before -> {
             Duration left = before.waitAt(at, now.cooldown(), cap);

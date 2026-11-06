@@ -136,10 +136,15 @@ final class ProtectionReader {
         }
         int failures = config.getInt("protection.account-lock.failures", 5);
         int hours = config.getInt("protection.account-lock.forgive-after-hours", 24);
+        if (failures < 0) {
+            throw new IllegalArgumentException(
+                    "protection.account-lock.failures must be 0 (off) or more, got: " + failures);
+        }
         try {
+            // 0 turns the lock off: tries are still counted, but no count ever reaches the limit.
             return new BanSteps(
                     minutes.stream().map(length -> Duration.ofMinutes(length)).toList(),
-                    failures,
+                    failures == 0 ? Integer.MAX_VALUE : failures,
                     Duration.ofHours(hours));
         } catch (IllegalArgumentException wrong) {
             throw new IllegalArgumentException("protection.account-lock: " + wrong.getMessage(), wrong);
@@ -147,18 +152,21 @@ final class ProtectionReader {
     }
 
     /**
-     * The bans of a whole IPv6 /48: the same steps, after more wrong passwords than one /64 may make. A limit
-     * below {@code bans.failures} counts as {@code bans.failures} rather than refusing the start: the key arrives
-     * with a release at 12, and an operator who had raised {@code bans.failures} past that must not find every
-     * login refused after the update.
+     * The bans of a whole IPv6 /48: the same steps, after more wrong passwords than one /64 may make, or none at 0.
+     * A limit below {@code bans.failures} counts as {@code bans.failures} rather than refusing the start, so a
+     * value an operator writes never turns every login away.
      */
     private static BanSteps wideBans(HoconConfig config) {
         BanSteps bans = bans(config);
-        int failures = config.getInt("protection.bans.failures-per-48", 12);
-        if (failures < 1) {
-            throw new IllegalArgumentException("protection.bans.failures-per-48 must be at least 1, got: " + failures);
+        int failures = config.getInt("protection.bans.failures-per-48", 0);
+        if (failures < 0) {
+            throw new IllegalArgumentException(
+                    "protection.bans.failures-per-48 must be 0 (off) or more, got: " + failures);
         }
-        return new BanSteps(bans.lengths(), Math.max(failures, bans.failures()), bans.forgiveAfter());
+        // 0 turns the /48 ban off: a mobile carrier hands every device a /64 of one shared /48, and one person
+        // hopping between them would otherwise ban everybody there.
+        int limit = failures == 0 ? Integer.MAX_VALUE : Math.max(failures, bans.failures());
+        return new BanSteps(bans.lengths(), limit, bans.forgiveAfter());
     }
 
     private static Remember.Settings sessions(HoconConfig config) {

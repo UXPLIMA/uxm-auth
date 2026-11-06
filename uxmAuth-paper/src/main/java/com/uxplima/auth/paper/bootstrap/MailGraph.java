@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import javax.net.ssl.SSLSocketFactory;
@@ -156,7 +157,8 @@ final class MailGraph implements AutoCloseable {
             Hashing hashing,
             RememberedSessions remembered,
             NetworkEvents events,
-            BreachedPasswords breaches) {
+            BreachedPasswords breaches,
+            Consumer<UUID> unlock) {
         return new RecoverPassword(
                 sessions,
                 emails,
@@ -171,7 +173,8 @@ final class MailGraph implements AutoCloseable {
                 new RecoveryAsks(
                         () -> settings.current().email().recoverPerHour(),
                         () -> settings.current().protection().sharedAddresses(),
-                        Instant::now));
+                        Instant::now),
+                unlock);
     }
 
     /** {@code /recover}, for a player at the login. */
