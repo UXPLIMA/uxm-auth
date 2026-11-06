@@ -19,6 +19,7 @@ import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.LinkEmail;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.account.Account;
+import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.command.Addresses;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
@@ -121,6 +122,12 @@ public final class EmailLink {
         if (typed.isEmpty()) {
             return usage(player);
         }
+        if (remembered(player)) {
+            // An address can reset the password: a session another person on the same address inherited may not link
+            // one.
+            messages.send(player, Keys.EMAIL_PASSWORD_FIRST);
+            return done();
+        }
         return run(player, account -> link.add(account.id(), account.name(), typed, messages.localeOf(player)));
     }
 
@@ -212,6 +219,12 @@ public final class EmailLink {
 
     private static TagResolver masked(String address) {
         return Text.placeholder("address", address);
+    }
+
+    /** Whether the player is logged in only because a remembered session from their address was still valid. */
+    private boolean remembered(Player player) {
+        return sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated in
+                && in.method() == AuthMethod.SESSION;
     }
 
     /** The account of a logged-in player, held or not for a duty, or the refusal told. */
