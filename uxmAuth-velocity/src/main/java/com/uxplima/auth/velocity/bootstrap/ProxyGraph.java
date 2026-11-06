@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,7 +67,9 @@ import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
+import com.uxplima.auth.domain.network.Nonces;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.adapter.inbound.ChannelGuard;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.EndedSessions;
@@ -77,6 +80,7 @@ import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.inbound.RemovedAccounts;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
+import com.uxplima.auth.velocity.adapter.inbound.Waiters;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyCommands;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
 import com.uxplima.auth.velocity.adapter.outbound.event.VelocityEvents;
@@ -106,6 +110,8 @@ final class ProxyGraph implements AutoCloseable {
     /** What the door makes of a player when LimboAPI asks, before the proxy's login events; set once it listens. */
     private BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> settleEarly =
             (player, taken) -> new DoorListener.Early.Free();
+    /** What the door lets go of a player who left the waiting world without being let out; set once it listens. */
+    private Consumer<Player> leftTheWorld = player -> {};
 
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;
@@ -194,6 +200,7 @@ final class ProxyGraph implements AutoCloseable {
                 words,
                 sessions,
                 settleEarly,
+                leftTheWorld,
                 guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
         logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
         settings.current().ownership().warnings().forEach(logger::warn);
@@ -310,7 +317,18 @@ final class ProxyGraph implements AutoCloseable {
                         () -> settings.current().passwords().maxAttempts()),
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
-                clock);
+                clock,
+                () -> longestWait(settings.current().timeouts()));
+    }
+
+    /**
+     * How long a connection's door decision is kept: the login comes after the wait in the proxy's world, which
+     * lasts at most the longer of the times to log in and to register, and a minute more for the rest of the login.
+     */
+    private static Duration longestWait(AuthSettings.Timeouts timeouts) {
+        Duration longest =
+                timeouts.login().compareTo(timeouts.register()) >= 0 ? timeouts.login() : timeouts.register();
+        return longest.plus(Duration.ofMinutes(1));
     }
 
     /**
@@ -343,8 +361,10 @@ final class ProxyGraph implements AutoCloseable {
                 new DoorWords(words),
                 logger,
                 steps.secondStep(),
-                proxy::getPlayer);
+                proxy::getPlayer,
+                new Waiters(clock, () -> longestWait(settings.current().timeouts())));
         this.settleEarly = doorListener::settleEarly;
+        this.leftTheWorld = doorListener::leftTheWorld;
         register(doorListener);
         register(new HoldListener(
                 sessions,
@@ -357,6 +377,7 @@ final class ProxyGraph implements AutoCloseable {
         register(new ClaimWriter(sessions, claims, clock));
         proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
         register(new ReportListener(sessions, claims, clock, logger, routes::loggedIn));
+        register(new ChannelGuard(words));
         NetworkEvents bulletins = NetworkBulletins.open(
                 settings.current().network().redis(), new Bulletins(claims.get().orElseThrow()), logger::warn);
         bulletins.listen(new EndedSessions(sessions));
@@ -429,9 +450,13 @@ final class ProxyGraph implements AutoCloseable {
         return loaded.secret();
     }
 
-    /** The signer of the claims every server behind this proxy reads. */
+    /**
+     * The signer of the claims every server behind this proxy reads, and the reader of their reports, which
+     * remembers the reports it took so a copy is never taken twice.
+     */
     private static Supplier<Optional<Claims>> claims(PluginSettings settings, NetworkSecret secret) {
-        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor()));
+        Nonces seen = new Nonces();
+        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor(), seen));
     }
 
     /** The network secret and the step after the password, which the door and the claims read. */

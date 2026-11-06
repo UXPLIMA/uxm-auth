@@ -44,24 +44,29 @@ public final class Sessions {
     private final Map<UUID, Held> states = new ConcurrentHashMap<>();
     private final AtomicLong generations = new AtomicLong();
 
-    /** Opens the connection as a visit of its own. */
-    public void open(UUID connection, AuthState state) {
-        open(connection, state, UUID.randomUUID().toString());
+    /** Opens the connection as a visit of its own, and answers the generation of this opening. */
+    public long open(UUID connection, AuthState state) {
+        return open(connection, state, UUID.randomUUID().toString());
     }
 
-    /** Opens the connection as the visit the proxy named. */
-    public void open(UUID connection, AuthState state, String visit) {
-        open(connection, state, visit, "");
+    /** Opens the connection as the visit the proxy named, and answers the generation of this opening. */
+    public long open(UUID connection, AuthState state, String visit) {
+        return open(connection, state, visit, "");
     }
 
-    /** Opens the connection as this visit, through the host the player typed. */
-    public void open(UUID connection, AuthState state, String visit, String host) {
+    /**
+     * Opens the connection as this visit, through the host the player typed, and answers the generation of this
+     * opening, which every later step of the same connection names so a later opening is never mistaken for it.
+     * Generations start at one.
+     */
+    public long open(UUID connection, AuthState state, String visit, String host) {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(visit, "visit");
         Objects.requireNonNull(host, "host");
-        states.compute(
-                connection, (key, previous) -> new Held(generations.incrementAndGet(), state, visit, host, false));
+        long generation = generations.incrementAndGet();
+        states.put(connection, new Held(generation, state, visit, host, false));
+        return generation;
     }
 
     public Optional<AuthState> state(UUID connection) {
@@ -78,10 +83,18 @@ public final class Sessions {
         states.remove(connection);
     }
 
-    /** Closes the connection only if it is still the opening this generation names. */
-    public void close(UUID connection, long generation) {
+    /** Closes the connection only if it is still the opening this generation names; true when it closed it. */
+    public boolean close(UUID connection, long generation) {
         Objects.requireNonNull(connection, "connection");
-        states.computeIfPresent(connection, (key, current) -> current.generation() == generation ? null : current);
+        AtomicBoolean closed = new AtomicBoolean();
+        states.computeIfPresent(connection, (key, current) -> {
+            if (current.generation() != generation) {
+                return current;
+            }
+            closed.set(true);
+            return null;
+        });
+        return closed.get();
     }
 
     public boolean isOpen(UUID connection) {

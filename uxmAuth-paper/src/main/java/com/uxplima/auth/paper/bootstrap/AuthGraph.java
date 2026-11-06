@@ -91,6 +91,7 @@ import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
+import com.uxplima.auth.domain.network.Nonces;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.account.BackupPasswordNotice;
 import com.uxplima.auth.paper.adapter.inbound.account.BedrockBackupForm;
@@ -259,6 +260,9 @@ final class AuthGraph implements AutoCloseable {
     private static final int DISCORD_QUEUE = 100;
 
     private final ChannelReports channelReports;
+    /** The nonces of the proxy's claims this server took, kept across reloads so a copy is never taken twice. */
+    private final Nonces seenClaims = new Nonces();
+
     private final ServerHellos hellos;
     /** Who holds a name, by the operator's sources: the door asks it, and so do staff marking an account premium. */
     private final PremiumLookup lookup;
@@ -280,7 +284,14 @@ final class AuthGraph implements AutoCloseable {
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         this.lane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
-        this.channelReports = new ChannelReports(plugin, () -> claims(settings), Clock.systemUTC());
+        requireServerName(boot.network());
+        this.channelReports = new ChannelReports(
+                plugin,
+                () -> claims(settings),
+                () -> settings.current().network().serverName(),
+                Clock.systemUTC(),
+                scheduler,
+                messages);
         Hashing hashing = boot.hashers().observed(timings::start, spent -> timings.record(Timings.Kind.HASHING, spent));
         AccountRepository accounts = new TimedAccounts(
                 WebsiteAccounts.beside(
@@ -592,7 +603,12 @@ final class AuthGraph implements AutoCloseable {
                         plugin.getServer()::createProfile,
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
-                        new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
+                        new NetworkDoor(
+                                () -> claims(settings),
+                                () -> settings.current().network().serverName(),
+                                accounts::findById,
+                                clock,
+                                plugin.getLogger()),
                         addressRules,
                         remember::resumes,
                         factors.secondStep),
@@ -843,11 +859,22 @@ final class AuthGraph implements AutoCloseable {
     }
 
     /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */
-    private static Optional<Claims> claims(PluginSettings settings) {
+    private Optional<Claims> claims(PluginSettings settings) {
         AuthSettings.Network network = settings.current().network();
         return network.enabled()
-                ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor()))
+                ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor(), seenClaims))
                 : Optional.empty();
+    }
+
+    /**
+     * A server on a network takes only the claims written for it, by its name in the proxy's list; without one it
+     * would take none, so it does not start.
+     */
+    private static void requireServerName(AuthSettings.Network network) {
+        if (network.enabled() && network.serverName().isBlank()) {
+            throw new IllegalStateException("network.enabled is true and network.server-name is empty. Set it to"
+                    + " this server's name in the proxy's list: the proxy writes every claim for one server.");
+        }
     }
 
     /** What a player reads after a login: the previous one, and a premium player's backup password, once. */
@@ -894,7 +921,7 @@ final class AuthGraph implements AutoCloseable {
     }
 
     /** The bulletins of this server: on Redis while it is on a network that names one, and on itself otherwise. */
-    private static NetworkEvents bulletins(PluginSettings settings, java.util.logging.Logger logger) {
+    private NetworkEvents bulletins(PluginSettings settings, java.util.logging.Logger logger) {
         return claims(settings)
                 .map(claims -> NetworkBulletins.open(
                         settings.current().network().redis(), new Bulletins(claims), logger::warning))

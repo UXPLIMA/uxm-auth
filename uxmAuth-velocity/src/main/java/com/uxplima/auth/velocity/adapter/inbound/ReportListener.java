@@ -18,7 +18,8 @@ import org.slf4j.Logger;
 
 /**
  * What a server tells the proxy on the report channel: a login it let in, or a player it holds to wait. It is
- * taken only from a server connection, about the player on that connection, signed with the network's secret.
+ * taken only from a server connection, about the player on that connection, signed with the reports' key of the
+ * network's secret, and naming the server of that connection.
  * The channel is never passed on, to a client or to a server, whoever sent on it.
  */
 public final class ReportListener {
@@ -66,7 +67,15 @@ public final class ReportListener {
             return;
         }
         String text = new String(event.getData(), StandardCharsets.UTF_8);
-        switch (reader.get().read(text, player.getUniqueId(), player.getUsername(), clock.instant())) {
+        // A report names the server that wrote it, and is taken only on the connection to that server.
+        switch (reader.get()
+                .read(
+                        text,
+                        Claim.Direction.TO_PROXY,
+                        player.getUniqueId(),
+                        player.getUsername(),
+                        server.getServerInfo().getName(),
+                        clock.instant())) {
             case Claims.Reading.Valid valid -> {
                 switch (valid.claim().standing()) {
                     case Claim.LoggedIn in -> {
@@ -81,10 +90,11 @@ public final class ReportListener {
             }
             case Claims.Reading.Refused refused ->
                 logger.warn(
-                        "A server's report about {} was refused ({}). Check that network.secret is the same on the"
-                                + " proxy and on every server, and that the clocks agree.",
+                        "The report of {} about {} was refused ({}). {}",
+                        server.getServerInfo().getName(),
                         DoorListener.printable(player.getUsername()),
-                        refused.why().name());
+                        refused.why().name(),
+                        refused.why().advice());
         }
     }
 }

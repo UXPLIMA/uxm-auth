@@ -166,12 +166,14 @@ public final class AuthSettings {
      * Whether this server is a backend behind the proxy half, and what the two share.
      *
      * @param secret the key the proxy signs its claims with, copied from the proxy's data folder
+     * @param serverName this server's name in the proxy's list, which every claim for it names; empty on the proxy
      * @param claimFor how long a signed claim stays fresh after the proxy wrote it
      * @param allowedCommands the proxy's own commands a player may run before logging in
      */
     public record Network(
             boolean enabled,
             String secret,
+            String serverName,
             Duration claimFor,
             List<String> allowedCommands,
             Routing routing,
@@ -181,6 +183,7 @@ public final class AuthSettings {
             Redis redis) {
         public Network {
             Objects.requireNonNull(secret, "secret");
+            Objects.requireNonNull(serverName, "serverName");
             Objects.requireNonNull(claimFor, "claimFor");
             allowedCommands = List.copyOf(Objects.requireNonNull(allowedCommands, "allowedCommands"));
             Objects.requireNonNull(routing, "routing");
@@ -197,7 +200,7 @@ public final class AuthSettings {
         /** Never printed: the secret is what keeps a forged claim out. */
         @Override
         public String toString() {
-            return "Network[enabled=" + enabled + ", claimFor=" + claimFor + "]";
+            return "Network[enabled=" + enabled + ", serverName=" + serverName + ", claimFor=" + claimFor + "]";
         }
     }
 

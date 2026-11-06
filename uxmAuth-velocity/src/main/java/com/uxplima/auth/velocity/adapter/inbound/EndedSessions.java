@@ -21,7 +21,9 @@ public final class EndedSessions implements Consumer<Bulletin> {
     public void accept(Bulletin bulletin) {
         switch (Objects.requireNonNull(bulletin, "bulletin")) {
             case Bulletin.SessionsEnded ended -> {
-                if (!ended.keep().equals(sessions.visit(ended.account()))) {
+                // No visit to keep ends every session, also one no server let in yet: a player logged in at the
+                // proxy's own world has no visit until their first server.
+                if (ended.keep().isEmpty() || !ended.keep().equals(sessions.visit(ended.account()))) {
                     sessions.loggedOut(ended.account());
                 }
             }
