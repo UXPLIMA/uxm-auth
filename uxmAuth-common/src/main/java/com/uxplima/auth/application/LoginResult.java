@@ -28,6 +28,16 @@ public sealed interface LoginResult {
         }
     }
 
+    /**
+     * Too many wrong passwords and codes were typed for this account lately, from anywhere: nothing is checked
+     * for it for this long. It says nothing of the password typed. The player may stay and try again then.
+     */
+    record Locked(Duration left) implements LoginResult {
+        public Locked {
+            Objects.requireNonNull(left, "left");
+        }
+    }
+
     /** The password was right, but today's rules refuse it, for this reason: a new one must be set first. */
     record MustReplace(PasswordVerdict why) implements LoginResult {
         public MustReplace {

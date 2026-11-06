@@ -81,6 +81,8 @@ public final class FactorScreen implements FactorOffer {
                 guest.fire(AuthSettings.Moment.BANNED);
                 guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
             }
+            case ConfirmFactor.Result.Locked locked ->
+                offer(reader, messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left())));
             case ConfirmFactor.Result.NotWaiting notWaiting -> shower.close(reader);
             case ConfirmFactor.Result.Gone gone -> {}
         }

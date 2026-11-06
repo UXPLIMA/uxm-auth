@@ -330,7 +330,7 @@ public final class LimboLogin {
     private CompletableFuture<Outcome> otherWords(
             Audience reader, UUID id, String label, List<String> rest, String address) {
         if (words.changeLabels().get().contains(label) && replacing(id)) {
-            return replaced(reader, id, rest);
+            return replaced(reader, id, rest, address);
         }
         if (words.factorLabels().get().contains(label) && rest.size() == 1) {
             return coded(reader, id, rest.getFirst(), address);
@@ -361,6 +361,8 @@ public final class LimboLogin {
                 new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
             case ConfirmFactor.Result.Banned banned ->
                 new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            case ConfirmFactor.Result.Locked locked ->
+                new Outcome.Stay(messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left())));
             case ConfirmFactor.Result.NotWaiting notWaiting ->
                 new Outcome.Stay(messages.render(reader, Keys.FACTOR_NOTHING_ASKED));
             case ConfirmFactor.Result.Gone gone -> new Outcome.Stay(reminder(reader, id));
@@ -424,11 +426,11 @@ public final class LimboLogin {
                 .thenApply(result -> registered(reader, id, result));
     }
 
-    private CompletableFuture<Outcome> replaced(Audience reader, UUID id, List<String> passwords) {
+    private CompletableFuture<Outcome> replaced(Audience reader, UUID id, List<String> passwords, String address) {
         if (passwords.size() < 2) {
             return CompletableFuture.completedFuture(new Outcome.Stay(messages.render(reader, Keys.CHANGE_NEEDS_BOTH)));
         }
-        return change.run(id, Password.of(passwords.getFirst()), Password.of(passwords.get(1)))
+        return change.run(id, Password.of(passwords.getFirst()), Password.of(passwords.get(1)), address)
                 .thenApply(result -> replaced(reader, id, result));
     }
 
@@ -442,6 +444,12 @@ public final class LimboLogin {
                         .orElseGet(() -> reminder(reader, id)));
             case ChangeResult.NotLoggedIn notYet -> new Outcome.Stay(reminder(reader, id));
             case ChangeResult.Gone gone -> new Outcome.Stay(reminder(reader, id));
+            case ChangeResult.ChangedElsewhere elsewhere ->
+                new Outcome.Out(messages.render(reader, Keys.LOGOUT_SESSIONS_ENDED));
+            case ChangeResult.Locked locked ->
+                new Outcome.Stay(messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left())));
+            case ChangeResult.Banned banned ->
+                new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
         };
     }
 
@@ -458,6 +466,8 @@ public final class LimboLogin {
                 new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
             case LoginResult.Banned banned ->
                 new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            case LoginResult.Locked locked ->
+                new Outcome.Stay(messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left())));
             case LoginResult.MustReplace mustReplace ->
                 new Outcome.Stay(PasswordWords.reason(messages, reader, mustReplace.why())
                         .map(why -> why.append(Component.newline()).append(reminder(reader, id)))

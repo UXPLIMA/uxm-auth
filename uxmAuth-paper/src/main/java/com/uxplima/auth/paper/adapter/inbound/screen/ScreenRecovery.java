@@ -45,7 +45,9 @@ public final class ScreenRecovery implements RecoveryOffer {
     @Override
     public CompletableFuture<Void> forgot(Guest guest) {
         Audience reader = Objects.requireNonNull(guest, "guest").audience();
-        return guest.after(recover.request(guest.id(), messages.localeOf(reader)), outcome -> shown(guest, outcome));
+        return guest.after(
+                recover.request(guest.id(), guest.address(), messages.localeOf(reader)),
+                outcome -> shown(guest, outcome));
     }
 
     @Override

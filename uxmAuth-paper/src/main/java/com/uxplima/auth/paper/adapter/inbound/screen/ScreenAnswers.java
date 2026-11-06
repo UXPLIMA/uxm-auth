@@ -425,6 +425,12 @@ public final class ScreenAnswers {
                 guest.fire(AuthSettings.Moment.BANNED);
                 guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
             }
+            case LoginResult.Locked locked ->
+                shower.show(
+                        reader,
+                        screens.login(
+                                reader,
+                                messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left()))));
             case LoginResult.MustReplace mustReplace -> shower.show(reader, screens.replace(reader, mustReplace.why()));
             case LoginResult.CaptchaNeeded needed ->
                 captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_NEEDED));
@@ -510,6 +516,18 @@ public final class ScreenAnswers {
             case ChangeResult.Changed changed -> shower.close(reader);
             case ChangeResult.NotLoggedIn notLoggedIn -> shower.show(reader, screens.login(reader, null));
             case ChangeResult.WrongOld wrongOld -> shower.show(reader, screens.login(reader, null));
+            case ChangeResult.ChangedElsewhere elsewhere ->
+                guest.kick(messages.render(reader, Keys.LOGOUT_SESSIONS_ENDED));
+            case ChangeResult.Locked locked ->
+                shower.show(
+                        reader,
+                        screens.replace(
+                                reader,
+                                messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left()))));
+            case ChangeResult.Banned banned -> {
+                guest.fire(AuthSettings.Moment.BANNED);
+                guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            }
             case ChangeResult.Gone gone -> {}
         }
     }

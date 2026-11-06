@@ -33,19 +33,25 @@ import com.uxplima.auth.domain.state.AuthState;
  * sets it. Every session of the account ends and every remembered one is forgotten; the player stays at the login
  * and logs in with the new password, so a second factor is still asked. A wrong code counts against the address.
  * The table is read and the password hashed on the hashing lane.
+ *
+ * <p>Anybody can ask at the login under any name, so the answer to an ask says nothing of the account: the same
+ * line whether an address is linked, a code went, or the account's cooldown or cap held one back, and never the
+ * address, masked or not. Only how often this address asks, over every account, and mail that is off or failed,
+ * which are the server's own, are told apart. The time an ask takes can still differ, since a code is hashed and
+ * mailed only for an account with an address.
  */
 public final class RecoverPassword {
 
     /** What asking or recovering came to. */
     public sealed interface Outcome {
-        /** A code went to the linked address, shown masked, good for this long. */
-        record Sent(String masked, Duration lasts) implements Outcome {}
+        /**
+         * The ask was taken: a code good for this long went to the linked address, if the account has one and its
+         * cooldown and cap allowed it. Which of these it was is not said.
+         */
+        record Sent(Duration lasts) implements Outcome {}
 
-        /** A code went out too recently; another may go after this long. */
+        /** This address asked too often lately, over every account; it may ask again after this long. */
         record Cooldown(Duration left) implements Outcome {}
-
-        /** No address is linked to the account. */
-        record NoAddress() implements Outcome {}
 
         /** Mail is off on this server. */
         record MailOff() implements Outcome {}
@@ -92,6 +98,7 @@ public final class RecoverPassword {
     private final HashingLane lane;
     private final Rules rules;
     private final Ending ending;
+    private final RecoveryAsks asks;
 
     public RecoverPassword(
             Sessions sessions,
@@ -103,7 +110,9 @@ public final class RecoverPassword {
             Supplier<PasswordPolicy> policy,
             BreachedPasswords breaches,
             RememberedSessions remembered,
-            NetworkEvents events) {
+            NetworkEvents events,
+            RecoveryAsks asks) {
+        this.asks = Objects.requireNonNull(asks, "asks");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.emails = Objects.requireNonNull(emails, "emails");
         this.codes = Objects.requireNonNull(codes, "codes");
@@ -115,18 +124,27 @@ public final class RecoverPassword {
                 new Ending(Objects.requireNonNull(remembered, "remembered"), Objects.requireNonNull(events, "events"));
     }
 
-    /** Mails a recovery code to the linked address of the account this connection waits to log in to. */
-    public CompletableFuture<Outcome> request(UUID connection, Locale language) {
+    /**
+     * Mails a recovery code to the linked address of the account this connection, from this address, waits to log
+     * in to.
+     */
+    public CompletableFuture<Outcome> request(UUID connection, String address, Locale language) {
         Objects.requireNonNull(connection, "connection");
+        Objects.requireNonNull(address, "address");
         Objects.requireNonNull(language, "language");
         Optional<Account> account = waiting(connection);
         if (account.isEmpty()) {
             return done(new Outcome.NotWaiting());
         }
+        String host = sessions.held(connection).map(Sessions.Held::host).orElse("");
+        Optional<Duration> wait = asks.ask(address, host);
+        if (wait.isPresent()) {
+            return done(new Outcome.Cooldown(wait.get()));
+        }
         Account owner = account.get();
         return lane.submit(() -> emails.address(owner.id())).thenCompose(to -> {
             if (to.isEmpty()) {
-                return done(new Outcome.NoAddress());
+                return done(new Outcome.Sent(codes.codeTime()));
             }
             return codes.issue(
                             owner.id(),
@@ -135,14 +153,15 @@ public final class RecoverPassword {
                             Mailer.Kind.RECOVERY,
                             language,
                             Map.of("player", owner.name().value()))
-                    .thenApply(RecoverPassword::issued);
+                    .thenApply(this::issued);
         });
     }
 
-    private static Outcome issued(MailCodes.Issued issued) {
+    /** The account's cooldown and cap answer as a sent code does, so nobody learns that an address is linked. */
+    private Outcome issued(MailCodes.Issued issued) {
         return switch (issued) {
-            case MailCodes.Issued.Sent sent -> new Outcome.Sent(sent.to().masked(), sent.lasts());
-            case MailCodes.Issued.Cooldown cooldown -> new Outcome.Cooldown(cooldown.left());
+            case MailCodes.Issued.Sent sent -> new Outcome.Sent(sent.lasts());
+            case MailCodes.Issued.Cooldown cooldown -> new Outcome.Sent(codes.codeTime());
             case MailCodes.Issued.Off off -> new Outcome.MailOff();
             case MailCodes.Issued.Failed failed -> new Outcome.MailFailed();
             case MailCodes.Issued.Live live -> throw new IllegalStateException("a recovery always sends a fresh code");

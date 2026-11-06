@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.SqlMailSends;
 import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.adapter.outbound.mail.SmtpClient;
 import com.uxplima.auth.adapter.outbound.mail.SmtpMailer;
@@ -25,6 +26,7 @@ import com.uxplima.auth.application.mail.LinkEmail;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.MailLogin;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.mail.RecoveryAsks;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.Emails;
@@ -86,6 +88,7 @@ final class MailGraph implements AutoCloseable {
         this.emails = emails;
         this.codes = new MailCodes(
                 emails,
+                new SqlMailSends(database),
                 mailer,
                 hashing,
                 lane,
@@ -164,7 +167,11 @@ final class MailGraph implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 breaches,
                 remembered,
-                events);
+                events,
+                new RecoveryAsks(
+                        () -> settings.current().email().recoverPerHour(),
+                        () -> settings.current().protection().sharedAddresses(),
+                        Instant::now));
     }
 
     /** {@code /recover}, for a player at the login. */

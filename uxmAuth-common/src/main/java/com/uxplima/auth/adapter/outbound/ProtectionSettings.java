@@ -21,6 +21,8 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  * @param sharedAddressSources the addresses those filters connect from, which prove a connection came through one
  * @param sessions for whom remembered sessions are on, and how long one lasts
  * @param bans how wrong passwords ban the address they came from
+ * @param wideBans how the wrong passwords of a whole IPv6 /48 ban it: the steps of the bans, with a limit of its own
+ * @param lockout how the wrong passwords and codes typed for one account, from anywhere, lock it for a while
  * @param connections how often one address may connect
  * @param accounts how many password accounts one address may make
  * @param countries which countries come in, and how the country file is fetched
@@ -31,6 +33,8 @@ public record ProtectionSettings(
         List<String> sharedAddressSources,
         Remember.Settings sessions,
         BanSteps bans,
+        BanSteps wideBans,
+        BanSteps lockout,
         ConnectionWindow.Settings connections,
         AccountCap.Settings accounts,
         GeoSettings countries,
@@ -45,6 +49,8 @@ public record ProtectionSettings(
         }
         Objects.requireNonNull(sessions, "sessions");
         Objects.requireNonNull(bans, "bans");
+        Objects.requireNonNull(wideBans, "wideBans");
+        Objects.requireNonNull(lockout, "lockout");
         Objects.requireNonNull(connections, "connections");
         Objects.requireNonNull(accounts, "accounts");
         Objects.requireNonNull(countries, "countries");
@@ -53,12 +59,19 @@ public record ProtectionSettings(
 
     /** What the console should say about these settings at every start and reload. */
     public List<String> problems() {
-        if (!sharedAddresses().unproven()) {
-            return List.of();
+        SharedAddresses shared = sharedAddresses();
+        if (shared.unproven()) {
+            return List.of("protection.shared-address-hosts lists hosts, but protection.shared-address-sources lists"
+                    + " no address, so no connection counts as through a filter: a host alone is the player's to"
+                    + " type. List the addresses the filter connects from.");
         }
-        return List.of("protection.shared-address-hosts lists hosts, but protection.shared-address-sources lists no"
-                + " address, so no connection counts as through a filter: a host alone is the player's to type."
-                + " List the addresses the filter connects from.");
+        if (shared.hostsNarrowNothing()) {
+            return List.of("protection.shared-address-hosts no longer narrows protection.shared-address-sources:"
+                    + " every connection from those addresses counts as through the filter, whatever host it"
+                    + " typed, so none of them is remembered or banned by address. Empty the hosts list to"
+                    + " silence this.");
+        }
+        return List.of();
     }
 
     /** The shared-address filters, to tell a connection through one from an ordinary one. */

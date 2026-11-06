@@ -69,11 +69,11 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
 
     /**
      * What every other store keeps under an account's id: the app and backup codes, the mail address and its codes,
-     * the login history, the last server, the website link, the import that made the account and a dispute staff
-     * settled for the account. A deleted
-     * account drops them, so a later account under the same id, which an offline id derived from the name is,
-     * inherits none of them: above all not a name staff kept for somebody else, which would turn the paid owner away;
-     * a moved id takes them along, so a scheme move keeps what staff decided.
+     * the login history, the last server, the website link, the import that made the account, the lock of wrong
+     * tries, the count of codes mailed and a dispute staff settled for the account. A deleted account drops them,
+     * so a later account under the same id, which an offline id derived from the name is, inherits none of them:
+     * above all not a name staff kept for somebody else, which would turn the paid owner away; a moved id takes
+     * them along, so a scheme move keeps what staff decided.
      */
     private static final List<String> DROP_KEPT = List.of(
             "DELETE FROM uxmauth_factor WHERE account_id = ?",
@@ -84,7 +84,9 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             "DELETE FROM uxmauth_last_server WHERE account_id = ?",
             "DELETE FROM uxmauth_website_link WHERE account_id = ?",
             "DELETE FROM uxmauth_dispute WHERE kept_for = ?",
-            "DELETE FROM uxmauth_import_account WHERE account_id = ?");
+            "DELETE FROM uxmauth_import_account WHERE account_id = ?",
+            "DELETE FROM uxmauth_account_lock WHERE account_id = ?",
+            "DELETE FROM uxmauth_mail_send WHERE account_id = ?");
 
     private static final List<String> MOVE_KEPT = List.of(
             "UPDATE uxmauth_factor SET account_id = ? WHERE account_id = ?",
@@ -95,7 +97,9 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             "UPDATE uxmauth_last_server SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_website_link SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_dispute SET kept_for = ? WHERE kept_for = ?",
-            "UPDATE uxmauth_import_account SET account_id = ? WHERE account_id = ?");
+            "UPDATE uxmauth_import_account SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_account_lock SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_mail_send SET account_id = ? WHERE account_id = ?");
 
     private final Database database;
 

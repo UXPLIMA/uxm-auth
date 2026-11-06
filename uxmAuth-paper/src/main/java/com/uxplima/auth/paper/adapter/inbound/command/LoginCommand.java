@@ -132,6 +132,8 @@ public final class LoginCommand {
                     player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
                 }
             }
+            case LoginResult.Locked locked ->
+                messages.send(player, Keys.LOGIN_LOCKED, times.placeholder(player, locked.left()));
             case LoginResult.MustReplace mustReplace -> {
                 PasswordWords.reason(messages, player, mustReplace.why()).ifPresent(player::sendMessage);
                 messages.send(player, Keys.LOGIN_MUST_REPLACE);

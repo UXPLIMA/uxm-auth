@@ -22,6 +22,7 @@ import com.uxplima.auth.domain.name.PlayerName;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
+import com.uxplima.auth.domain.protection.AddressTally;
 import com.uxplima.auth.domain.state.Attempts;
 import com.uxplima.auth.domain.state.AuthMethod;
 import com.uxplima.auth.domain.state.AuthState;
@@ -35,6 +36,10 @@ import org.jspecify.annotations.Nullable;
  * was read at the join, because another server or a member of staff may have changed it since. A right
  * password on an older hash is stored again in the current algorithm, and nothing is written for a
  * connection that closed, or was opened again, while the check ran.
+ *
+ * <p>Beside the attempts of the connection and the bans of the address, every try counts against the account
+ * itself, wherever it came from: a locked account checks no password until its lock runs out, and says so
+ * whether the password would have been right or not.
  */
 public final class LogIn {
 
@@ -73,6 +78,74 @@ public final class LogIn {
         void passed(PlayerName name);
     }
 
+    /**
+     * Where a try at an account's password or code counts against the account, from any address, and the short
+     * lock enough wrong ones earn. A try is counted as wrong before it is checked, so tries sent together cannot
+     * pass the limit; a right one gives it back, and a finished login starts the count again.
+     */
+    public interface Lockout {
+        /** No lock: nothing counts, nothing waits. */
+        Lockout NONE = new Lockout() {
+            @Override
+            public Try take(Account account, String address, String host) {
+                return take(account.id());
+            }
+
+            @Override
+            public Try take(UUID account) {
+                return new Try.Taken(account, AddressTally.clean(), AddressTally.clean(), Instant.EPOCH);
+            }
+
+            @Override
+            public void right(Try.Taken taken) {}
+
+            @Override
+            public void passed(UUID account) {}
+        };
+
+        /** What a try came to before anything was checked. */
+        sealed interface Try {
+            /** The account is locked for this long; nothing was counted or checked. */
+            record Refused(Duration left) implements Try {
+                public Refused {
+                    Objects.requireNonNull(left, "left");
+                }
+            }
+
+            /** The try is counted as wrong: the tally before it, after it, and when it was taken. */
+            record Taken(UUID account, AddressTally before, AddressTally after, Instant at) implements Try {
+                public Taken {
+                    Objects.requireNonNull(account, "account");
+                    Objects.requireNonNull(before, "before");
+                    Objects.requireNonNull(after, "after");
+                    Objects.requireNonNull(at, "at");
+                }
+
+                /** How long the account is locked when this try is what locked it; nothing otherwise. */
+                public Optional<Duration> locks() {
+                    return after.bannedAt(at) && !before.bannedAt(at)
+                            ? Optional.of(after.leftAt(at))
+                            : Optional.empty();
+                }
+            }
+        }
+
+        /**
+         * Takes a try at the account from this address through this host. The address its owner last logged in
+         * from, unless a filter shares it, is not refused by a lock; its tries still count.
+         */
+        Try take(Account account, String address, String host);
+
+        /** Takes a try at the account from a player logged in to it, whom no address lets past a lock. */
+        Try take(UUID account);
+
+        /** The try was right: its count is given back. */
+        void right(Try.Taken taken);
+
+        /** The owner finished a login: the account's count starts again. */
+        void passed(UUID account);
+    }
+
     private final AccountRepository accounts;
     private final Hashing hashing;
     private final HashingLane lane;
@@ -83,6 +156,7 @@ public final class LogIn {
     private final Captcha captcha;
     private final SecondStep secondStep;
     private final AuthEvents events;
+    private final Lockout lockout;
 
     public LogIn(AccountRepository accounts, Hashing hashing, HashingLane lane, Sessions sessions, Clock clock) {
         this(accounts, hashing, lane, sessions, clock, (address, host) -> Optional.empty());
@@ -150,6 +224,23 @@ public final class LogIn {
             Captcha captcha,
             SecondStep secondStep,
             AuthEvents events) {
+        this(accounts, hashing, lane, sessions, clock, failures, policy, captcha, secondStep, events, Lockout.NONE);
+    }
+
+    /** @param lockout where every try counts against the account it was typed for, and locks it after enough */
+    public LogIn(
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            Sessions sessions,
+            Clock clock,
+            Failures failures,
+            Supplier<PasswordPolicy> policy,
+            Captcha captcha,
+            SecondStep secondStep,
+            AuthEvents events,
+            Lockout lockout) {
+        this.lockout = Objects.requireNonNull(lockout, "lockout");
         this.events = Objects.requireNonNull(events, "events");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
@@ -204,16 +295,48 @@ public final class LogIn {
                 .orElseGet(() -> spendAndCheck(connection, held, password, address)));
     }
 
-    /** Spends the attempt, unless another answer of the same connection spent the last one meanwhile, and checks. */
+    /**
+     * Takes a try at the account, unless it is locked, then spends the attempt, unless another answer of the same
+     * connection spent the last one meanwhile, and checks.
+     */
     private LoginResult spendAndCheck(UUID connection, Sessions.Held held, Password password, String address) {
+        Lockout.Try.Taken taken;
+        if (held.state() instanceof AuthState.Registered waiting) {
+            switch (lockout.take(waiting.account(), address, held.host())) {
+                case Lockout.Try.Refused refused -> {
+                    return new LoginResult.Locked(refused.left());
+                }
+                case Lockout.Try.Taken took -> taken = took;
+            }
+        } else {
+            return refusal(held.state());
+        }
         AtomicReference<AuthState.Registered> reserved = new AtomicReference<>();
         AuthState after = sessions.update(connection, held.generation(), current -> spend(current, reserved))
                 .orElse(null);
         AuthState.Registered spent = reserved.get();
         if (spent == null) {
+            lockout.right(taken);
             return refusal(after);
         }
-        return check(connection, held, spent, password, address);
+        LoginResult result = check(connection, held, spent, password, address, taken);
+        if (!(result instanceof LoginResult.Wrong
+                || result instanceof LoginResult.TooManyAttempts
+                || result instanceof LoginResult.Banned
+                || result instanceof LoginResult.Locked)) {
+            // Nothing was found wrong: the account's count is given back, or started again by the login.
+            settle(result, taken);
+        }
+        return result;
+    }
+
+    /** A right password gives its try back; one that finished the login starts the account's count again. */
+    private void settle(LoginResult result, Lockout.Try.Taken taken) {
+        if (result instanceof LoginResult.LoggedIn || result instanceof LoginResult.MustReplace) {
+            lockout.passed(taken.account());
+        } else {
+            lockout.right(taken);
+        }
     }
 
     /** Spends one attempt on a connection that has one left, and remembers what it became. */
@@ -242,7 +365,12 @@ public final class LogIn {
     }
 
     private LoginResult check(
-            UUID connection, Sessions.Held held, AuthState.Registered spent, Password password, String address) {
+            UUID connection,
+            Sessions.Held held,
+            AuthState.Registered spent,
+            Password password,
+            String address,
+            Lockout.Try.Taken taken) {
         long generation = held.generation();
         if (!sessions.isOpen(connection, generation)) {
             return new LoginResult.Gone();
@@ -255,7 +383,7 @@ public final class LogIn {
         return switch (hashing.verify(password, stored)) {
             case Verification.Wrong wrong -> {
                 captcha.failed(current.name());
-                yield wrongAnswer(connection, spent.attempts(), address, held.host());
+                yield wrongAnswer(connection, spent.attempts(), address, held.host(), taken);
             }
             case Verification.Right right -> logIn(connection, generation, current, address, password);
             case Verification.RightButRehash rehash -> {
@@ -267,11 +395,16 @@ public final class LogIn {
         };
     }
 
-    private LoginResult wrongAnswer(UUID connection, Attempts afterThisOne, String address, String host) {
+    private LoginResult wrongAnswer(
+            UUID connection, Attempts afterThisOne, String address, String host, Lockout.Try.Taken taken) {
         events.wrongPassword(connection, afterThisOne.left());
         Optional<Duration> banned = failures.failed(address, host);
         if (banned.isPresent()) {
             return new LoginResult.Banned(banned.get());
+        }
+        Optional<Duration> locked = taken.locks();
+        if (locked.isPresent()) {
+            return new LoginResult.Locked(locked.get());
         }
         return afterThisOne.exhausted()
                 ? new LoginResult.TooManyAttempts()

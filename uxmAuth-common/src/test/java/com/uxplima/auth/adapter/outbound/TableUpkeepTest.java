@@ -37,8 +37,8 @@ class TableUpkeepTest {
             tallies.change("198.51.100.3", tally -> new AddressTally(0, 1, NOW.plus(Duration.ofDays(2)), longAgo));
             UUID gone = UUID.randomUUID();
             UUID kept = UUID.randomUUID();
-            sessions.remember(gone, "198.51.100.1", NOW.minusSeconds(1));
-            sessions.remember(kept, "198.51.100.2", NOW.plus(Duration.ofDays(1)));
+            sessions.remember(gone, "198.51.100.1", "", NOW.minusSeconds(1));
+            sessions.remember(kept, "198.51.100.2", "", NOW.plus(Duration.ofDays(1)));
             List<String> console = new ArrayList<>();
 
             new TableUpkeep(tallies, sessions, () -> FORGIVE, Clock.fixed(NOW, ZoneOffset.UTC), console::add).run();
@@ -46,7 +46,7 @@ class TableUpkeepTest {
             assertThat(tallies.find("198.51.100.1")).isEmpty();
             assertThat(tallies.find("198.51.100.2")).isPresent();
             assertThat(tallies.find("198.51.100.3")).isPresent();
-            assertThat(sessions.holds(kept, "198.51.100.2", NOW)).isTrue();
+            assertThat(sessions.holds(kept, "198.51.100.2", "", NOW)).isTrue();
             assertThat(sessions.dropExpired(NOW)).isZero();
             assertThat(console).isEmpty();
         }

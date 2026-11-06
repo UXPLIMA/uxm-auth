@@ -20,7 +20,7 @@ Contents: [Player commands](#player-commands) · [Staff commands](#staff-command
 | `/unregister [proof]` | | `uxmauth.unregister` | Deletes the player's own account: alone it asks, then again with the password or an app code within `account.delete-confirm-seconds`. |
 | `/session on\|off` | | `uxmauth.session` | Chooses whether a join from the same address skips the password. Off ends every session of the account. |
 | `/captcha [code]` | | `uxmauth.captcha` | Answers the captcha. |
-| `/recover [code] [password]` | | `uxmauth.recover` | Alone it mails a code to the linked address; with the code and a new password it sets that password. |
+| `/recover [code] [password]` | | `uxmauth.recover` | Alone it mails a code to the linked address, and says the same whether there is one; with the code and a new password it sets that password. |
 | `/email add [address]` | | `uxmauth.email` | Mails a code to the address. |
 | `/email confirm [code]` | | `uxmauth.email` | Links the address with its code. |
 | `/email remove` | | `uxmauth.email` | Takes the linked address away. |

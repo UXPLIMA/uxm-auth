@@ -29,6 +29,7 @@ import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAccountTallies;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlEmails;
@@ -74,6 +75,7 @@ import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.AccountCap;
+import com.uxplima.auth.application.protection.AccountLockout;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.Captchas;
@@ -315,6 +317,7 @@ final class AuthGraph implements AutoCloseable {
         AddressBans bans = new AddressBans(
                 tallies,
                 () -> settings.current().protection().bans(),
+                () -> settings.current().protection().wideBans(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
         TableUpkeep upkeep = new TableUpkeep(
@@ -338,6 +341,11 @@ final class AuthGraph implements AutoCloseable {
                 Instant::now,
                 AuthNotices.both(discord, AuthNotices.onBan(fired::banned)));
         LogIn.Failures failures = alerts.watching(bans);
+        AccountLockout lockout = new AccountLockout(
+                new SqlAccountTallies(database),
+                () -> settings.current().protection().lockout(),
+                () -> settings.current().protection().sharedAddresses(),
+                Instant::now);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
         Set<String> runnable = PlayerCommandLabels.enabled(commands);
@@ -448,7 +456,7 @@ final class AuthGraph implements AutoCloseable {
                 database,
                 accounts,
                 sessions,
-                failures,
+                new FactorGraph.Guards(failures, lockout, captchas),
                 id -> bedrock.player(id).isPresent(),
                 hashing,
                 lane,
@@ -469,7 +477,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 captchas,
                 factors.secondStep,
-                fired);
+                fired,
+                lockout);
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -500,7 +509,9 @@ final class AuthGraph implements AutoCloseable {
                 events,
                 remembered,
                 breaches,
-                fired);
+                fired,
+                failures,
+                lockout);
         RecoverPassword recovering = mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
@@ -665,7 +676,8 @@ final class AuthGraph implements AutoCloseable {
                         lane,
                         new Unregister(accounts, events, fired),
                         () -> settings.current().deleteConfirm(),
-                        clock),
+                        clock,
+                        new DeleteOwnAccount.Guards(failures, lockout)),
                 proofForm,
                 id -> bedrock.player(id).isPresent(),
                 replies,
