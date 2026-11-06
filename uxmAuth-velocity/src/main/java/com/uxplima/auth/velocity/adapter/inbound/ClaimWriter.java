@@ -11,13 +11,16 @@ import java.util.function.Supplier;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.network.Claims;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.util.GameProfile;
 
 /**
  * Writes a fresh claim into the profile the proxy forwards, before every connection to a server, for that server
- * alone. The server reads it at its pre-login and takes it off the profile there, so no client ever sees it.
+ * alone. The server reads it at its pre-login and takes it off the profile there, and the proxy takes it off its
+ * own copy once the connection is made or failed, so no client ever sees it.
  */
 public final class ClaimWriter {
 
@@ -26,6 +29,9 @@ public final class ClaimWriter {
 
     /** Below every plugin that leaves the default, so the server another plugin picked is the one written for. */
     private static final short LATE = -1000;
+
+    /** Above every plugin that leaves the default, so none of them reads a claim the server already took. */
+    private static final short EARLY = 1000;
 
     private final ProxySessions sessions;
     private final Supplier<Optional<Claims>> claims;
@@ -47,6 +53,29 @@ public final class ClaimWriter {
                             .getServer()
                             .map(server -> server.getServerInfo().getName())
                             .orElse(""));
+        }
+    }
+
+    /**
+     * The server took the profile, the claim with it: it comes off the proxy's copy before any other plugin reads
+     * it, since a plugin that draws a tab list sends a player's profile to every other player.
+     */
+    @Subscribe(priority = EARLY)
+    public void onConnected(ServerConnectedEvent event) {
+        drop(event.getPlayer());
+    }
+
+    /** The connection failed: the claim written for it comes off the proxy's copy of the profile as well. */
+    @Subscribe(priority = EARLY)
+    public void onKicked(KickedFromServerEvent event) {
+        drop(event.getPlayer());
+    }
+
+    /** The claim off the player's profile, when one is on it. */
+    void drop(Player player) {
+        List<GameProfile.Property> properties = without(player);
+        if (properties.size() != player.getGameProfileProperties().size()) {
+            player.setGameProfileProperties(properties);
         }
     }
 
