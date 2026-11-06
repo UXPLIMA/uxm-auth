@@ -213,7 +213,8 @@ public final class PluginSettings {
                     Pattern.compile(passwords.allowed()),
                     passwords.required(),
                     maxBytes,
-                    common);
+                    common,
+                    passwords.screenLogins());
         }
 
         private static Hashing hashersOf(AuthSettings.HashSettings hashing, WebsiteTable website) {

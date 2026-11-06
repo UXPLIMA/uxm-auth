@@ -247,6 +247,11 @@ public final class LogIn {
         if (!sessions.isOpen(connection, generation)) {
             return new LoginResult.Gone();
         }
+        if (policy.get().refusesAtLogin(password)) {
+            // No stored password can be this answer: it costs an attempt, not a read and a hash.
+            captcha.failed(spent.account().name());
+            return wrongAnswer(connection, spent.attempts(), address, held.host());
+        }
         Account current = accounts.findById(spent.account().id()).orElse(null);
         PasswordHash stored = current == null ? null : current.password();
         if (current == null || stored == null) {

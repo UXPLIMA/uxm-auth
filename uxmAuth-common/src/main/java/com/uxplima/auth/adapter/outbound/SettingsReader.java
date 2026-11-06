@@ -56,7 +56,8 @@ final class SettingsReader {
                 required(config),
                 config.getBoolean("passwords.confirm-on-register", true),
                 config.getBoolean("passwords.old-on-change", true),
-                config.getInt("passwords.max-attempts", 3));
+                config.getInt("passwords.max-attempts", 3),
+                config.getBoolean("passwords.screen-logins", false));
     }
 
     static AuthSettings.PasswordLists passwordLists(HoconConfig config) {

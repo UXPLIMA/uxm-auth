@@ -17,6 +17,14 @@ address end the session. `sessions.skip-second-factor` decides whether a session
 step. An IPv6 address counts by its /64. `/uxmauth unban <address>` lifts a ban. `passwords.max-attempts` kicks a
 player after that many wrong passwords on one connection.
 
+## Login answers
+
+A login answer with a control character, an invisible character such as a zero-width space, or more than 256
+characters is a wrong password at once: it costs an attempt, but no database read and no hash. With
+`passwords.screen-logins` on, an answer longer than `passwords.max-length` or outside `passwords.allowed` is
+refused the same way. Turn it on for a server whose passwords were all made under today's rules; leave it off while
+imported accounts may hold passwords outside them.
+
 ## Limits
 
 - `protection.connections`: how many connections one address may make inside `window-seconds`, counted at every
