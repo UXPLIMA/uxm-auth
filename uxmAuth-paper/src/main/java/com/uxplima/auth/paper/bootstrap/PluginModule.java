@@ -181,7 +181,8 @@ final class PluginModule {
                     AuthGraph graph = auth;
                     return graph == null ? 0 : graph.staffing.windowsRead();
                 }),
-                PluginHealth.placeholders(() -> unpublish != null));
+                PluginHealth.placeholders(() -> unpublish != null),
+                PluginHealth.websiteHash(() -> settings.current().websiteTable()));
     }
 
     /**

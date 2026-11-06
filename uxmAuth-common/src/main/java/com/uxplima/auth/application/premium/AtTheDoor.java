@@ -17,14 +17,20 @@ import com.uxplima.auth.domain.premium.Holder;
 import com.uxplima.auth.domain.premium.NameOwnership;
 import com.uxplima.auth.domain.premium.PremiumAnswer;
 import com.uxplima.auth.domain.premium.Refusal;
+import com.uxplima.auth.domain.protection.SharedAddresses;
 
 /**
  * A connection at the hello, before the server makes a profile for it: is it asked for the handshake?
  *
  * <p>The account is read first, and the web only where the operator's rule needs it. A name the door will
- * refuse anyway, for its spelling or for the case it was registered in, is never asked about: the name check
- * at the pre-login says why, and the web and Mojang's cap are not spent on it. This may wait on the database
- * and the network, so it never runs on a thread the server needs.
+ * refuse anyway for its spelling is never asked about: the name check at the pre-login says why, and the web and
+ * Mojang's cap are not spent on it. A name registered here in another case is asked about once it arrives in a
+ * spelling of its own, because that may be its paid owner in Mojang's spelling, whom the pre-login would
+ * otherwise send back to the holder's spelling forever. A name the web has not answered lately costs the
+ * address that brought it one lookup of its budget; past that the name counts as one nobody could look up. A
+ * shared-address filter is everybody's address, so no budget holds it, no claim is taken from it, and a failure
+ * remembered for it turns nobody away. This may wait on the database and the network, so it never runs on a
+ * thread the server needs.
  */
 public final class AtTheDoor {
 
@@ -36,7 +42,10 @@ public final class AtTheDoor {
     private final NameMemory claims;
     private final NameMemory ownerClaims;
     private final Disputes disputes;
+    private final Supplier<SharedAddresses> shared;
+    private final LookupBudget budget;
 
+    /** No shared-address filter, and no budget for an address. */
     public AtTheDoor(
             AccountRepository accounts,
             Supplier<NamePolicy> names,
@@ -46,6 +55,36 @@ public final class AtTheDoor {
             NameMemory claims,
             NameMemory ownerClaims,
             Disputes disputes) {
+        this(
+                accounts,
+                names,
+                lookup,
+                ownership,
+                failed,
+                claims,
+                ownerClaims,
+                disputes,
+                SharedAddresses::none,
+                LookupBudget.unlimited());
+    }
+
+    /**
+     * @param shared the filters every player of which arrives from the filter's own address
+     * @param budget how many names one address may have the web asked about
+     */
+    public AtTheDoor(
+            AccountRepository accounts,
+            Supplier<NamePolicy> names,
+            PremiumLookup lookup,
+            Supplier<NameOwnership> ownership,
+            NameMemory failed,
+            NameMemory claims,
+            NameMemory ownerClaims,
+            Disputes disputes,
+            Supplier<SharedAddresses> shared,
+            LookupBudget budget) {
+        this.shared = Objects.requireNonNull(shared, "shared");
+        this.budget = Objects.requireNonNull(budget, "budget");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.names = Objects.requireNonNull(names, "names");
         this.lookup = Objects.requireNonNull(lookup, "lookup");
@@ -70,16 +109,17 @@ public final class AtTheDoor {
             return new Decision.Refuse(Refusal.NAME_DISPUTED);
         }
         Optional<Account> account = accounts.findByName(name);
-        if (account.isPresent() && !account.get().name().value().equals(raw)) {
-            return new Decision.Cracked(false, false);
-        }
-        boolean claimed = claims.holds(address, name);
-        boolean asked = claimed || ownerClaims.holds(address, name);
+        boolean otherCase = account.isPresent() && !account.get().name().value().equals(raw);
+        boolean throughAFilter = shared.get().through(address, host);
+        boolean claimed = !throughAFilter && claims.holds(address, name);
+        boolean asked = claimed || (!throughAFilter && ownerClaims.holds(address, name));
         Holder holder = holder(account);
         AtomicReference<PremiumAnswer> answered = new AtomicReference<>();
-        Arrival arrival = new Arrival(holder, asked, failed.holds(address, name), host);
+        Arrival arrival = new Arrival(raw, holder, otherCase, asked, failed.holds(address, name), throughAFilter, host);
         Decision decision = ownership.get().decide(arrival, () -> {
-            PremiumAnswer answer = lookup.lookup(name);
+            PremiumAnswer answer = lookup.known(name)
+                    .orElseGet(() ->
+                            throughAFilter || budget.take(address) ? lookup.lookup(name) : new PremiumAnswer.Unknown());
             answered.set(answer);
             return answer;
         });
@@ -91,30 +131,56 @@ public final class AtTheDoor {
             // The failure is explained now, and the next connection is asked again rather than refused again.
             failed.forget(address, name);
         }
-        if (holder == Holder.CRACKED_UNVERIFIED && answered.get() instanceof PremiumAnswer.Cracked) {
-            account.ifPresent(found -> accounts.update(found.asVerified()));
+        if (holder == Holder.CRACKED_UNVERIFIED
+                && decision instanceof Decision.Cracked
+                && answered.get() != null
+                && !(answered.get() instanceof PremiumAnswer.Unknown)) {
+            // A source answered and the account goes on with its password: who owns the name is settled.
+            account.ifPresent(found -> accounts.markVerified(found.id()));
         }
         return decision;
     }
 
-    /** A player at this address says the name is theirs: their next connection from here is asked. */
-    public void claim(String address, PlayerName name) {
+    /**
+     * A player at this address says the name is theirs: their next connection from here is asked. Not through a
+     * shared-address filter, whose next connection may be anybody's: then nothing is remembered, and the answer
+     * is false.
+     */
+    public boolean claim(String address, PlayerName name) {
+        if (sharedAddress(address)) {
+            return false;
+        }
         claims.remember(address, name);
+        return true;
     }
 
     /**
      * The owner of the account, logged in, asks for the handshake: their next connection from here is asked, and
-     * its pre-login reads {@link #ownerAsked} to know the account turns premium rather than changes hands.
+     * its pre-login reads {@link #ownerAsked} to know the account turns premium rather than changes hands. Not
+     * through a shared-address filter, where the next proved connection may be another player's, who would be
+     * handed the account: then nothing is remembered, and the answer is false.
      */
-    public void ownerAsks(String address, PlayerName name) {
+    public boolean ownerAsks(String address, PlayerName name) {
+        if (sharedAddress(address)) {
+            return false;
+        }
         ownerClaims.remember(address, name);
+        return true;
     }
 
     /** Whether the owner of the account asked for this connection's handshake. Read once, by the pre-login. */
     public boolean ownerAsked(String address, PlayerName name) {
-        boolean asked = ownerClaims.holds(address, name);
+        boolean asked = ownerClaims.holds(address, name) && !sharedAddress(address);
         ownerClaims.forget(address, name);
         return asked;
+    }
+
+    /**
+     * Whether this is a shared-address filter's address, whatever host was typed: a claim kept under it would be
+     * every player's behind the filter.
+     */
+    private boolean sharedAddress(String address) {
+        return shared.get().through(address, "");
     }
 
     /**
@@ -123,7 +189,7 @@ public final class AtTheDoor {
      */
     public void failed(String address, PlayerName name) {
         failed.remember(address, name);
-        accounts.findByName(name).filter(Account::unverified).ifPresent(found -> accounts.update(found.asVerified()));
+        accounts.findByName(name).filter(Account::unverified).ifPresent(found -> accounts.markVerified(found.id()));
     }
 
     /** A connection from this address under this name passed the handshake. */

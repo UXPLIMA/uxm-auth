@@ -65,4 +65,34 @@ class PasswordPolicyTest {
     void anyPolicyAcceptsEverything() {
         assertThat(check(PasswordPolicy.ANY, "x")).isEqualTo(new PasswordVerdict.Accepted());
     }
+
+    @Test
+    void aLoginAnswerIsScreenedForWhatNobodyTypesWhateverTheRules() {
+        assertThat(PasswordPolicy.ANY.refusesAtLogin(Password.of("hunter22"))).isFalse();
+        assertThat(PasswordPolicy.ANY.refusesAtLogin(Password.of("hun\tter22"))).isTrue();
+        assertThat(PasswordPolicy.ANY.refusesAtLogin(Password.of("hun\u202Eter22")))
+                .isTrue();
+        assertThat(PasswordPolicy.ANY.refusesAtLogin(Password.of("hunter\uD800")))
+                .isTrue();
+        assertThat(PasswordPolicy.ANY.refusesAtLogin(Password.of("日本語のパスワード"))).isFalse();
+    }
+
+    @Test
+    void screenedRulesRefuseALoginAnswerOutsideTheirCharactersAndLength() {
+        PasswordPolicy ascii =
+                new PasswordPolicy(6, 12, Pattern.compile("[\\x21-\\x7E]+"), Set.of(), 0, CommonPasswords.none(), true);
+
+        assertThat(ascii.refusesAtLogin(Password.of("hunter22"))).isFalse();
+        assertThat(ascii.refusesAtLogin(Password.of("日本語のパスワード"))).isTrue();
+        assertThat(ascii.refusesAtLogin(Password.of("hunter22hunter22"))).isTrue();
+    }
+
+    @Test
+    void aNewPasswordNoLoginCouldMatchIsRefused() {
+        PasswordPolicy policy = new PasswordPolicy(1, 1000, Pattern.compile("(?s).*"), Set.of(), 0);
+
+        assertThat(policy.check(Password.of("hun\u200Bter22"))).isEqualTo(new PasswordVerdict.BadCharacters());
+        assertThat(policy.check(Password.of("a".repeat(PasswordPolicy.LONGEST_ANSWER + 1))))
+                .isEqualTo(new PasswordVerdict.TooLong(PasswordPolicy.LONGEST_ANSWER));
+    }
 }

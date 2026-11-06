@@ -14,9 +14,13 @@
   those.
 
 Passwords keep their hash and move to `hashing.algorithm` at the player's next login. Authenticator secrets and
-premium ids come across. The start prints how many accounts came over and how many were refused, never a
+premium ids come across. A name that already holds an account here is left as it is, with its password, mail and
+second factor, and counted as held; only an account the same import made in a run that failed is written again.
+The start prints how many accounts came over, how many names were held and how many were refused, never a
 password. An import runs once; every later start says it ran and does nothing. A failed import stops the plugin
-with its reason, marks nothing and runs again at the next start. On a network every server may name the same
+with its reason, marks nothing and runs again at the next start; a file that does not parse is such a failure. A
+source that holds no account at all is not marked either: the start says so and reads it again next time, until
+it holds accounts or `source` is emptied. On a network every server may name the same
 source: the first to start imports and the others wait and find it done.
 
 `import.premium` reads a list of premium names another plugin kept, such as `fastlogin`, after the accounts, with
@@ -36,15 +40,22 @@ names of `columns` when it is missing; an existing one is used as it is. Everyth
 - A row counts as an account's only once the plugin wrote it, adopted it, or found the account's own hash in it.
   A row someone made on the website under the name of an account the plugin held first opens nothing and is never
   written.
+- That link is bound to the row itself, by its registration date, or by its `id` when it has no date. A row the
+  website deletes and someone registers again under the name is theirs, and the account keeps the plugin's own
+  password. A table with neither a date nor an `id` tells its rows apart only by the password, so a password
+  changed on such a website no longer opens the account in game.
 - Premium and Bedrock accounts never read or write a row, and a registration in game never writes over one.
 - Removing an account in game removes its row. The plugin's own row is still kept, so turning the table off loses
   only what the website changed since.
-- `sha256` is weak: choose it only for a website that reads nothing else.
+- `hash` is the format of every password while the table is on, the plugin's own row included, because both keep
+  the one hash. `sha256` is one salted SHA-256, which a copy of the database gives up in hours rather than years:
+  choose it only for a website that reads nothing else. The start and `/uxmauth doctor` warn while it is on.
 
 ## Moving the database
 
 1. Fill `storage.move-to` with the target database, empty of this plugin's tables. A target that holds an
-   account is refused and nothing is written.
+   account is refused and nothing is written. A move that fails halfway empties the tables it copied again, so
+   it can simply run again; when even that fails, the console says to empty this plugin's tables at the target.
 2. Run `/uxmauth database move` from the console while nobody plays. The website table moves too when it is on.
 3. Put the target's three lines in place of `storage.jdbc-url`, `username` and `password`, empty `move-to`, and
    restart.

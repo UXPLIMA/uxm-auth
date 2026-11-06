@@ -26,6 +26,7 @@ import com.uxplima.auth.domain.hash.HashFormats;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.password.CommonPasswords;
 import com.uxplima.auth.domain.password.Password;
 import com.uxplima.auth.domain.password.PasswordPolicy;
 import com.uxplima.auth.domain.password.PasswordVerdict;
@@ -172,7 +173,58 @@ class LogInTest {
     }
 
     /** Accounts in a map, enough for the login path. */
-    private static final class Accounts implements AccountRepository {
+    private LogIn logInUnder(PasswordPolicy policy) {
+        return new LogIn(
+                accounts,
+                hashing,
+                lane,
+                sessions,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                (a, h) -> Optional.empty(),
+                () -> policy);
+    }
+
+    @Test
+    void anAnswerWithAControlCharacterIsWrongEvenWhenItIsTheStoredPassword() {
+        waitForLogin(register(hashing.hash(Password.of("hun\u0007ter22"))), 3);
+
+        assertThat(logIn(logIn(), "hun\u0007ter22")).isEqualTo(new LoginResult.Wrong(2));
+    }
+
+    @Test
+    void anAnswerWithAZeroWidthSpaceIsWrong() {
+        waitForLogin(register(hashing.hash(Password.of("hun\u200Bter22"))), 3);
+
+        assertThat(logIn(logIn(), "hun\u200Bter22")).isEqualTo(new LoginResult.Wrong(2));
+    }
+
+    @Test
+    void anAnswerLongerThanTheHardLimitIsWrong() {
+        waitForLogin(register(hashing.hash(Password.of("hunter22"))), 3);
+
+        assertThat(logIn(logIn(), "a".repeat(PasswordPolicy.LONGEST_ANSWER + 1)))
+                .isEqualTo(new LoginResult.Wrong(2));
+    }
+
+    @Test
+    void screenedLoginsRefuseCharactersTheRulesDoNotAllow() {
+        PasswordPolicy ascii =
+                new PasswordPolicy(6, 64, Pattern.compile("[\\x21-\\x7E]+"), Set.of(), 0, CommonPasswords.none(), true);
+        waitForLogin(register(hashing.hash(Password.of("şifre123"))), 3);
+
+        assertThat(logIn(logInUnder(ascii), "şifre123")).isEqualTo(new LoginResult.Wrong(2));
+    }
+
+    @Test
+    void unscreenedLoginsStillAcceptAnImportedPasswordOutsideTheRules() {
+        PasswordPolicy ascii = new PasswordPolicy(
+                1, 64, Pattern.compile("[\\x21-\\x7E]+"), Set.of(), 0, CommonPasswords.none(), false);
+        waitForLogin(register(hashing.hash(Password.of("şifre123"))), 3);
+
+        assertThat(logIn(logInUnder(ascii), "şifre123")).isNotInstanceOf(LoginResult.Wrong.class);
+    }
+
+    static final class Accounts implements AccountRepository {
 
         private final Map<UUID, Account> byId = new HashMap<>();
         private final Map<UUID, Instant> lastLogin = new HashMap<>();
@@ -198,6 +250,14 @@ class LogInTest {
         @Override
         public void update(Account account) {
             byId.put(account.id(), account);
+        }
+
+        @Override
+        public void markVerified(UUID id) {
+            Account account = byId.get(id);
+            if (account != null) {
+                byId.put(id, account.asVerified());
+            }
         }
 
         @Override

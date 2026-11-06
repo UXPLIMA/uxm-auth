@@ -29,6 +29,11 @@ public final class ClaimName {
         ALREADY_PREMIUM,
         /** The operator's rule proves names another way. */
         NOT_THIS_RULE,
+        /**
+         * The player connects through a shared-address filter, where the next connection from the address may be
+         * anybody's, so no claim can be tied to theirs.
+         */
+        SHARED_ADDRESS,
         /** The connection has no session. */
         GONE
     }
@@ -76,12 +81,10 @@ public final class ClaimName {
 
     /** A player who proved the password asks as the owner. */
     private Result owner(String address, PlayerName name) {
-        door.ownerAsks(address, name);
-        return Result.ASKED;
+        return door.ownerAsks(address, name) ? Result.ASKED : Result.SHARED_ADDRESS;
     }
 
     private Result asked(String address, PlayerName name) {
-        door.claim(address, name);
-        return Result.ASKED;
+        return door.claim(address, name) ? Result.ASKED : Result.SHARED_ADDRESS;
     }
 }

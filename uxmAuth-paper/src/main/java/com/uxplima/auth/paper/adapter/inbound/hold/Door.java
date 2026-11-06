@@ -108,7 +108,10 @@ public final class Door {
         this.duty = Objects.requireNonNull(duty, "duty");
     }
 
-    /** A player arrived, or logged out: anything a crash left is given back, and a waiting player is held. */
+    /**
+     * A player arrived, logged out, or was sent back to the password: anything a crash left is given back, a waiting
+     * player is held, and their clock and their screen start over.
+     */
     public void hold(Player player) {
         Objects.requireNonNull(player, "player");
         keeper.arrive(player);
@@ -137,7 +140,7 @@ public final class Door {
 
     /** A player who arrives already let in: told to the proxy, remembered, and greeted. */
     private void arrivedIn(Player player, AuthState.Authenticated in) {
-        if (in.method() != AuthMethod.NETWORK) {
+        if (!in.method().fromTheNetwork()) {
             // A login the network vouched for came from the proxy, which already knows it.
             reports.loggedIn(player, in.method());
         }

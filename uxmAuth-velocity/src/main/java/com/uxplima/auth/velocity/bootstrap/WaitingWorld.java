@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -21,6 +22,7 @@ import com.uxplima.auth.adapter.outbound.CommandFile;
 import com.uxplima.auth.adapter.outbound.PluginSettings;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.LogIn;
+import com.uxplima.auth.application.LogOut;
 import com.uxplima.auth.application.ReadTheName;
 import com.uxplima.auth.application.RegisterAccount;
 import com.uxplima.auth.application.Sessions;
@@ -30,6 +32,7 @@ import com.uxplima.auth.application.factor.SecondStep;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.mail.RecoveryAsks;
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.AuthEvents;
@@ -43,6 +46,7 @@ import com.uxplima.auth.application.protection.Remember;
 import com.uxplima.auth.application.staff.ForceLogin;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.name.PlayerName;
+import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.LimboLogin;
 import com.uxplima.auth.velocity.adapter.inbound.LimboRecovery;
@@ -89,6 +93,7 @@ final class WaitingWorld implements AutoCloseable {
      * Hold every player who waits for the proxy's password in the world, when the settings ask for it.
      *
      * @param door what the door makes of a player when LimboAPI asks, before the proxy's login events
+     * @param leftTheWorld what the door lets go of a player who left the world without being let out
      * @throws NoWaitingWorld when the settings ask for the world and the proxy cannot build it
      */
     void open(
@@ -97,6 +102,7 @@ final class WaitingWorld implements AutoCloseable {
             Messages words,
             ProxySessions network,
             BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> door,
+            Consumer<Player> leftTheWorld,
             Guards guards) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
@@ -116,7 +122,7 @@ final class WaitingWorld implements AutoCloseable {
                     null);
         }
         try {
-            hold(kit.get(), limboApi.get(), settings, accounts, words, network, door, guards);
+            hold(kit.get(), limboApi.get(), settings, accounts, words, network, door, leftTheWorld, guards);
         } catch (RuntimeException | LinkageError foreign) {
             close();
             throw new NoWaitingWorld("LimboAPI could not build the waiting world: " + foreign, foreign);
@@ -131,6 +137,7 @@ final class WaitingWorld implements AutoCloseable {
             Messages words,
             ProxySessions network,
             BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> door,
+            Consumer<Player> leftTheWorld,
             Guards guards) {
         LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
@@ -139,7 +146,15 @@ final class WaitingWorld implements AutoCloseable {
         LimboWait wait = new LimboWait(
                 kit.open(limboApi, folder, settings.current().network(), metas(labels), logger),
                 player -> waiter(door.apply(player, this::taken), player, words),
-                (player, waiter, exit) -> visit(passwords, network, guards.remember(), player, waiter, exit, reach),
+                (player, waiter, exit) -> visit(
+                        passwords,
+                        network,
+                        guards.remember(),
+                        player,
+                        waiter,
+                        exit,
+                        reach,
+                        () -> leftTheWorld.accept(player)),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
@@ -147,7 +162,7 @@ final class WaitingWorld implements AutoCloseable {
         logger.info("Players who must log in wait in the proxy's own world, built with LimboAPI.");
     }
 
-    /** Who a player waits as; a second connection under a name already online is turned away instead. */
+    /** Who a player waits as; a second connection under a name already online or waiting is turned away instead. */
     private static Optional<LimboWait.Waiter> waiter(DoorListener.Early early, Player player, Messages words) {
         return switch (early) {
             case DoorListener.Early.Waits waits ->
@@ -168,13 +183,14 @@ final class WaitingWorld implements AutoCloseable {
     }
 
     /**
-     * What guards the waiting world's door: the remembered sessions, where a wrong password counts, the limit on
-     * the accounts one address makes, the breach check, and where a changed password ends the account's other
-     * sessions.
+     * What guards the waiting world's door: the remembered sessions, where a wrong password counts against its
+     * address and against its account, the limit on the accounts one address makes, the breach check, and where a
+     * changed password ends the account's other sessions.
      */
     record Guards(
             Remember remember,
             LogIn.Failures failures,
+            LogIn.Lockout lockout,
             RegisterAccount.Cap cap,
             BreachedPasswords breaches,
             NetworkEvents bulletins,
@@ -200,6 +216,18 @@ final class WaitingWorld implements AutoCloseable {
         Sessions sessions = new Sessions();
         Clock clock = Clock.systemUTC();
         this.force = new ForceLogin(accounts, sessions, guards.bulletins(), clock);
+        // Sessions ended elsewhere, by staff or a recovery, send a connection waiting here past the old password,
+        // for its app code or its setup, back to the password, as a server does: the old one no longer counts.
+        LogOut ending =
+                new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), guards.remembered());
+        guards.bulletins().listen(bulletin -> {
+            if (bulletin instanceof Bulletin.SessionsEnded ended
+                    && (ended.keep().isEmpty()
+                            || !ended.keep()
+                                    .equals(sessions.held(ended.account()).map(Sessions.Held::visit)))) {
+                ending.end(ended.account());
+            }
+        });
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), clock::instant);
         return new LimboLogin(
@@ -217,7 +245,8 @@ final class WaitingWorld implements AutoCloseable {
                         () -> settings.current().passwordPolicy(),
                         captchas,
                         guards.secondStep(),
-                        guards.events()),
+                        guards.events(),
+                        guards.lockout()),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -236,7 +265,7 @@ final class WaitingWorld implements AutoCloseable {
                 labels,
                 () -> settings.current().passwords().confirmOnRegister(),
                 guards.secondStep(),
-                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane)),
+                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane), captchas),
                 recovery(settings, accounts, sessions, words, guards, new Hashers(hashing, hashingLane)));
     }
 
@@ -258,20 +287,31 @@ final class WaitingWorld implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 guards.breaches(),
                 guards.remembered(),
-                guards.bulletins());
+                guards.bulletins(),
+                new RecoveryAsks(
+                        () -> settings.current().email().recoverPerHour(),
+                        () -> settings.current().protection().sharedAddresses(),
+                        Instant::now),
+                guards.lockout()::passed);
         return new LimboRecovery(recover, sessions, words);
     }
 
     /** The code of the second step, checked on the hashing lane: the factor table is read, backup codes hashed. */
     private static LimboLogin.CodeCheck codes(
-            PluginSettings settings, AccountRepository accounts, Sessions sessions, Guards guards, Hashers hashers) {
+            PluginSettings settings,
+            AccountRepository accounts,
+            Sessions sessions,
+            Guards guards,
+            Hashers hashers,
+            Captchas captchas) {
         FactorCheck check = new FactorCheck(
                 guards.factors(),
                 hashers.hashing(),
                 () -> settings.current().secondFactor().setup().totp(),
                 () -> settings.current().secondFactor().setup().backup(),
                 guards.mailedCode());
-        ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, guards.failures(), Instant::now);
+        ConfirmFactor confirm = new ConfirmFactor(
+                accounts, sessions, check, guards.failures(), guards.lockout(), captchas, Instant::now);
         return (id, code, address) -> hashers.lane().submit(() -> confirm.confirm(id, code, address));
     }
 
@@ -288,7 +328,10 @@ final class WaitingWorld implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 guards.bulletins(),
                 guards.remembered(),
-                guards.breaches());
+                guards.breaches(),
+                AuthEvents.NONE,
+                guards.failures(),
+                guards.lockout());
     }
 
     /** Lets a connection waiting in the world in as forced, on the lane: the account table is written. */
@@ -308,7 +351,8 @@ final class WaitingWorld implements AutoCloseable {
             Player player,
             LimboWait.Waiter waiter,
             LimboVisit.Exit exit,
-            LimboVisit.Reach reach) {
+            LimboVisit.Reach reach,
+            Runnable freed) {
         return new LimboVisit(
                 passwords,
                 network,
@@ -319,7 +363,8 @@ final class WaitingWorld implements AutoCloseable {
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(""),
                 player,
                 exit,
-                reach);
+                reach,
+                freed);
     }
 
     /** Each command the waiting world answers, in every word commands.conf gives it. */

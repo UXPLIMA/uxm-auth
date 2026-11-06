@@ -11,17 +11,19 @@ import com.uxplima.uxmlib.storage.sql.Database;
 
 /**
  * Remembered sessions in {@code uxmauth_session} and choices in {@code uxmauth_session_choice}. A row is replaced
- * by deleting and writing it again in one transaction, which every database this plugin speaks runs alike.
+ * by deleting and writing it again in one transaction, which every database this plugin speaks runs alike. A row
+ * holds the host its login came through, and only a join through the same host finds it.
  */
 public final class SqlRememberedSessions implements RememberedSessions {
 
     private static final String DROP_ONE = "DELETE FROM uxmauth_session WHERE account_id = ? AND address = ?";
     private static final String DROP_EXPIRED = "DELETE FROM uxmauth_session WHERE account_id = ? AND expires_at <= ?";
     private static final String WRITE =
-            "INSERT INTO uxmauth_session (account_id, address, expires_at) VALUES (?, ?, ?)";
-    private static final String HOLDS =
-            "SELECT expires_at FROM uxmauth_session WHERE account_id = ? AND address = ? AND expires_at > ?";
+            "INSERT INTO uxmauth_session (account_id, address, host, expires_at) VALUES (?, ?, ?, ?)";
+    private static final String HOLDS = "SELECT expires_at FROM uxmauth_session"
+            + " WHERE account_id = ? AND address = ? AND host = ? AND expires_at > ?";
     private static final String FORGET = "DELETE FROM uxmauth_session WHERE account_id = ?";
+    private static final String DROP_ALL_EXPIRED = "DELETE FROM uxmauth_session WHERE expires_at <= ?";
     private static final String READ_CHOICE = "SELECT remember FROM uxmauth_session_choice WHERE account_id = ?";
     private static final String DROP_CHOICE = "DELETE FROM uxmauth_session_choice WHERE account_id = ?";
     private static final String WRITE_CHOICE =
@@ -40,9 +42,10 @@ public final class SqlRememberedSessions implements RememberedSessions {
     }
 
     @Override
-    public void remember(UUID account, String address, Instant until) {
+    public void remember(UUID account, String address, String host, Instant until) {
         String id = Objects.requireNonNull(account, "account").toString();
         Objects.requireNonNull(address, "address");
+        Objects.requireNonNull(host, "host");
         long expires = Objects.requireNonNull(until, "until").toEpochMilli();
         long now = clock.millis();
         database.inTransaction(sql -> {
@@ -58,22 +61,25 @@ public final class SqlRememberedSessions implements RememberedSessions {
             sql.update(WRITE, statement -> {
                 statement.setString(1, id);
                 statement.setString(2, address);
-                statement.setLong(3, expires);
+                statement.setString(3, host);
+                statement.setLong(4, expires);
             });
         });
     }
 
     @Override
-    public boolean holds(UUID account, String address, Instant now) {
+    public boolean holds(UUID account, String address, String host, Instant now) {
         String id = Objects.requireNonNull(account, "account").toString();
         Objects.requireNonNull(address, "address");
+        Objects.requireNonNull(host, "host");
         long at = Objects.requireNonNull(now, "now").toEpochMilli();
         return database.transaction(sql -> sql.queryFirst(
                         HOLDS,
                         statement -> {
                             statement.setString(1, id);
                             statement.setString(2, address);
-                            statement.setLong(3, at);
+                            statement.setString(3, host);
+                            statement.setLong(4, at);
                         },
                         row -> row.getLong("expires_at")))
                 .isPresent();
@@ -83,6 +89,15 @@ public final class SqlRememberedSessions implements RememberedSessions {
     public void forget(UUID account) {
         String id = Objects.requireNonNull(account, "account").toString();
         database.inTransaction(sql -> sql.update(FORGET, statement -> statement.setString(1, id)));
+    }
+
+    /**
+     * Drops every session that ran out by now, of every account. A new session drops its own account's, but one
+     * whose player never came back would stay. Answers how many went.
+     */
+    public int dropExpired(Instant now) {
+        long at = Objects.requireNonNull(now, "now").toEpochMilli();
+        return database.transaction(sql -> sql.update(DROP_ALL_EXPIRED, statement -> statement.setLong(1, at)));
     }
 
     @Override

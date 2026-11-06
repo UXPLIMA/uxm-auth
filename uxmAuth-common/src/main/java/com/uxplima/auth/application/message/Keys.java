@@ -121,6 +121,9 @@ public enum Keys implements MessageKey {
     KICK_TIMEOUT_REGISTER("kick.timeout-register", "<body>You took too long to register. Join again to try once more."),
     KICK_CANCELLED("kick.cancelled", "<body>You left before logging in. Join again whenever you like."),
     KICK_STORAGE("kick.storage", "<body>This server cannot reach its accounts right now. Try again in a minute."),
+    KICK_HOLD_UNSAVED(
+            "kick.hold-unsaved",
+            "<body>This server could not keep your things safe while you log in, so you were sent away with them. Join again."),
     KICK_TOO_MANY_ATTEMPTS("kick.too-many-attempts", "<body>Too many wrong passwords. Join again to try once more."),
     KICK_NAME_TOO_SHORT(
             "kick.name-too-short",
@@ -143,6 +146,10 @@ public enum Keys implements MessageKey {
             "kick.paid-name-moved",
             "<body>This name now belongs to its paid owner. Your account here is now <value><name><body>:"
                     + " change your name to it and join again. Your password and everything you had are as they were."),
+    KICK_PAID_SPELLING(
+            "kick.paid-spelling",
+            "<body>This name belongs to a paid Minecraft account, written with other capital letters."
+                    + " If the account is yours, join from the official launcher. If it is not, join under another name."),
     KICK_PREMIUM_ADDRESS(
             "kick.premium-address",
             "<body>This address is for paid Minecraft accounts, and your last try did not pass Mojang's check."
@@ -159,6 +166,9 @@ public enum Keys implements MessageKey {
                     + " name is yours."),
     KICK_NETWORK_CLAIM(
             "kick.network-claim", "<body>This server could not confirm your login with the network. Join again."),
+    KICK_NETWORK_CHANNEL(
+            "kick.network-channel",
+            "<body>Your client closed a channel the network needs to follow your login. Join again."),
     KICK_NAME_CASE(
             "kick.name-case",
             "<body>This name is registered as <value><name><body>. Join again with exactly that spelling."),
@@ -170,6 +180,10 @@ public enum Keys implements MessageKey {
     LOGIN_USAGE("login.usage", "<tag:'AUTH'> <body>Type your password after the command: <value>/login <password>"),
     LOGIN_ALREADY("login.already", "<tag:'AUTH'> <body>You are already logged in."),
     LOGIN_REFUSED("login.refused", "<tag:'AUTH'> <body>Your login was refused."),
+    LOGIN_LOCKED(
+            "login.locked",
+            "<etag:'ERROR'> <body>Too many wrong passwords or codes were typed for this account lately. Try again in"
+                    + " <value><time><body>."),
     CLAIM_UNAVAILABLE(
             "claim.unavailable",
             "<etag:'ERROR'> <body>This server cannot ask Mojang who owns a name, so there is nothing to claim here."),
@@ -177,6 +191,10 @@ public enum Keys implements MessageKey {
     CLAIM_NOT_THIS_RULE(
             "claim.not-this-rule",
             "<etag:'ERROR'> <body>This server proves paid names on its own, so there is nothing to claim."),
+    CLAIM_SHARED_ADDRESS(
+            "claim.shared-address",
+            "<etag:'ERROR'> <body>You connect through a service that hides your own address, so a claim cannot be"
+                    + " tied to your next connection. Ask staff to settle the name."),
     PREMIUM_LOG_IN_FIRST(
             "premium.log-in-first",
             "<etag:'ERROR'> <body>Log in first, then use <value>/premium<body> to prove your name on your next"
@@ -279,6 +297,10 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Your account must ask a code from an authenticator app before you can play. Type"
                     + " <value>/2fa setup<body> to set it up."),
     FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
+    FACTOR_PASSWORD_FIRST(
+            "factor.password-first",
+            "<etag:'ERROR'> <body>A remembered session cannot set up the app. Log out with <value>/logout<body> and"
+                    + " log in with your password first."),
     FACTOR_CODE_NEEDED(
             "factor.code-needed",
             "<body>Now type the code from your authenticator app or the one mailed to you, or a backup code, with"
@@ -336,16 +358,18 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>This server requires an address, so it cannot be removed. Link another with"
                     + " <value>/email add <address><body> to replace it."),
     EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
-    RECOVER_SENT(
-            "recover.sent",
-            "<good>A code went to <value><address><good>. Type <value>/recover <code> <new"
+    EMAIL_PASSWORD_FIRST(
+            "email.password-first",
+            "<etag:'ERROR'> <body>A remembered session cannot link an address. Log out with <value>/logout<body> and"
+                    + " log in with your password first."),
+    RECOVER_REQUESTED(
+            "recover.requested",
+            "<good>If this account has a confirmed address, a code went to it. Type <value>/recover <code> <new"
                     + " password><good> within <value><minutes><good> minutes."),
     RECOVER_COOLDOWN(
             "recover.cooldown",
-            "<etag:'ERROR'> <body>A code went out a moment ago. Ask again in <value><seconds><body> seconds."),
-    RECOVER_NO_ADDRESS(
-            "recover.no-address",
-            "<etag:'ERROR'> <body>No address is linked to this account, so no code can be sent. Ask" + " the staff."),
+            "<etag:'ERROR'> <body>Too many codes were asked from your address lately. Ask again in"
+                    + " <value><minutes><body> minutes."),
     RECOVER_NOT_WAITING(
             "recover.not-waiting", "<etag:'ERROR'> <body>A password is recovered at the login, before it is typed."),
     RECOVER_USAGE(
@@ -379,7 +403,7 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Players are online. Move the database while nobody plays."),
     DATABASE_MOVE_TARGET_FULL(
             "database.move-target-full",
-            "<etag:'ERROR'> <body>The target holds this plugin's accounts already, and nothing was written. Name an empty database."),
+            "<etag:'ERROR'> <body>The target holds rows of this plugin already, and nothing was written. A move that stopped halfway can leave them: empty this plugin's tables there, or name an empty database, and run this again."),
     DATABASE_MOVE_DONE(
             "database.move-done",
             "<tag:'AUTH'> <body>Copied <value><rows><body> rows in <value><tables><body> tables. Copy the three lines of <value>storage.move-to<body> into <value>storage<body>, empty <value>storage.move-to<body>, and restart the server to finish the move."),
@@ -408,6 +432,9 @@ public enum Keys implements MessageKey {
     STAFF_FORCED_LOGIN(
             "staff.forced-login",
             "<tag:'AUTH'> <body>Every server was told to let <value><name><body> in, wherever they wait."),
+    STAFF_FORCED_NOBODY(
+            "staff.forced-nobody",
+            "<etag:'ERROR'> <body>Nobody waits to log in as <value><name><body> on this server, so nobody was let in."),
     STAFF_LET_IN("staff.let-in", "<tag:'AUTH'> <body>Staff let you in."),
     STAFF_UNBANNED("staff.unbanned", "<tag:'AUTH'> <body><value><address><body> is no longer banned."),
     STAFF_NOT_BANNED(
@@ -429,6 +456,9 @@ public enum Keys implements MessageKey {
             "staff.registered-you",
             "<tag:'AUTH'> <body>Staff made your account. Log in with the password they gave you."),
     STAFF_NAME_TAKEN("staff.name-taken", "<etag:'ERROR'> <body>An account holds <value><name><body> already."),
+    STAFF_NAME_CASE(
+            "staff.name-case",
+            "<etag:'ERROR'> <body><value><name><body> is online here as <value><online><body>. Write the name exactly that way."),
     STAFF_NAME_REFUSED(
             "staff.name-refused", "<etag:'ERROR'> <body><value><name><body> breaks the name rules of config.conf."),
     STAFF_FACTOR_OFF(

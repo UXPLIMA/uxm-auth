@@ -17,9 +17,21 @@ only with the right signature, so a player who reaches it some other way is aske
    data folder, readable by its owner only, and says where in its console.
 4. Copy that secret into `network.secret` on every backend server, set `network.enabled = true` and set
    `network.server-name` to the server's name in the proxy's list. Keep the secret private: whoever has it can
-   log anybody in. A server with the network on and no secret refuses to start.
+   log anybody in. A server with the network on and no secret, or no name, refuses to start.
 
 Leave `network.enabled` off on a server that stands alone.
+
+### Updating
+
+The proxy and every server must run the same uxmAuth release. A claim names the server it is written for and a
+report the server that wrote it, and each use of the secret signs with a key of its own, so a server takes no
+claim from an older proxy and the proxy takes no report from an older server. Such a claim or report is refused
+and the console says `OUTDATED`; update the proxy and every server together, during one restart.
+
+Every server now needs `network.server-name`, its name in the proxy's list: a server with the network on and no
+name refuses every login until it is set, because it could not tell a claim written for it from one written for
+another server. Redis bulletins change format with the same release, so members of older and newer releases do
+not hear each other.
 
 ## Routing
 
@@ -36,7 +48,10 @@ On the proxy:
   every move to another server, waits for the login.
 
 `network.claim-seconds` is how long a signed claim stays good; the proxy writes a fresh one before each
-connection to a server.
+connection to a server, for that server alone. A server takes each claim once, so a copy of one is refused, and
+takes the claim off the player's profile before anyone else can see it. A server tells the proxy, on the
+`uxmauth:network` channel the proxy opens on each player's connection, when a player waits again after a logout
+there; a client that closes that channel is sent away.
 
 ## Redis
 
@@ -53,7 +68,8 @@ database.
   uxmAuth.
 - `limbo`: a world built inside the proxy that no server sees, where the player types `/login` or `/register`.
   It needs LimboAPI on the proxy, version 1.1 or 2. `network.limbo-file` names a schematic in the data folder
-  the world is built from; without it the player stands on a small platform at `network.limbo-spawn`.
+  the world is built from; without it the player stands on a small platform at `network.limbo-spawn`. A player
+  Mojang proved whose account asks for a second-factor code waits there too and types `/2fa <code>`.
 
 A proxy asked for its own world that cannot build it, because LimboAPI is missing or is a release the plugin does
 not know, refuses every login and says why in its console. A server without uxmAuth would let a waiting player

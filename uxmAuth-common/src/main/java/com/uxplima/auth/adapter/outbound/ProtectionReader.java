@@ -19,6 +19,9 @@ import com.uxplima.uxmlib.config.HoconConfig;
 final class ProtectionReader {
 
     private static final List<Integer> SHIPPED_STEPS = List.of(5, 30, 60, 1440);
+    private static final List<Integer> SHIPPED_LOCK_STEPS = List.of(1, 5, 15, 60);
+    // A lock longer than a day would let a stranger keep an owner out for good with a few wrong passwords a day.
+    private static final int LONGEST_LOCK_MINUTES = 1440;
     // The letters and digits that are not read as one another: no 0 and O, no 1, I and L.
     private static final String SHIPPED_CHARACTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -30,6 +33,8 @@ final class ProtectionReader {
                 list(config, "shared-address-sources"),
                 sessions(config),
                 bans(config),
+                wideBans(config),
+                lockout(config),
                 connections(config),
                 accounts(config),
                 countries(config),
@@ -116,6 +121,52 @@ final class ProtectionReader {
         } catch (IllegalArgumentException wrong) {
             throw new IllegalArgumentException("protection.bans: " + wrong.getMessage(), wrong);
         }
+    }
+
+    /** How the wrong passwords and codes of one account, typed from anywhere, lock it for a while. */
+    private static BanSteps lockout(HoconConfig config) {
+        List<Integer> minutes =
+                config.nodeAt("protection", "account-lock", "steps-minutes").virtual()
+                        ? SHIPPED_LOCK_STEPS
+                        : config.getList("protection.account-lock.steps-minutes", Integer.class);
+        if (minutes.stream().anyMatch(length -> length > LONGEST_LOCK_MINUTES)) {
+            throw new IllegalArgumentException("protection.account-lock.steps-minutes: a lock lasts at most "
+                    + LONGEST_LOCK_MINUTES + " minutes, so a stranger cannot keep an owner out for good; got "
+                    + minutes);
+        }
+        int failures = config.getInt("protection.account-lock.failures", 5);
+        int hours = config.getInt("protection.account-lock.forgive-after-hours", 24);
+        if (failures < 0) {
+            throw new IllegalArgumentException(
+                    "protection.account-lock.failures must be 0 (off) or more, got: " + failures);
+        }
+        try {
+            // 0 turns the lock off: tries are still counted, but no count ever reaches the limit.
+            return new BanSteps(
+                    minutes.stream().map(length -> Duration.ofMinutes(length)).toList(),
+                    failures == 0 ? Integer.MAX_VALUE : failures,
+                    Duration.ofHours(hours));
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException("protection.account-lock: " + wrong.getMessage(), wrong);
+        }
+    }
+
+    /**
+     * The bans of a whole IPv6 /48: the same steps, after more wrong passwords than one /64 may make, or none at 0.
+     * A limit below {@code bans.failures} counts as {@code bans.failures} rather than refusing the start, so a
+     * value an operator writes never turns every login away.
+     */
+    private static BanSteps wideBans(HoconConfig config) {
+        BanSteps bans = bans(config);
+        int failures = config.getInt("protection.bans.failures-per-48", 0);
+        if (failures < 0) {
+            throw new IllegalArgumentException(
+                    "protection.bans.failures-per-48 must be 0 (off) or more, got: " + failures);
+        }
+        // 0 turns the /48 ban off: a mobile carrier hands every device a /64 of one shared /48, and one person
+        // hopping between them would otherwise ban everybody there.
+        int limit = failures == 0 ? Integer.MAX_VALUE : Math.max(failures, bans.failures());
+        return new BanSteps(bans.lengths(), limit, bans.forgiveAfter());
     }
 
     private static Remember.Settings sessions(HoconConfig config) {

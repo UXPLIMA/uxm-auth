@@ -10,10 +10,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Seals a bulletin with the network's secret, and opens one only signed and fresh.
+ * Seals a bulletin with the bulletins' own key, made from the network's secret, and opens one only signed and
+ * fresh.
  *
- * <p>A bulletin's text opens with its own version mark, which no claim's text carries, so the one secret that
- * signs both can never make a claim pass for a bulletin or a bulletin for a claim.
+ * <p>The key is not the one claims or reports are signed with, and a bulletin's text opens with its own version
+ * mark besides, so a claim never passes for a bulletin or a bulletin for a claim.
  */
 public final class Bulletins {
 
@@ -29,7 +30,7 @@ public final class Bulletins {
         }
     }
 
-    private static final String VERSION = "b1";
+    private static final String VERSION = "b2";
     private static final String SEPARATOR = "|";
     private static final String SESSIONS_ENDED = "S";
     private static final String LET_IN = "L";
@@ -51,7 +52,7 @@ public final class Bulletins {
 
     public String seal(Sent sent) {
         Objects.requireNonNull(sent, "sent");
-        return claims.seal(
+        return claims.sealBulletin(
                 switch (sent.bulletin()) {
                     case Bulletin.SessionsEnded ended ->
                         text(sent, SESSIONS_ENDED, ended.account(), ended.keep().orElse(""));
@@ -79,7 +80,7 @@ public final class Bulletins {
     public Optional<Sent> open(String sealed, Instant now) {
         Objects.requireNonNull(sealed, "sealed");
         Objects.requireNonNull(now, "now");
-        return claims.unseal(sealed)
+        return claims.unsealBulletin(sealed)
                 .flatMap(Bulletins::parse)
                 .filter(read -> claims.fresh(read.issued(), now))
                 .filter(read -> firstTime(read, now));

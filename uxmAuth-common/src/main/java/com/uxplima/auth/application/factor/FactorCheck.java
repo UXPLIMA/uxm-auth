@@ -19,8 +19,12 @@ import com.uxplima.auth.domain.password.Password;
 
 /**
  * Whether a typed code answers an account's second factor: the app's code for now, taken once across every server,
- * the login code mailed to it, or one of the backup codes, each spent once. A backup code is checked against slow hashes, so this runs off the server
- * thread, on the lane the password hashes run on.
+ * the login code mailed to it, or one of the backup codes, each spent once. A backup code is checked against slow
+ * hashes, so this runs off the server thread, on the lane the password hashes run on.
+ *
+ * <p>The shapes can meet: an app code of eight digits made only of 2 to 9 is also shaped like a backup code of
+ * eight characters. So the shape never decides which factor is asked: the app is asked first, as it costs no hash,
+ * then the backup codes when the code is shaped like one, then the mailed code.
  */
 public final class FactorCheck {
 
@@ -54,11 +58,7 @@ public final class FactorCheck {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(typed, "typed");
         Objects.requireNonNull(now, "now");
-        Optional<String> code = backup.get().read(typed);
-        if (code.isPresent()) {
-            return spendsBackup(account, code.get());
-        }
-        return appTakes(account, typed, now) || mailed.takes(account, typed.strip());
+        return appOrBackup(account, typed, now) || mailed.takes(account, typed.strip());
     }
 
     /**
@@ -69,8 +69,11 @@ public final class FactorCheck {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(typed, "typed");
         Objects.requireNonNull(now, "now");
+        if (appTakes(account, typed, now)) {
+            return true;
+        }
         Optional<String> code = backup.get().read(typed);
-        return code.isPresent() ? spendsBackup(account, code.get()) : appTakes(account, typed, now);
+        return code.isPresent() && spendsBackup(account, code.get());
     }
 
     /** Hashes a new set for the account in place of every code before it, and gives it back to be shown once. */

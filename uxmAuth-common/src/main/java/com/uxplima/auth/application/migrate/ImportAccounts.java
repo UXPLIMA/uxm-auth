@@ -3,6 +3,7 @@ package com.uxplima.auth.application.migrate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +34,9 @@ import org.jspecify.annotations.Nullable;
  * Brings another login plugin's accounts over, once.
  *
  * <p>The whole source is read before anything is written, so a source that fails halfway leaves nothing behind
- * and marks nothing complete; the next start reads it again. Every account is written by its name, so a second run
- * updates what the first wrote and never doubles it. An account the plugin held already keeps its own id.
+ * and marks nothing complete; the next start reads it again. Every account is written by its name, and each one the
+ * import makes is remembered under its source, so a second run updates what the first made and never doubles it. A
+ * name this plugin held before the import is left as it is and counted as held.
  */
 public final class ImportAccounts {
 
@@ -60,7 +62,12 @@ public final class ImportAccounts {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    /** Imports the source unless it was imported before, and says what it did. A failure marks nothing. */
+    /**
+     * Imports the source unless it was imported before, and says what it did. A failure marks nothing, and neither
+     * does a source that held no row at all: a file or table that came up empty, by a wrong path or a source that has
+     * not written yet, must not be marked done before any account came over. An empty source is only read again at
+     * every start until the operator empties {@code import.source}, which costs nothing.
+     */
     public ImportReport run(ImportSource source) {
         String key = Objects.requireNonNull(source, "source").key();
         if (marks.completed(key).isPresent()) {
@@ -69,9 +76,16 @@ public final class ImportAccounts {
         Tally tally = new Tally();
         Map<String, Picked> picked = new LinkedHashMap<>();
         try (Stream<ImportedAccount> rows = source.read()) {
-            rows.forEach(row -> pick(row, picked, tally));
+            rows.forEach(row -> {
+                tally.read++;
+                pick(row, picked, tally);
+            });
         }
-        picked.values().forEach(one -> write(one, tally));
+        if (tally.read == 0) {
+            return tally.report(key);
+        }
+        onePerPremiumId(picked, tally);
+        picked.values().forEach(one -> write(one, key, tally));
         marks.complete(key, clock.instant());
         return tally.report(key);
     }
@@ -99,16 +113,65 @@ public final class ImportAccounts {
         }
     }
 
-    private void write(Picked one, Tally tally) {
+    /**
+     * Keeps one name per premium id: a source that kept a paid player under two names, as an old name beside a new
+     * one, gives the id to the name that played last. Two accounts under one premium id would let the lookup by that
+     * id answer either.
+     */
+    private static void onePerPremiumId(Map<String, Picked> picked, Tally tally) {
+        Map<UUID, Picked> latest = new HashMap<>();
+        for (Picked one : picked.values()) {
+            UUID premiumId = one.row().premiumId();
+            if (premiumId != null) {
+                latest.merge(premiumId, one, (kept, next) -> next.seen().isAfter(kept.seen()) ? next : kept);
+            }
+        }
+        picked.values().removeIf(one -> {
+            UUID premiumId = one.row().premiumId();
+            boolean older = premiumId != null && !one.equals(latest.get(premiumId));
+            if (older) {
+                tally.duplicates++;
+            }
+            return older;
+        });
+    }
+
+    /**
+     * Writes one account. A name this plugin held before the import keeps its account as it is, and is counted:
+     * writing over it would give it another plugin's password, kind and premium id while its mail, factors and
+     * sessions stayed. Only an account this import made, in a run that failed before it completed, is written again.
+     */
+    private void write(Picked one, String key, Tally tally) {
         Optional<Account> existing = accounts.findByName(one.name());
+        if (existing.isPresent() && !marks.wrote(key, existing.get().id())) {
+            tally.held++;
+            return;
+        }
+        UUID premiumId = one.row().premiumId();
+        if (premiumId != null
+                && accounts.findByPremiumId(premiumId)
+                        .filter(holder -> existing.map(Account::id)
+                                .filter(holder.id()::equals)
+                                .isEmpty())
+                        .isPresent()) {
+            // Another account here proved that premium id already.
+            tally.held++;
+            return;
+        }
         Account account = accountFor(one, existing);
         if (existing.isPresent()) {
             accounts.update(account);
             tally.updated++;
+        } else if (accounts.findById(account.id()).isPresent()) {
+            // The source's id is an account under another name here, which is not this import's to change.
+            tally.held++;
+            return;
         } else if (accounts.insert(account) instanceof AccountRepository.Inserted) {
+            marks.written(key, account.id());
             tally.imported++;
         } else {
-            tally.duplicates++;
+            // Somebody registered the name while the import ran.
+            tally.held++;
             return;
         }
         if (one.row().password() instanceof LegacyHashes.Unknown unknown) {
@@ -160,9 +223,11 @@ public final class ImportAccounts {
 
     /** The counts of one run, kept on the one thread that runs it. */
     private static final class Tally {
+        int read;
         int imported;
         int updated;
         int duplicates;
+        int held;
         int refusedSecrets;
         int refusedNameCount;
         final List<String> refusedNames = new ArrayList<>();
@@ -179,9 +244,11 @@ public final class ImportAccounts {
             return new ImportReport(
                     key,
                     false,
+                    read,
                     imported,
                     updated,
                     duplicates,
+                    held,
                     refusedSecrets,
                     refusedNames,
                     refusedNameCount,

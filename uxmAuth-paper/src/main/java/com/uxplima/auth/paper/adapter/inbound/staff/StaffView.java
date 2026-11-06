@@ -180,6 +180,8 @@ public final class StaffView implements Staff {
             case SESSION -> Keys.METHOD_SESSION;
             case FORCED -> Keys.METHOD_FORCED;
             case NETWORK -> Keys.METHOD_NETWORK;
+            // Staff read how the player really came in: a remembered session, carried here by the proxy.
+            case NETWORK_SESSION -> Keys.METHOD_SESSION;
         };
     }
 }

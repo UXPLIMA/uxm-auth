@@ -67,6 +67,16 @@ public final class TimedAccounts implements AccountRepository {
     }
 
     @Override
+    public void markVerified(UUID id) {
+        long start = timings.start();
+        try {
+            table.markVerified(id);
+        } finally {
+            done(start);
+        }
+    }
+
+    @Override
     public void recordLogin(UUID id, Instant at, String address) {
         long start = timings.start();
         try {
@@ -151,6 +161,16 @@ public final class TimedAccounts implements AccountRepository {
         long start = timings.start();
         try {
             table.delete(id);
+        } finally {
+            done(start);
+        }
+    }
+
+    @Override
+    public boolean deleteIfInactive(UUID id, Instant before) {
+        long start = timings.start();
+        try {
+            return table.deleteIfInactive(id, before);
         } finally {
             done(start);
         }

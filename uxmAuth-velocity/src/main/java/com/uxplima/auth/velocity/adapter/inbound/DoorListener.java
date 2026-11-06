@@ -1,6 +1,8 @@
 package com.uxplima.auth.velocity.adapter.inbound;
 
 import java.net.InetSocketAddress;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -17,6 +19,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.state.AuthMethod;
+import com.uxplima.auth.domain.state.AuthState;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.Subscribe;
@@ -51,6 +54,7 @@ public final class DoorListener {
     private final Logger logger;
     private final SecondStep secondStep;
     private final Function<UUID, Optional<Player>> online;
+    private final Waiters waiters;
 
     /**
      * The connections the waiting world settled before their login, by their address and port, which no other
@@ -58,7 +62,10 @@ public final class DoorListener {
      */
     private final Set<InetSocketAddress> settledEarly = ConcurrentHashMap.newKeySet();
 
-    /** The connections the waiting world turned away as a second one under a name already online. */
+    /**
+     * The connections the waiting world turned away as a second one under a name already online or waiting, until
+     * they leave. They settled nothing, so their leaving ends nothing either.
+     */
     private final Set<InetSocketAddress> turnedAway = ConcurrentHashMap.newKeySet();
 
     /**
@@ -104,6 +111,35 @@ public final class DoorListener {
             Logger logger,
             SecondStep secondStep,
             Function<UUID, Optional<Player>> online) {
+        this(
+                door,
+                admission,
+                remember,
+                accounts,
+                sessions,
+                words,
+                logger,
+                secondStep,
+                online,
+                new Waiters(Clock.systemUTC(), () -> Duration.ofMinutes(3)));
+    }
+
+    /**
+     * @param waiters the connections the waiting world settled before Velocity knows them, so a second connection
+     *     under the id or the name of one is turned away
+     */
+    public DoorListener(
+            ProxyDoor door,
+            Admission admission,
+            Remember remember,
+            Function<UUID, Optional<Account>> accounts,
+            ProxySessions sessions,
+            DoorWords words,
+            Logger logger,
+            SecondStep secondStep,
+            Function<UUID, Optional<Player>> online,
+            Waiters waiters) {
+        this.waiters = Objects.requireNonNull(waiters, "waiters");
         this.online = Objects.requireNonNull(online, "online");
         this.door = Objects.requireNonNull(door, "door");
         this.admission = Objects.requireNonNull(admission, "admission");
@@ -208,7 +244,7 @@ public final class DoorListener {
      */
     void login(LoginEvent event) {
         Player player = event.getPlayer();
-        if (turnedAway.remove(player.getRemoteAddress())) {
+        if (turnedAway.contains(player.getRemoteAddress())) {
             event.setResult(ResultedEvent.ComponentResult.denied(words.alreadyOnline()));
             return;
         }
@@ -221,10 +257,12 @@ public final class DoorListener {
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Premium premium -> {
-                        passed(
-                                player.getUniqueId(),
-                                premium.state().account(),
-                                premium.state().method());
+                        if (!settledEarly.remove(player.getRemoteAddress())) {
+                            passed(
+                                    player.getUniqueId(),
+                                    premium.state().account(),
+                                    premium.state().method());
+                        }
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Untouched untouched -> {
@@ -242,7 +280,7 @@ public final class DoorListener {
     /** What the door made of a player when LimboAPI asked whether to hold them. */
     public sealed interface Early {
 
-        /** The player waits for the password, under this profile. */
+        /** The player waits for the password, or for the app's code, under this profile. */
         record Waits(GameProfile profile) implements Early {
             public Waits {
                 Objects.requireNonNull(profile, "profile");
@@ -262,25 +300,58 @@ public final class DoorListener {
      * login after keeps what was settled, a login in the world among it.
      *
      * <p>LimboAPI asks after Velocity's check for a second connection, but with kick-existing-players on that check
-     * lets the newcomer through while the first is still online. A session is kept by id, so settling the newcomer
-     * would end the online player's login. Such a newcomer settles nothing.
+     * lets the newcomer through while the first is still online, and it never sees a player LimboAPI still holds in
+     * the world, whom Velocity does not know yet. A session, a wait in the world and its login are all kept by id,
+     * so settling the newcomer would hand it the first one's: a login the first one made would answer the
+     * newcomer's. Such a newcomer settles nothing and is turned away, whether the first one is online or waiting.
      *
      * @param taken whether a player under this profile's id or name is on the proxy already
      */
     public Early settleEarly(Player player, Predicate<GameProfile> taken) {
         Objects.requireNonNull(taken, "taken");
         InetSocketAddress remote = Objects.requireNonNull(player, "player").getRemoteAddress();
-        if (!(door.arrival(remote).orElse(null) instanceof ProxyDoor.Arrival.Usual usual)) {
+        ProxyDoor.Arrival arrival = door.arrival(remote).orElse(null);
+        if (arrival instanceof ProxyDoor.Arrival.Premium premium) {
+            return owesTheCode(player, remote, premium.state(), taken);
+        }
+        if (!(arrival instanceof ProxyDoor.Arrival.Usual usual)) {
             return new Early.Free();
         }
         GameProfile profile = door.profile(player.getGameProfile(), false, remote);
-        if (taken.test(profile)) {
-            turnedAway.add(remote);
+        if (!hold(remote, profile, taken)) {
             return new Early.Taken();
         }
         waitOrResume(profile.getId(), profile.getName(), player, usual);
         settledEarly.add(remote);
         return sessions.waitsAtTheProxy(profile.getId()) ? new Early.Waits(profile) : new Early.Free();
+    }
+
+    /**
+     * A player Mojang proved, whose account asks the app's code: they wait in the world for it, under the account's
+     * id and name, since no server may be reached before the code. Any other proved player goes on.
+     */
+    private Early owesTheCode(
+            Player player, InetSocketAddress remote, AuthState.Authenticated proved, Predicate<GameProfile> taken) {
+        Account account = proved.account();
+        if (!secondStep.asks(account, proved.method())) {
+            return new Early.Free();
+        }
+        GameProfile profile = new GameProfile(account.id(), account.name().value(), player.getGameProfileProperties());
+        if (!hold(remote, profile, taken)) {
+            return new Early.Taken();
+        }
+        passed(account.id(), account, proved.method());
+        settledEarly.add(remote);
+        return sessions.waitsAtTheProxy(account.id()) ? new Early.Waits(profile) : new Early.Free();
+    }
+
+    /** The connection holds the profile's id and name, unless a player online or waiting holds either already. */
+    private boolean hold(InetSocketAddress remote, GameProfile profile, Predicate<GameProfile> taken) {
+        if (taken.test(profile) || !waiters.hold(remote, profile.getId(), profile.getName())) {
+            turnedAway.add(remote);
+            return false;
+        }
+        return true;
     }
 
     /** A player with a password waits for it, unless a session from this address lets them in. */
@@ -308,15 +379,38 @@ public final class DoorListener {
 
     void left(DisconnectEvent event) {
         Player player = event.getPlayer();
-        settledEarly.remove(player.getRemoteAddress());
-        turnedAway.remove(player.getRemoteAddress());
-        door.gone(player.getRemoteAddress());
-        // Velocity tells every plugin that a second connection it turned away left. The session under the id is the
-        // other player's then, and stays.
-        if (online.apply(player.getUniqueId()).filter(held -> held != player).isPresent()) {
+        InetSocketAddress remote = player.getRemoteAddress();
+        settledEarly.remove(remote);
+        boolean refused = turnedAway.remove(remote);
+        door.gone(remote);
+        Optional<UUID> waited = waiters.release(remote);
+        if (refused) {
+            // A second connection the waiting world turned away settled nothing: the session is the first one's.
             return;
         }
-        sessions.forget(event.getPlayer().getUniqueId());
+        forget(player, player.getUniqueId());
+        // The world settled the connection under the id its account is kept by, which the player may not carry.
+        waited.filter(id -> !id.equals(player.getUniqueId())).ifPresent(id -> forget(player, id));
+    }
+
+    /**
+     * The session under this id ends with the connection that left, unless it is another connection's: Velocity
+     * tells every plugin that a second connection it turned away left, and the waiting world may hold the first.
+     */
+    private void forget(Player player, UUID id) {
+        if (online.apply(id).filter(held -> held != player).isPresent()
+                || waiters.heldByAnother(player.getRemoteAddress(), id)) {
+            return;
+        }
+        sessions.forget(id);
+    }
+
+    /**
+     * The player left the waiting world without being let out, however they left it: what the world held for the
+     * connection is let go at once, before Velocity says the connection is gone.
+     */
+    public void leftTheWorld(Player player) {
+        waiters.release(Objects.requireNonNull(player, "player").getRemoteAddress());
     }
 
     /** A name as the console may print it: a control character could rewrite the line around it. */

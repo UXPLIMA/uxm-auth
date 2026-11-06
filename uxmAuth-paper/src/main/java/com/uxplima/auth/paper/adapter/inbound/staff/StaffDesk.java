@@ -4,8 +4,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -62,13 +64,29 @@ public final class StaffDesk implements StaffActions {
     /**
      * What the desk reaches on this server: the player online under a name, and what a made account means to them.
      *
-     * @param online the id of the player online here under exactly this name, when there is one
+     * @param online the player online here under this name in any case, when there is one
      * @param registered tells a player waiting under a made account's name to log in
+     * @param waiting whether a connection under this name waits to log in here, in the world or at the dialog
+     * @param networked whether other servers hear the bulletins too, so a player may wait on one of them
      */
-    public record Reach(Function<String, Optional<UUID>> online, Consumer<Account> registered) {
+    public record Reach(
+            Function<String, Optional<Online>> online,
+            Consumer<Account> registered,
+            Predicate<String> waiting,
+            BooleanSupplier networked) {
         public Reach {
             Objects.requireNonNull(online, "online");
             Objects.requireNonNull(registered, "registered");
+            Objects.requireNonNull(waiting, "waiting");
+            Objects.requireNonNull(networked, "networked");
+        }
+    }
+
+    /** A player online here: their id, and their name as the server spells it. */
+    public record Online(UUID id, String name) {
+        public Online {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(name, "name");
         }
     }
 
@@ -129,9 +147,15 @@ public final class StaffDesk implements StaffActions {
         if (!gate.allows(Objects.requireNonNull(sender, "sender"), StaffAction.FORCE_LOGIN)) {
             return CompletableFuture.completedFuture(null);
         }
+        // Read before the ask: on a server alone the ask lets the player in at once, and they wait no longer.
+        boolean reachable = reach.networked().getAsBoolean() || reach.waiting().test(name);
         return replies.on(sender, lane.submit(() -> cases.force().ask(new PlayerName(name))), asked -> {
             if (asked == ForceLogin.Asked.UNKNOWN) {
                 messages.send(sender, Keys.STAFF_UNKNOWN, Text.placeholder("name", name));
+                return;
+            }
+            if (!reachable) {
+                messages.send(sender, Keys.STAFF_FORCED_NOBODY, Text.placeholder("name", name));
                 return;
             }
             messages.send(sender, Keys.STAFF_FORCED_LOGIN, Text.placeholder("name", name));
@@ -207,8 +231,19 @@ public final class StaffDesk implements StaffActions {
         if (!gate.allows(Objects.requireNonNull(sender, "sender"), StaffAction.FORCE_REGISTER)) {
             return CompletableFuture.completedFuture(null);
         }
+        Optional<Online> here = reach.online().apply(name);
+        if (here.isPresent() && !here.get().name().equals(name)) {
+            // The server finds a player whatever the case, and the account would take their id under a name
+            // spelled otherwise: another account's name for the same player.
+            messages.send(
+                    sender,
+                    Keys.STAFF_NAME_CASE,
+                    Text.placeholder("name", name),
+                    Text.placeholder("online", here.get().name()));
+            return CompletableFuture.completedFuture(null);
+        }
         Password fresh = Password.of(password);
-        Optional<UUID> online = reach.online().apply(name);
+        Optional<UUID> online = here.map(Online::id);
         return replies.on(sender, lane.submit(() -> cases.register().register(name, fresh, online)), outcome -> {
             TagResolver who = Text.placeholder("name", name);
             switch (outcome) {

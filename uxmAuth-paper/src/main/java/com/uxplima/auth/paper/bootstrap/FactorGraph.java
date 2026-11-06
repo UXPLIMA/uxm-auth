@@ -41,6 +41,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.FactorScreen;
 import com.uxplima.auth.paper.adapter.inbound.screen.Guest;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.factor.QrMap;
+import com.uxplima.auth.paper.adapter.outbound.hold.PluginItems;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
@@ -70,13 +71,19 @@ final class FactorGraph {
     private final Sessions sessions;
     private final Messages messages;
 
+    /**
+     * Where a wrong code counts: against the address, against the account wherever it came from, and toward the
+     * captcha of the name.
+     */
+    record Guards(LogIn.Failures failures, LogIn.Lockout lockout, LogIn.Captcha captcha) {}
+
     FactorGraph(
             Plugin plugin,
             PluginSettings settings,
             Database database,
             AccountRepository accounts,
             Sessions sessions,
-            LogIn.Failures failures,
+            Guards guards,
             Predicate<UUID> bedrock,
             Hashing hashing,
             HashingLane lane,
@@ -86,9 +93,11 @@ final class FactorGraph {
             AuthScreens screens,
             ScreenShower shower,
             MailGraph mail,
-            Factors factors) {
+            Factors factors,
+            PluginItems pluginItems) {
         this.sessions = sessions;
         this.messages = messages;
+        LogIn.Failures failures = guards.failures();
         Path folder = plugin.getDataFolder().toPath();
         this.factors = factors;
         this.secondStep = new SecondStep(
@@ -99,7 +108,8 @@ final class FactorGraph {
                 () -> settings.current().secondFactor().setup().totp(),
                 () -> settings.current().secondFactor().setup().backup(),
                 new MailedLoginCode(mail.emails, mail.codes));
-        ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, failures, Instant::now);
+        ConfirmFactor confirm = new ConfirmFactor(
+                accounts, sessions, check, failures, guards.lockout(), guards.captcha(), Instant::now);
         this.screen = new FactorScreen(confirm, screens, shower, messages, lane);
         SetUpTotp setUp = new SetUpTotp(
                 factors,
@@ -109,6 +119,8 @@ final class FactorGraph {
                 new SecureRandom(),
                 Instant::now);
         Optional<QrMap> qr = QrMap.open(plugin.getServer(), folder.resolve("qr-map.id"), plugin.getLogger());
+        // The QR map is the plugin's: the hold never keeps it as something that reached a waiting player.
+        qr.ifPresent(map -> pluginItems.add(map::holds));
         OwedSetups owed = new OwedSetups(sessions);
         this.setup = new FactorSetup(
                 setUp,

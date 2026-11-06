@@ -52,7 +52,7 @@ public final class SessionsAuthApi implements AuthApi {
             case BEDROCK -> LoginWay.BEDROCK;
             case SESSION -> LoginWay.SESSION;
             case FORCED -> LoginWay.FORCED;
-            case NETWORK -> LoginWay.NETWORK;
+            case NETWORK, NETWORK_SESSION -> LoginWay.NETWORK;
         };
     }
 

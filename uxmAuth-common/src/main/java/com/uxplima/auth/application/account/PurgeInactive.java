@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.port.AccountRepository;
@@ -18,6 +19,10 @@ import org.jspecify.annotations.Nullable;
  * Removes the accounts nobody logged in to for the operator's window, with everything kept under them, in batches.
  * On a network every server writes its logins to the one table, so a login anywhere keeps an account. It is off
  * until the operator turns it on. It ticks often and runs when its check is due, so a reload of the settings counts.
+ *
+ * <p>An account is chosen by one read and removed by another step, and a player may log in between them, so the
+ * removal decides again that the account is idle; an account a connection here holds, at the door or in the game,
+ * is left alone too.
  */
 public final class PurgeInactive {
 
@@ -41,14 +46,21 @@ public final class PurgeInactive {
 
     private final InactiveAccounts inactive;
     private final AccountRepository accounts;
+    private final Predicate<UUID> online;
     private final Supplier<Settings> settings;
     private final Clock clock;
     private final AtomicReference<@Nullable Instant> lastRun = new AtomicReference<>();
 
+    /** @param online whether a connection here holds this account now, at the door or in the game */
     public PurgeInactive(
-            InactiveAccounts inactive, AccountRepository accounts, Supplier<Settings> settings, Clock clock) {
+            InactiveAccounts inactive,
+            AccountRepository accounts,
+            Predicate<UUID> online,
+            Supplier<Settings> settings,
+            Clock clock) {
         this.inactive = Objects.requireNonNull(inactive, "inactive");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
+        this.online = Objects.requireNonNull(online, "online");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -64,11 +76,18 @@ public final class PurgeInactive {
         lastRun.set(at);
         Instant before = at.minus(now.after());
         int removed = 0;
+        UUID after = null;
         List<UUID> batch;
         do {
-            batch = inactive.inactiveSince(before, now.keepPremium(), BATCH);
-            batch.forEach(accounts::delete);
-            removed += batch.size();
+            batch = inactive.inactiveSince(before, now.keepPremium(), after, BATCH);
+            for (UUID id : batch) {
+                if (!online.test(id) && accounts.deleteIfInactive(id, before)) {
+                    removed++;
+                }
+            }
+            if (!batch.isEmpty()) {
+                after = batch.getLast();
+            }
         } while (batch.size() == BATCH);
         return Optional.of(new Purged(removed));
     }

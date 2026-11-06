@@ -19,6 +19,11 @@ public interface Hellos {
         public Optional<HelloOutcome> take(InetSocketAddress address) {
             return Optional.empty();
         }
+
+        @Override
+        public boolean takeBedrock(InetSocketAddress address) {
+            return false;
+        }
     };
 
     /** Whether every connection's hello passes the door before its pre-login. */
@@ -26,4 +31,7 @@ public interface Hellos {
 
     /** What the hello of the connection at this address came to, read once. */
     Optional<HelloOutcome> take(InetSocketAddress address);
+
+    /** Whether Floodgate marked the channel of the connection at this address a Bedrock one at its hello, read once. */
+    boolean takeBedrock(InetSocketAddress address);
 }

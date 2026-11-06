@@ -29,15 +29,20 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             + " registration_address, last_login_at, last_address, unverified, registration_key";
     private static final String SELECT = "SELECT " + COLUMNS + " FROM uxmauth_account WHERE ";
     private static final String ALL = "SELECT " + COLUMNS + " FROM uxmauth_account";
-    private static final String INACTIVE =
-            "SELECT id FROM uxmauth_account WHERE COALESCE(last_login_at, registered_at) < ? ORDER BY id LIMIT ?";
+    private static final String INACTIVE = "SELECT id FROM uxmauth_account"
+            + " WHERE COALESCE(last_login_at, registered_at) < ? AND id > ? ORDER BY id LIMIT ?";
     private static final String INACTIVE_NOT_PREMIUM = "SELECT id FROM uxmauth_account"
-            + " WHERE COALESCE(last_login_at, registered_at) < ? AND kind <> 'PREMIUM' ORDER BY id LIMIT ?";
+            + " WHERE COALESCE(last_login_at, registered_at) < ? AND kind <> 'PREMIUM' AND id > ? ORDER BY id LIMIT ?";
+    /** The removal of an idle account decides again, in its own statement, that nobody logged in meanwhile. */
+    private static final String DELETE_INACTIVE =
+            "DELETE FROM uxmauth_account WHERE id = ? AND COALESCE(last_login_at, registered_at) < ?";
+
     private static final String INSERT =
             "INSERT INTO uxmauth_account (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
             + " premium_id = ?, password = ?, registered_at = ?, registration_address = ?, last_login_at = ?,"
             + " last_address = ?, unverified = ?, registration_key = ? WHERE id = ?";
+    private static final String MARK_VERIFIED = "UPDATE uxmauth_account SET unverified = 0 WHERE id = ?";
     private static final String RECORD_LOGIN =
             "UPDATE uxmauth_account SET last_login_at = ?, last_address = ? WHERE id = ?";
     private static final String REPLACE_PASSWORD =
@@ -65,8 +70,11 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
 
     /**
      * What every other store keeps under an account's id: the app and backup codes, the mail address and its codes,
-     * the login history and the last server. A deleted account drops them, so a later account under the same id,
-     * which an offline id derived from the name is, inherits none of them; a moved id takes them along.
+     * the login history, the last server, the website link, the import that made the account, the lock of wrong
+     * tries, the count of codes mailed and a dispute staff settled for the account. A deleted account drops them,
+     * so a later account under the same id, which an offline id derived from the name is, inherits none of them:
+     * above all not a name staff kept for somebody else, which would turn the paid owner away; a moved id takes
+     * them along, so a scheme move keeps what staff decided.
      */
     private static final List<String> DROP_KEPT = List.of(
             "DELETE FROM uxmauth_factor WHERE account_id = ?",
@@ -75,7 +83,11 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             "DELETE FROM uxmauth_mail_code WHERE account_id = ?",
             "DELETE FROM uxmauth_login WHERE account_id = ?",
             "DELETE FROM uxmauth_last_server WHERE account_id = ?",
-            "DELETE FROM uxmauth_website_link WHERE account_id = ?");
+            "DELETE FROM uxmauth_website_link WHERE account_id = ?",
+            "DELETE FROM uxmauth_dispute WHERE kept_for = ?",
+            "DELETE FROM uxmauth_import_account WHERE account_id = ?",
+            "DELETE FROM uxmauth_account_lock WHERE account_id = ?",
+            "DELETE FROM uxmauth_mail_send WHERE account_id = ?");
 
     private static final List<String> MOVE_KEPT = List.of(
             "UPDATE uxmauth_factor SET account_id = ? WHERE account_id = ?",
@@ -84,7 +96,11 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             "UPDATE uxmauth_mail_code SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_login SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_last_server SET account_id = ? WHERE account_id = ?",
-            "UPDATE uxmauth_website_link SET account_id = ? WHERE account_id = ?");
+            "UPDATE uxmauth_website_link SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_dispute SET kept_for = ? WHERE kept_for = ?",
+            "UPDATE uxmauth_import_account SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_account_lock SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_mail_send SET account_id = ? WHERE account_id = ?");
 
     private final Database database;
 
@@ -105,13 +121,16 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
     }
 
     @Override
-    public List<UUID> inactiveSince(Instant before, boolean keepPremium, int limit) {
+    public List<UUID> inactiveSince(Instant before, boolean keepPremium, @Nullable UUID after, int limit) {
         Objects.requireNonNull(before, "before");
+        // Every id is longer than the empty text, so the first batch starts at the first id.
+        String from = after == null ? "" : after.toString();
         return database.transaction(sql -> sql.query(
                 keepPremium ? INACTIVE_NOT_PREMIUM : INACTIVE,
                 statement -> {
                     statement.setLong(1, before.toEpochMilli());
-                    statement.setInt(2, limit);
+                    statement.setString(2, from);
+                    statement.setInt(3, limit);
                 },
                 row -> UUID.fromString(row.getString("id"))));
     }
@@ -155,6 +174,12 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
     }
 
     @Override
+    public void markVerified(UUID id) {
+        Objects.requireNonNull(id, "id");
+        database.inTransaction(sql -> sql.update(MARK_VERIFIED, statement -> statement.setString(1, id.toString())));
+    }
+
+    @Override
     public void recordLogin(UUID id, Instant at, String address) {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(at, "at");
@@ -195,11 +220,15 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
                 .orElse(0);
     }
 
+    /**
+     * Nothing in the table keeps a premium id to one account, and a database from before the import refused a second
+     * one may hold two. The one that played last answers, the same one on every database and every call.
+     */
     @Override
     public Optional<Account> findByPremiumId(UUID premiumId) {
         Objects.requireNonNull(premiumId, "premiumId");
         return database.transaction(sql -> sql.queryFirst(
-                SELECT + "premium_id = ?",
+                SELECT + "premium_id = ? ORDER BY COALESCE(last_login_at, registered_at) DESC, id",
                 statement -> statement.setString(1, premiumId.toString()),
                 SqlAccountRepository::read));
     }
@@ -273,6 +302,32 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
                 sql.update(drop, statement -> statement.setString(1, id.toString()));
             }
             sql.update(DELETE, statement -> statement.setString(1, id.toString()));
+        });
+    }
+
+    /**
+     * The account row goes first, and only while it is still idle; a login recorded between the purge's read and this
+     * removal keeps it, and with it everything it keeps. The rest goes in the same transaction.
+     */
+    @Override
+    public boolean deleteIfInactive(UUID id, Instant before) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(before, "before");
+        return database.transaction(sql -> {
+            int removed = sql.update(DELETE_INACTIVE, statement -> {
+                statement.setString(1, id.toString());
+                statement.setLong(2, before.toEpochMilli());
+            });
+            if (removed == 0) {
+                return false;
+            }
+            sql.update(DELETE_RENAMES, statement -> statement.setString(1, id.toString()));
+            sql.update(DROP_SESSIONS, statement -> statement.setString(1, id.toString()));
+            sql.update(DROP_CHOICE, statement -> statement.setString(1, id.toString()));
+            for (String drop : DROP_KEPT) {
+                sql.update(drop, statement -> statement.setString(1, id.toString()));
+            }
+            return true;
         });
     }
 

@@ -14,6 +14,7 @@ import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.network.Claim;
+import com.uxplima.auth.domain.network.ClaimRefusal;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.state.AuthMethod;
 
@@ -21,8 +22,9 @@ import com.uxplima.auth.domain.state.AuthMethod;
  * The proxy's word on a server behind it. The proxy writes a signed claim into the profile it forwards; this
  * reads it at the pre-login and takes it off the profile, so no client ever sees it.
  *
- * <p>A claim that does not hold, forged, stale or about another player, turns the player away and says why in
- * the console. A player who comes with no claim is asked for the password as on a server that stands alone.
+ * <p>A claim that does not hold, forged, stale, about another player, written for another server or a copy of
+ * one taken before, turns the player away and says why in the console. A player who comes with no claim is asked
+ * for the password as on a server that stands alone.
  */
 public final class NetworkDoor {
 
@@ -69,17 +71,30 @@ public final class NetworkDoor {
     }
 
     private static final NetworkDoor NONE = new NetworkDoor(
-            Optional::empty, id -> Optional.empty(), Clock.systemUTC(), Logger.getLogger(NetworkDoor.class.getName()));
+            Optional::empty,
+            () -> "",
+            id -> Optional.empty(),
+            Clock.systemUTC(),
+            Logger.getLogger(NetworkDoor.class.getName()));
 
     private final Supplier<Optional<Claims>> claims;
+    private final Supplier<String> here;
     private final Function<UUID, Optional<Account>> accounts;
     private final Clock clock;
     private final Logger logger;
 
-    /** @param claims the reader of the proxy's claims, or empty while this server stands alone */
+    /**
+     * @param claims the reader of the proxy's claims, or empty while this server stands alone
+     * @param here this server's name in the proxy's list, which a claim for it names
+     */
     public NetworkDoor(
-            Supplier<Optional<Claims>> claims, Function<UUID, Optional<Account>> accounts, Clock clock, Logger logger) {
+            Supplier<Optional<Claims>> claims,
+            Supplier<String> here,
+            Function<UUID, Optional<Account>> accounts,
+            Clock clock,
+            Logger logger) {
         this.claims = Objects.requireNonNull(claims, "claims");
+        this.here = Objects.requireNonNull(here, "here");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -90,13 +105,12 @@ public final class NetworkDoor {
         return NONE;
     }
 
-    /** What the claim on this connection comes to, with the claim taken off its profile. */
+    /**
+     * What the claim on this connection comes to, with the claim taken off its profile. It comes off on a server
+     * alone too: Paper shows a player's profile to every other player, and a claim there could be copied.
+     */
     public Reading read(AsyncPlayerPreLoginEvent event) {
         Objects.requireNonNull(event, "event");
-        Optional<Claims> reader = claims.get();
-        if (reader.isEmpty()) {
-            return new Reading.None();
-        }
         PlayerProfile profile = event.getPlayerProfile();
         Optional<String> sealed = profile.getProperties().stream()
                 .filter(property -> property.getName().equals(PROPERTY))
@@ -107,9 +121,19 @@ public final class NetworkDoor {
         }
         profile.removeProperty(PROPERTY);
         event.setPlayerProfile(profile);
-        return switch (reader.get().read(sealed.get(), event.getUniqueId(), event.getName(), clock.instant())) {
-            case Claims.Reading.Refused refused ->
-                refused(event.getName(), refused.why().name());
+        Optional<Claims> reader = claims.get();
+        if (reader.isEmpty()) {
+            return new Reading.None();
+        }
+        return switch (reader.get()
+                .read(
+                        sealed.get(),
+                        Claim.Direction.TO_SERVER,
+                        event.getUniqueId(),
+                        event.getName(),
+                        here.get(),
+                        clock.instant())) {
+            case Claims.Reading.Refused refused -> refused(event.getName(), refused.why());
             case Claims.Reading.Valid valid -> standing(event.getName(), valid.claim());
         };
     }
@@ -120,17 +144,27 @@ public final class NetworkDoor {
             case Claim.LoggedIn in ->
                 accounts.apply(claim.id())
                         .<Reading>map(account -> new Reading.LoggedIn(account, in.method(), claim.nonce()))
-                        .orElseGet(() -> refused(name, "NO_ACCOUNT"));
+                        .orElseGet(() -> noAccount(name));
             case Claim.Code code ->
                 accounts.apply(claim.id())
                         .<Reading>map(account -> new Reading.Code(account, code.method(), claim.nonce()))
-                        .orElseGet(() -> refused(name, "NO_ACCOUNT"));
+                        .orElseGet(() -> noAccount(name));
         };
     }
 
-    private Reading refused(String name, String why) {
-        logger.warning("The proxy's claim for " + name.replaceAll("\\p{Cntrl}", "?") + " was refused (" + why
-                + "). Check that network.secret here is the proxy's, and that the clocks agree.");
+    private Reading refused(String name, ClaimRefusal why) {
+        logger.warning(
+                "The proxy's claim for " + printable(name) + " was refused (" + why.name() + "). " + why.advice());
         return new Reading.Refused();
+    }
+
+    private Reading noAccount(String name) {
+        logger.warning("The proxy's claim for " + printable(name) + " was refused (NO_ACCOUNT). Check that the proxy"
+                + " and this server read the same database.");
+        return new Reading.Refused();
+    }
+
+    private static String printable(String name) {
+        return name.replaceAll("\\p{Cntrl}", "?");
     }
 }

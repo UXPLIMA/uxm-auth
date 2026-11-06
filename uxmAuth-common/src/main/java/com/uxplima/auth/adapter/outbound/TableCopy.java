@@ -48,7 +48,10 @@ public final class TableCopy implements DatabaseCopy {
             "uxmauth_email",
             "uxmauth_mail_code",
             "uxmauth_login",
-            "uxmauth_website_link");
+            "uxmauth_website_link",
+            "uxmauth_import_account",
+            "uxmauth_account_lock",
+            "uxmauth_mail_send");
 
     /** The rows sent in one batch. */
     private static final int BATCH = 500;
@@ -108,18 +111,45 @@ public final class TableCopy implements DatabaseCopy {
         return counts(target);
     }
 
+    /**
+     * Each table goes in a transaction of its own, so a failure leaves the tables before it copied. Those are emptied
+     * again, which is safe because the move found every table of ours at the target empty: a retry then finds the
+     * target as the first try did, instead of refusing it as one that holds accounts.
+     */
     @Override
     public Map<String, Long> copy() {
         Map<String, Long> written = new LinkedHashMap<>();
         for (String table : tables) {
             try {
                 written.put(table, copyTable(table));
-            } catch (SQLException failed) {
+            } catch (SQLException | RuntimeException failed) {
+                String emptied = emptied(written.keySet())
+                        ? "the tables copied before it were emptied again, so the move can run again"
+                        : "the tables copied before it could not be emptied: empty this plugin's tables at the target"
+                                + " before the move runs again";
                 throw new StorageException(
-                        "the table " + table + " could not be copied: " + failed.getMessage(), failed);
+                        "the table " + table + " could not be copied (" + failed.getMessage() + "), and " + emptied,
+                        failed);
             }
         }
         return written;
+    }
+
+    /** Empties the target's copies of these tables, and answers whether every one is empty again. */
+    private boolean emptied(Iterable<String> copied) {
+        try (Connection connection = target.connection();
+                Statement statement = connection.createStatement()) {
+            for (String table : copied) {
+                // The names are this plugin's own and the website table's, which the settings checked.
+                statement.executeUpdate("DELETE FROM " + table);
+            }
+            if (!connection.getAutoCommit()) {
+                connection.commit();
+            }
+            return true;
+        } catch (SQLException | RuntimeException failed) {
+            return false;
+        }
     }
 
     @Override

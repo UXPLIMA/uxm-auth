@@ -121,6 +121,12 @@ public final class EmailLink {
         if (typed.isEmpty()) {
             return usage(player);
         }
+        if (remembered(player)) {
+            // An address can reset the password: a session another person on the same address inherited, here or
+            // on another server of the network, may not link one.
+            messages.send(player, Keys.EMAIL_PASSWORD_FIRST);
+            return done();
+        }
         return run(player, account -> link.add(account.id(), account.name(), typed, messages.localeOf(player)));
     }
 
@@ -212,6 +218,15 @@ public final class EmailLink {
 
     private static TagResolver masked(String address) {
         return Text.placeholder("address", address);
+    }
+
+    /**
+     * Whether the player is logged in only because a remembered session from their address was still valid, on
+     * this server or on the one the proxy first sent them to.
+     */
+    private boolean remembered(Player player) {
+        return sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated in
+                && in.method().remembered();
     }
 
     /** The account of a logged-in player, held or not for a duty, or the refusal told. */

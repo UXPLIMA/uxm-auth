@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * What one address did wrong: the wrong passwords since its last ban, the step its next ban is, until when it is
- * banned, and when it last failed.
+ * banned, and when it last failed. An account's wrong tries are kept in the same shape, its lock where the ban is.
  */
 public record AddressTally(
         int failures,

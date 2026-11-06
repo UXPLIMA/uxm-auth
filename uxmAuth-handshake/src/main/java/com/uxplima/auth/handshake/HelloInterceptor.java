@@ -23,10 +23,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The door may wait on the database and the web, so the answer comes on another thread and is carried back
  * to the connection's own event loop before anything touches the channel. A connection gone by then is
- * dropped. A client sends nothing while its hello waits, so anything that arrives meanwhile, a second hello
- * above all, closes the connection: a second hello passed on would reach the server unchecked while the first
- * one was still being decided. A door that fails refuses the connection at its pre-login, never lets it in
- * unchecked.
+ * dropped. A client sends nothing while its hello waits, so anything that arrives meanwhile closes the
+ * connection. A client sends one hello in its life, so a second one closes it too, whenever it comes: passed on,
+ * it would reach the server unchecked, under a name the door never decided. A door that fails refuses the
+ * connection at its pre-login, never lets it in unchecked.
  */
 final class HelloInterceptor extends ChannelInboundHandlerAdapter {
 
@@ -48,7 +48,7 @@ final class HelloInterceptor extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        if (waiting) {
+        if (waiting || (seen && msg instanceof ServerboundHelloPacket)) {
             ReferenceCountUtil.release(msg);
             ChannelFuture unused = ctx.close();
             return;
@@ -65,6 +65,9 @@ final class HelloInterceptor extends ChannelInboundHandlerAdapter {
         }
         Login mine = found.get();
         if (mine.bedrock()) {
+            // Xbox Live proved the player; the pre-login reads the mark to know this connection is the Bedrock one.
+            login = mine;
+            results.bedrock(mine.address());
             ctx.fireChannelRead(msg);
             return;
         }

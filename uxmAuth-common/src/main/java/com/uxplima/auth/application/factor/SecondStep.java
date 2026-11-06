@@ -91,7 +91,7 @@ public final class SecondStep {
             case PASSWORD -> false;
             case SESSION -> now.sessionsSkip();
             case PREMIUM, BEDROCK -> now.premiumSkips();
-            case REGISTERED, FORCED, NETWORK -> true;
+            case REGISTERED, FORCED, NETWORK, NETWORK_SESSION -> true;
         };
     }
 

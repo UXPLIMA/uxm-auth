@@ -17,26 +17,45 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
+import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerEditBookEvent;
+import org.bukkit.event.player.PlayerFishEvent;
+import org.bukkit.event.player.PlayerHarvestBlockEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerPickupArrowEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerTakeLecternBookEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.server.TabCompleteEvent;
+import org.bukkit.event.vehicle.VehicleDamageEvent;
+import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
+import io.papermc.paper.event.player.PlayerLecternPageChangeEvent;
+import io.papermc.paper.event.player.PlayerOpenSignEvent;
+import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 
+import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
+import com.destroystokyo.paper.event.player.PlayerRecipeBookClickEvent;
 import com.destroystokyo.paper.event.server.AsyncTabCompleteEvent;
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.application.Sessions;
@@ -61,24 +80,31 @@ public final class HoldListener implements Listener {
     private final Supplier<AuthSettings.Hold> hold;
     private final Supplier<Set<String>> ownCommands;
     private final String namespace;
+    private final Predicate<String> ownedHere;
 
     /**
-     * @param ownCommands every label and alias of this plugin's player commands, in lower case, which a
-     *     waiting player must always be able to run
+     * @param ownCommands every label and alias of this plugin's player commands that are on, in lower case, which
+     *     a waiting player must always be able to run
      * @param namespace the prefix the server puts before this plugin's commands, in lower case
      */
     public HoldListener(
             Sessions sessions, Supplier<AuthSettings.Hold> hold, Supplier<Set<String>> ownCommands, String namespace) {
-        this(sessions, hold, ownCommands, namespace, player -> false);
+        this(sessions, hold, ownCommands, namespace, player -> false, label -> false);
     }
 
-    /** @param passing whether a teleport of this player is the plugin's own, into the login world or back */
+    /**
+     * @param passing whether a teleport of this player is the plugin's own, into the login world or back
+     * @param ownedHere whether the server runs this plugin's command under a bare label, rather than another
+     *     plugin's that took the label first
+     */
     public HoldListener(
             Sessions sessions,
             Supplier<AuthSettings.Hold> hold,
             Supplier<Set<String>> ownCommands,
             String namespace,
-            Predicate<UUID> passing) {
+            Predicate<UUID> passing,
+            Predicate<String> ownedHere) {
+        this.ownedHere = Objects.requireNonNull(ownedHere, "ownedHere");
         this.passing = Objects.requireNonNull(passing, "passing");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.hold = Objects.requireNonNull(hold, "hold");
@@ -187,6 +213,75 @@ public final class HoldListener implements Listener {
         stop(event, event.getPlayer(), AuthSettings.Hold::interact);
     }
 
+    /** The click on a spot of an entity has a list of its own, and the armor stand's is the one items move by. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onInteractAtEntity(PlayerInteractAtEntityEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onArmorStand(PlayerArmorStandManipulateEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onConsume(PlayerItemConsumeEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onFish(PlayerFishEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onBed(PlayerBedEnterEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onLecternPage(PlayerLecternPageChangeEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onLecternBook(PlayerTakeLecternBookEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::interact);
+    }
+
+    /** Anything a waiting player throws or shoots, whatever the item they used. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onLaunch(ProjectileLaunchEvent event) {
+        if (event.getEntity().getShooter() instanceof Player player) {
+            stop(event, player, AuthSettings.Hold::interact);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onHarvest(PlayerHarvestBlockEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::blocks);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onSignOpen(PlayerOpenSignEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::blocks);
+    }
+
+    /** A sign editor opened before the hold can still send its lines. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onSign(SignChangeEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::blocks);
+    }
+
+    /** A painting or an item frame, broken by hand or by something the player shot. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onHangingBreak(HangingBreakByEntityEvent event) {
+        Entity remover = event.getRemover();
+        if (remover != null && dealer(remover) instanceof Player player) {
+            stop(event, player, AuthSettings.Hold::blocks);
+        }
+    }
+
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onOpen(InventoryOpenEvent event) {
         if (event.getPlayer() instanceof Player player) {
@@ -225,6 +320,28 @@ public final class HoldListener implements Listener {
         stop(event, event.getPlayer(), AuthSettings.Hold::inventory);
     }
 
+    /** An arrow or a trident lying on the ground is picked up through its own event, not the item's. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPickupArrow(PlayerPickupArrowEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::inventory);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPickupExperience(PlayerPickupExperienceEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::inventory);
+    }
+
+    /** The recipe book moves items into the crafting grid without a click on a slot. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onRecipeBook(PlayerRecipeBookClickEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::inventory);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onEditBook(PlayerEditBookEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::inventory);
+    }
+
     /** Damage taken by a waiting player, and damage dealt by one, with a hand or with something they shot. */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
@@ -234,6 +351,28 @@ public final class HoldListener implements Listener {
         if (event instanceof EntityDamageByEntityEvent byEntity
                 && dealer(byEntity.getDamager()) instanceof Player dealt) {
             stop(event, dealt, AuthSettings.Hold::damage);
+        }
+    }
+
+    /** Any swing a waiting player lands on an entity: a mob, a boat, a minecart or an item frame. */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onAttack(PrePlayerAttackEntityEvent event) {
+        stop(event, event.getPlayer(), AuthSettings.Hold::damage);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onVehicleDamage(VehicleDamageEvent event) {
+        Entity attacker = event.getAttacker();
+        if (attacker != null && dealer(attacker) instanceof Player player) {
+            stop(event, player, AuthSettings.Hold::damage);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onVehicleDestroy(VehicleDestroyEvent event) {
+        Entity attacker = event.getAttacker();
+        if (attacker != null && dealer(attacker) instanceof Player player) {
+            stop(event, player, AuthSettings.Hold::damage);
         }
     }
 
@@ -263,16 +402,18 @@ public final class HoldListener implements Listener {
     }
 
     /**
-     * Whether a waiting player may run this label. This plugin's own commands pass bare or under this plugin's
-     * own namespace, never under another plugin's. An operator's allowed command is compared whole, so
-     * {@code spawn} allows {@code /spawn} and only {@code essentials:spawn} allows {@code /essentials:spawn}.
+     * Whether a waiting player may run this label. This plugin's own commands pass under this plugin's own
+     * namespace, never under another plugin's, and bare only while the server runs this plugin's command under
+     * the label: a land plugin that took {@code claim} first would otherwise run its own for a stranger. An
+     * operator's allowed command is compared whole, so {@code spawn} allows {@code /spawn} and only
+     * {@code essentials:spawn} allows {@code /essentials:spawn}.
      */
     private boolean allowed(String label) {
         int colon = label.indexOf(':');
         String bare = colon < 0 ? label : label.substring(colon + 1);
-        boolean ours = colon < 0 || label.substring(0, colon).equals(namespace);
-        return (ours && ownCommands.get().contains(bare))
-                || hold.get().allowedCommands().stream().anyMatch(command -> command.equalsIgnoreCase(label));
+        boolean ours = ownCommands.get().contains(bare)
+                && (colon < 0 ? ownedHere.test(bare) : label.substring(0, colon).equals(namespace));
+        return ours || hold.get().allowedCommands().stream().anyMatch(command -> command.equalsIgnoreCase(label));
     }
 
     /** The command's label in lower case, without its slash, with its namespace if it was written. */

@@ -1,6 +1,17 @@
 package com.uxplima.auth.adapter.outbound;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,10 +36,20 @@ import org.jspecify.annotations.Nullable;
  * <p>A name cannot be bound, so the statements are made by uxmLib's builders, which refuse anything but a plain
  * identifier; the settings refused one already. Every value is bound. The website keys a row by the name in lower
  * case and keeps the name as written beside it, and its dates are milliseconds since the epoch.
+ *
+ * <p>A link says which row is an account's, and is bound to that row by its mark: a row the website deleted and
+ * somebody registered again under the name carries another mark, and is not taken for the account's.
  */
 final class WebsiteRows {
 
-    /** A row as the website keeps it. A date it never wrote reads as zero. */
+    /** The column a website numbers its rows by, when its table has one. */
+    static final String ID = "id";
+
+    /**
+     * A row as the website keeps it. A date it never wrote reads as zero.
+     *
+     * @param id the row's number, when the table numbers its rows
+     */
     record Row(
             String name,
             String realName,
@@ -36,12 +57,46 @@ final class WebsiteRows {
             long registeredAt,
             @Nullable String registrationAddress,
             long lastLogin,
-            @Nullable String lastAddress) {}
+            @Nullable String lastAddress,
+            @Nullable String id) {
+
+        /**
+         * What tells this row from a row made later under the same name: the moment it was registered, which a row
+         * made again does not share; its number when it has no date; its password when it has neither, which then
+         * binds only until the website changes it. The date comes before the number because a move into H2 numbers
+         * the rows afresh. Hashed, so the table of links never holds a second copy of a password.
+         */
+        String mark() {
+            String seen =
+                    registeredAt > 0 ? "registered:" + registeredAt : id != null ? "id:" + id : "password:" + password;
+            try {
+                return HexFormat.of()
+                        .formatHex(MessageDigest.getInstance("SHA-256").digest(seen.getBytes(StandardCharsets.UTF_8)));
+            } catch (NoSuchAlgorithmException missing) {
+                throw new IllegalStateException("the JDK has no SHA-256", missing);
+            }
+        }
+    }
+
+    /**
+     * What is known of an account's link.
+     *
+     * @param mark the mark of the row it is bound to; empty for a link made before links were bound
+     */
+    record Link(@Nullable String mark) {
+
+        /** Whether the link is bound to this row. A link with no mark yet binds the first row it meets. */
+        boolean binds(Row row) {
+            return mark == null || mark.equals(row.mark());
+        }
+    }
 
     private final Database database;
     private final Sql sql;
     private final String table;
     private final WebsiteTable.Columns columns;
+    /** Whether the table numbers its rows, read once it is prepared. */
+    private volatile boolean numbered;
 
     WebsiteRows(Database database, WebsiteTable website) {
         this.database = Objects.requireNonNull(database, "database");
@@ -68,6 +123,7 @@ final class WebsiteRows {
                 named.lastLogin(),
                 named.regDate(),
                 named.regIp()));
+        numbered = hasId();
     }
 
     private static String idColumn(Dialect dialect) {
@@ -79,18 +135,41 @@ final class WebsiteRows {
         };
     }
 
+    /** Whether the table, made here or by the website, has a column its rows are numbered by. */
+    private boolean hasId() {
+        try (Connection connection = database.connection();
+                Statement statement = connection.createStatement();
+                ResultSet empty = statement.executeQuery("SELECT * FROM " + table + " WHERE 1 = 0")) {
+            ResultSetMetaData meta = empty.getMetaData();
+            for (int at = 1; at <= meta.getColumnCount(); at++) {
+                if (meta.getColumnName(at).equalsIgnoreCase(ID)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (SQLException failed) {
+            throw new StorageException(
+                    "the website table " + table + " could not be read: " + failed.getMessage(), failed);
+        }
+    }
+
     Optional<Row> find(PlayerName name) {
+        boolean withId = numbered;
+        List<String> read = new ArrayList<>(List.of(
+                columns.name(),
+                columns.realName(),
+                columns.password(),
+                columns.regDate(),
+                columns.regIp(),
+                columns.lastLogin(),
+                columns.ip()));
+        if (withId) {
+            read.add(ID);
+        }
         return sql
                 .query(
                         SelectBuilder.from(table)
-                                .columns(
-                                        columns.name(),
-                                        columns.realName(),
-                                        columns.password(),
-                                        columns.regDate(),
-                                        columns.regIp(),
-                                        columns.lastLogin(),
-                                        columns.ip())
+                                .columns(read.toArray(String[]::new))
                                 .where(columns.name(), key(name))
                                 .limit(1)
                                 .build(),
@@ -101,7 +180,8 @@ final class WebsiteRows {
                                 row.getLong(4),
                                 row.getString(5),
                                 row.getLong(6),
-                                row.getString(7)))
+                                row.getString(7),
+                                withId ? row.getString(8) : null))
                 .stream()
                 .findFirst();
     }
@@ -178,22 +258,42 @@ final class WebsiteRows {
         sql.update(DeleteBuilder.from(table).where(columns.name(), key(name)).build());
     }
 
-    /** Whether the website's row under this account's name is known to be the account's. */
-    boolean linked(UUID account) {
+    /** The account's link to a row, if it has one. */
+    Optional<Link> link(UUID account) {
         return database.transaction(tx -> tx.queryFirst(
-                        "SELECT account_id FROM uxmauth_website_link WHERE account_id = ?",
-                        statement -> statement.setString(1, account.toString()),
-                        row -> row.getString(1)))
-                .isPresent();
+                "SELECT row_mark FROM uxmauth_website_link WHERE account_id = ?",
+                statement -> statement.setString(1, account.toString()),
+                row -> new Link(row.getString("row_mark"))));
     }
 
-    /** Records that the website's row under this account's name is the account's. */
-    void link(UUID account) {
-        if (!linked(account)) {
-            database.inTransaction(tx -> tx.update(
-                    "INSERT INTO uxmauth_website_link (account_id) VALUES (?)",
-                    statement -> statement.setString(1, account.toString())));
-        }
+    /** Records that this row is the account's, bound to its mark in place of any row the link named before. */
+    void link(UUID account, Row row) {
+        String id = account.toString();
+        String mark = row.mark();
+        database.inTransaction(tx -> {
+            int changed = tx.update("UPDATE uxmauth_website_link SET row_mark = ? WHERE account_id = ?", statement -> {
+                statement.setString(1, mark);
+                statement.setString(2, id);
+            });
+            if (changed == 0) {
+                tx.update("INSERT INTO uxmauth_website_link (account_id, row_mark) VALUES (?, ?)", statement -> {
+                    statement.setString(1, id);
+                    statement.setString(2, mark);
+                });
+            }
+        });
+    }
+
+    /** Binds the account's link to the row under its name now, as it stands after the plugin wrote it. */
+    void relink(UUID account, PlayerName name) {
+        find(name).ifPresent(row -> link(account, row));
+    }
+
+    /** Forgets the account's link, so no row under its name is the account's until one is linked again. */
+    void unlink(UUID account) {
+        database.inTransaction(tx -> tx.update(
+                "DELETE FROM uxmauth_website_link WHERE account_id = ?",
+                statement -> statement.setString(1, account.toString())));
     }
 
     private static String key(PlayerName name) {

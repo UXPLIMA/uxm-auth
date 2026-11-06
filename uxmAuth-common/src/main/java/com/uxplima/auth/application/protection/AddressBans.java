@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.port.AddressTallies;
@@ -16,7 +17,9 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
 
 /**
  * Wrong passwords count against the address they came from, and enough of them ban it for the operator's next
- * step. Through a shared-address filter one player's address is everybody's, so nothing counts there.
+ * step. An IPv6 address counts by its /64 and, with a higher limit of its own, by its /48 too, so a guesser who
+ * hops between the /64s of one provider block still meets a ban. Through a shared-address filter one player's
+ * address is everybody's, so nothing counts there.
  */
 public final class AddressBans {
 
@@ -32,16 +35,20 @@ public final class AddressBans {
 
     private final AddressTallies tallies;
     private final Supplier<BanSteps> steps;
+    private final Supplier<BanSteps> wideSteps;
     private final Supplier<SharedAddresses> shared;
     private final Supplier<Instant> clock;
 
+    /** @param wideSteps how the wrong passwords of a whole IPv6 /48 ban it */
     public AddressBans(
             AddressTallies tallies,
             Supplier<BanSteps> steps,
+            Supplier<BanSteps> wideSteps,
             Supplier<SharedAddresses> shared,
             Supplier<Instant> clock) {
         this.tallies = Objects.requireNonNull(tallies, "tallies");
         this.steps = Objects.requireNonNull(steps, "steps");
+        this.wideSteps = Objects.requireNonNull(wideSteps, "wideSteps");
         this.shared = Objects.requireNonNull(shared, "shared");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -57,7 +64,23 @@ public final class AddressBans {
         Instant now = clock.get();
         BanSteps rules = steps.get();
         AddressTally after = tallies.change(AddressKey.of(address), tally -> tally.failedAt(now, rules));
-        return after.bannedAt(now) ? Optional.of(after.leftAt(now)) : Optional.empty();
+        Optional<AddressTally> wide = AddressKey.wide(address).map(key -> {
+            BanSteps wider = wideSteps.get();
+            return tallies.change(key, tally -> tally.failedAt(now, wider));
+        });
+        return longest(now, Stream.concat(Stream.of(after), wide.stream()));
+    }
+
+    /** What the longest ban among these tallies has left, nothing when none is banned. */
+    private static Optional<Duration> longest(Instant now, Stream<AddressTally> tallies) {
+        return tallies.filter(tally -> tally.bannedAt(now))
+                .map(tally -> tally.leftAt(now))
+                .max(Duration::compareTo);
+    }
+
+    /** The keys an address is counted under: its own, or its /64, and its /48 when it has one. */
+    private static Stream<String> keys(String address) {
+        return Stream.concat(Stream.of(AddressKey.of(address)), AddressKey.wide(address).stream());
     }
 
     /** Whether a wrong password from this address through this host counts: it is read, and nobody shares it. */
@@ -71,10 +94,12 @@ public final class AddressBans {
         if (!AddressKey.isAddress(Objects.requireNonNull(address, "address"))) {
             return Unban.NOT_AN_ADDRESS;
         }
-        String key = AddressKey.of(address);
-        boolean banned =
-                tallies.find(key).filter(tally -> tally.bannedAt(clock.get())).isPresent();
-        tallies.clear(key);
+        Instant now = clock.get();
+        boolean banned = false;
+        for (String key : keys(address).toList()) {
+            banned |= tallies.find(key).filter(tally -> tally.bannedAt(now)).isPresent();
+            tallies.clear(key);
+        }
         return banned ? Unban.LIFTED : Unban.NOT_BANNED;
     }
 
@@ -82,9 +107,8 @@ public final class AddressBans {
     public Admission.Rule rule() {
         return arrival -> {
             Instant now = clock.get();
-            return tallies.find(AddressKey.of(arrival.address()))
-                    .filter(tally -> tally.bannedAt(now))
-                    .map(tally -> new Admission.Refused(Keys.KICK_BANNED, Map.of(), tally.leftAt(now)));
+            return longest(now, keys(arrival.address()).flatMap(key -> tallies.find(key).stream()))
+                    .map(left -> new Admission.Refused(Keys.KICK_BANNED, Map.of(), left));
         };
     }
 }

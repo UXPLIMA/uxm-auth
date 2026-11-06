@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,12 +27,14 @@ import com.uxplima.auth.adapter.outbound.PremiumStartLine;
 import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.SecretSeal;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAccountTallies;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.TableUpkeep;
 import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
@@ -51,10 +54,12 @@ import com.uxplima.auth.application.port.LastServers;
 import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.LetPremiumIn;
+import com.uxplima.auth.application.premium.LookupBudget;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.AccountCap;
+import com.uxplima.auth.application.protection.AccountLockout;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
@@ -65,7 +70,9 @@ import com.uxplima.auth.domain.network.Bulletin;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
+import com.uxplima.auth.domain.network.Nonces;
 import com.uxplima.auth.domain.premium.UuidScheme;
+import com.uxplima.auth.velocity.adapter.inbound.ChannelGuard;
 import com.uxplima.auth.velocity.adapter.inbound.ClaimWriter;
 import com.uxplima.auth.velocity.adapter.inbound.DoorListener;
 import com.uxplima.auth.velocity.adapter.inbound.EndedSessions;
@@ -76,6 +83,7 @@ import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.inbound.RemovedAccounts;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
+import com.uxplima.auth.velocity.adapter.inbound.Waiters;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyCommands;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
 import com.uxplima.auth.velocity.adapter.outbound.event.VelocityEvents;
@@ -105,10 +113,13 @@ final class ProxyGraph implements AutoCloseable {
     /** What the door makes of a player when LimboAPI asks, before the proxy's login events; set once it listens. */
     private BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> settleEarly =
             (player, taken) -> new DoorListener.Early.Free();
+    /** What the door lets go of a player who left the waiting world without being let out; set once it listens. */
+    private Consumer<Player> leftTheWorld = player -> {};
 
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;
     private @Nullable ScheduledTask countryTask;
+    private @Nullable ScheduledTask upkeepTask;
     private @Nullable ProxyMail mail;
     /** The API's Velocity events, fired for what happens at this proxy. */
     private final VelocityEvents fired;
@@ -147,6 +158,7 @@ final class ProxyGraph implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         AccountRepository accounts = WebsiteAccounts.beside(
                 new SqlAccountRepository(database), database, settings.current().websiteTable(), clock);
+        settings.current().websiteTable().weakHashWarning().ifPresent(logger::warn);
         ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
         NetworkSecret secret = secret(settings);
         // Sealed with the secret every member shares, so a code set up on any server reads here.
@@ -157,11 +169,26 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().sessions(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
+        SqlAddressTallies tallies = new SqlAddressTallies(database);
         AddressBans bans = new AddressBans(
-                new SqlAddressTallies(database),
+                tallies,
                 () -> settings.current().protection().bans(),
+                () -> settings.current().protection().wideBans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
+        // Soon after the start, and once a day after, forgiven addresses and ended sessions go.
+        this.upkeepTask = proxy.getScheduler()
+                .buildTask(
+                        plugin,
+                        new TableUpkeep(
+                                tallies,
+                                remembered,
+                                () -> settings.current().protection().bans().forgiveAfter(),
+                                clock,
+                                logger::warn))
+                .delay(2, TimeUnit.MINUTES)
+                .repeat(1, TimeUnit.DAYS)
+                .schedule();
         // The proxy tells its own wrong passwords; the servers behind it deliver every alert to their staff.
         LogIn.Failures failures = new Alerts(
                         () -> settings.current().staff().alerts(),
@@ -171,6 +198,11 @@ final class ProxyGraph implements AutoCloseable {
                         clock::instant,
                         AuthNotices.onBan(fired::banned))
                 .watching(bans);
+        AccountLockout lockout = new AccountLockout(
+                new SqlAccountTallies(database),
+                () -> settings.current().protection().lockout(),
+                () -> settings.current().protection().sharedAddresses(),
+                clock::instant);
         ProxyMail mail = new ProxyMail(proxy, logger, folder, settings, database, failures, words);
         this.mail = mail;
         SecondStep secondStep = new SecondStep(
@@ -193,8 +225,17 @@ final class ProxyGraph implements AutoCloseable {
                 words,
                 sessions,
                 settleEarly,
-                guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
+                leftTheWorld,
+                guards(
+                        settings,
+                        accounts,
+                        remember,
+                        new Counted(failures, lockout),
+                        clock,
+                        remembered,
+                        Codes.of(factors, secondStep, mail)));
         logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
+        settings.current().ownership().warnings().forEach(logger::warn);
     }
 
     /** The bulletins as they are when one is published: the network's, once the proxy has opened it. */
@@ -217,7 +258,7 @@ final class ProxyGraph implements AutoCloseable {
             PluginSettings settings,
             AccountRepository accounts,
             Remember remember,
-            LogIn.Failures failures,
+            Counted counted,
             Clock clock,
             SqlRememberedSessions remembered,
             Codes codes) {
@@ -229,7 +270,8 @@ final class ProxyGraph implements AutoCloseable {
                 logger::warn);
         return new WaitingWorld.Guards(
                 remember,
-                failures,
+                counted.failures(),
+                counted.lockout(),
                 cap::full,
                 breaches,
                 events,
@@ -308,7 +350,18 @@ final class ProxyGraph implements AutoCloseable {
                         () -> settings.current().passwords().maxAttempts()),
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
-                clock);
+                clock,
+                () -> longestWait(settings.current().timeouts()));
+    }
+
+    /**
+     * How long a connection's door decision is kept: the login comes after the wait in the proxy's world, which
+     * lasts at most the longer of the times to log in and to register, and a minute more for the rest of the login.
+     */
+    private static Duration longestWait(AuthSettings.Timeouts timeouts) {
+        Duration longest =
+                timeouts.login().compareTo(timeouts.register()) >= 0 ? timeouts.login() : timeouts.register();
+        return longest.plus(Duration.ofMinutes(1));
     }
 
     /**
@@ -341,8 +394,10 @@ final class ProxyGraph implements AutoCloseable {
                 new DoorWords(words),
                 logger,
                 steps.secondStep(),
-                proxy::getPlayer);
+                proxy::getPlayer,
+                new Waiters(clock, () -> longestWait(settings.current().timeouts())));
         this.settleEarly = doorListener::settleEarly;
+        this.leftTheWorld = doorListener::leftTheWorld;
         register(doorListener);
         register(new HoldListener(
                 sessions,
@@ -355,6 +410,7 @@ final class ProxyGraph implements AutoCloseable {
         register(new ClaimWriter(sessions, claims, clock));
         proxy.getChannelRegistrar().register(ReportListener.CHANNEL);
         register(new ReportListener(sessions, claims, clock, logger, routes::loggedIn));
+        register(new ChannelGuard(words));
         NetworkEvents bulletins = NetworkBulletins.open(
                 settings.current().network().redis(), new Bulletins(claims.get().orElseThrow()), logger::warn);
         bulletins.listen(new EndedSessions(sessions));
@@ -377,6 +433,9 @@ final class ProxyGraph implements AutoCloseable {
     public void close() {
         if (countryTask != null) {
             countryTask.cancel();
+        }
+        if (upkeepTask != null) {
+            upkeepTask.cancel();
         }
         if (countries != null) {
             try {
@@ -427,10 +486,17 @@ final class ProxyGraph implements AutoCloseable {
         return loaded.secret();
     }
 
-    /** The signer of the claims every server behind this proxy reads. */
+    /**
+     * The signer of the claims every server behind this proxy reads, and the reader of their reports, which
+     * remembers the reports it took so a copy is never taken twice.
+     */
     private static Supplier<Optional<Claims>> claims(PluginSettings settings, NetworkSecret secret) {
-        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor()));
+        Nonces seen = new Nonces();
+        return () -> Optional.of(new Claims(secret, settings.current().network().claimFor(), seen));
     }
+
+    /** Where a wrong password or code counts: against its address, and against the account it was typed for. */
+    private record Counted(LogIn.Failures failures, LogIn.Lockout lockout) {}
 
     /** The network secret and the step after the password, which the door and the claims read. */
     private record Steps(NetworkSecret secret, SecondStep secondStep) {}
@@ -459,7 +525,9 @@ final class ProxyGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().failedMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
-                disputes);
+                disputes,
+                () -> settings.current().protection().sharedAddresses(),
+                new LookupBudget(() -> settings.current().ownership().lookupsPerAddress(), clock));
     }
 
     /** The command lines of the login moments, run as the proxy's own commands. */

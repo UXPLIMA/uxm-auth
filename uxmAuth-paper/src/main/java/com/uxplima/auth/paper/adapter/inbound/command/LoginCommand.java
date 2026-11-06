@@ -117,14 +117,23 @@ public final class LoginCommand {
                 moments.fire(player, AuthSettings.Moment.WRONG_PASSWORD);
                 messages.send(player, Keys.LOGIN_WRONG, Text.placeholder("left", String.valueOf(wrong.attemptsLeft())));
             }
+            // The kick is the point; no effect an operator wrote may keep the player here.
             case LoginResult.TooManyAttempts tooMany -> {
-                moments.fire(player, AuthSettings.Moment.TOO_MANY_ATTEMPTS);
-                player.kick(messages.render(player, Keys.KICK_TOO_MANY_ATTEMPTS));
+                try {
+                    moments.fire(player, AuthSettings.Moment.TOO_MANY_ATTEMPTS);
+                } finally {
+                    player.kick(messages.render(player, Keys.KICK_TOO_MANY_ATTEMPTS));
+                }
             }
             case LoginResult.Banned banned -> {
-                moments.fire(player, AuthSettings.Moment.BANNED);
-                player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
+                try {
+                    moments.fire(player, AuthSettings.Moment.BANNED);
+                } finally {
+                    player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
+                }
             }
+            case LoginResult.Locked locked ->
+                messages.send(player, Keys.LOGIN_LOCKED, times.placeholder(player, locked.left()));
             case LoginResult.MustReplace mustReplace -> {
                 PasswordWords.reason(messages, player, mustReplace.why()).ifPresent(player::sendMessage);
                 messages.send(player, Keys.LOGIN_MUST_REPLACE);

@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
@@ -97,10 +98,23 @@ public final class AuthMoments implements MomentRunner {
         this.wallet = BridgedWallet.ofServer(Economies.vault(), System.getLogger("uxmAuth"));
     }
 
+    /**
+     * Runs the moment's list. Never throws: a moment often comes right before a kick or a hold, and an effect an
+     * operator wrote must not be able to stop that from happening.
+     */
     @Override
     public void fire(Player player, AuthSettings.Moment moment) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(moment, "moment");
+        try {
+            runAll(player, moment);
+        } catch (RuntimeException failed) {
+            server.getLogger()
+                    .log(Level.WARNING, "The effects of the " + moment.name() + " moment stopped part way", failed);
+        }
+    }
+
+    private void runAll(Player player, AuthSettings.Moment moment) {
         List<String> lines = effects.get().of(moment);
         if (lines.isEmpty()) {
             return;
@@ -139,6 +153,9 @@ public final class AuthMoments implements MomentRunner {
             server.getLogger()
                     .fine("This line of an effects list asked for a cost the player could not pay: " + line + " ("
                             + unaffordable.getMessage() + ")");
+        } catch (RuntimeException failed) {
+            // A command or a plugin behind a line can fail in any way; it costs that line and not the moment.
+            server.getLogger().log(Level.WARNING, "This line of an effects list failed: " + line, failed);
         }
     }
 
@@ -175,7 +192,8 @@ public final class AuthMoments implements MomentRunner {
                 .itemStore(ItemStore.inventory())
                 .wallet(wallet)
                 .broadcast(room)
-                .consoleSink(line -> server.dispatchCommand(server.getConsoleSender(), line))
+                // The console's commands run on the global thread, the one Folia allows them on.
+                .consoleSink(line -> scheduler.global(() -> server.dispatchCommand(server.getConsoleSender(), line)))
                 .playerSink(line -> server.dispatchCommand(player, line))
                 // [bossbar] puts a bar up and asks the caller to take it down again later.
                 .later((delay, what) -> scheduler.entityLater(player, delay, what))

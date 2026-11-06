@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 
 import com.uxplima.auth.adapter.outbound.AuthSettings;
 import com.uxplima.auth.adapter.outbound.PasswordWords;
+import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.ChangeResult;
 import com.uxplima.auth.application.message.Keys;
@@ -38,6 +39,7 @@ public final class ChangePasswordCommand {
     private final Supplier<AuthSettings.Passwords> passwords;
     private final Messages messages;
     private final Replies replies;
+    private final TimeWords times;
 
     public ChangePasswordCommand(
             ChangePassword change,
@@ -52,6 +54,7 @@ public final class ChangePasswordCommand {
         this.passwords = Objects.requireNonNull(passwords, "passwords");
         this.messages = Objects.requireNonNull(messages, "messages");
         this.replies = Objects.requireNonNull(replies, "replies");
+        this.times = new TimeWords(messages);
     }
 
     @Subcommand("")
@@ -73,7 +76,7 @@ public final class ChangePasswordCommand {
         }
         CompletableFuture<ChangeResult> answer;
         if (!second.isEmpty()) {
-            answer = change.run(player.getUniqueId(), Password.of(first), Password.of(second));
+            answer = change.run(player.getUniqueId(), Password.of(first), Password.of(second), Addresses.of(player));
         } else if (asksOld) {
             messages.send(player, Keys.CHANGE_NEEDS_BOTH);
             return CompletableFuture.completedFuture(null);
@@ -88,9 +91,17 @@ public final class ChangePasswordCommand {
             case ChangeResult.Changed changed -> moments.fire(player, AuthSettings.Moment.PASSWORD_CHANGED);
             case ChangeResult.Replaced replaced -> door.open(player, AuthSettings.Moment.LOGGED_IN);
             case ChangeResult.WrongOld wrongOld -> messages.send(player, Keys.CHANGE_WRONG_OLD);
+            case ChangeResult.Locked locked ->
+                messages.send(player, Keys.LOGIN_LOCKED, times.placeholder(player, locked.left()));
+            case ChangeResult.Banned banned -> {
+                moments.fire(player, AuthSettings.Moment.BANNED);
+                player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
+            }
             case ChangeResult.Rejected rejected ->
                 PasswordWords.reason(messages, player, rejected.verdict()).ifPresent(player::sendMessage);
             case ChangeResult.NotLoggedIn notLoggedIn -> messages.send(player, Keys.CHANGE_NOT_LOGGED_IN);
+            case ChangeResult.ChangedElsewhere elsewhere ->
+                player.kick(messages.render(player, Keys.LOGOUT_SESSIONS_ENDED));
             case ChangeResult.Gone gone -> {}
         }
     }

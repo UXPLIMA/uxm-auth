@@ -118,6 +118,11 @@ public final class CaptchaMap extends MapRenderer implements CaptchaScreen.Hand 
         return held.getType().isAir() || KeptMap.holds(held, view);
     }
 
+    /** Whether this item is the captcha's map, which is the plugin's and never the player's. */
+    public boolean holds(ItemStack item) {
+        return KeptMap.holds(Objects.requireNonNull(item, "item"), view);
+    }
+
     @Override
     public void forget(UUID id) {
         Objects.requireNonNull(id, "id");

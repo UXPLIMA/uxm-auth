@@ -296,10 +296,9 @@ public final class ConnectionListener implements Listener {
             return;
         }
         joined.remove(id, mine);
-        Sessions.Held held = sessions.held(id).orElse(null);
-        if (held != null
-                && held.generation() == mine.generation()
-                && !(held.state() instanceof AuthState.Authenticated)) {
+        // Whatever the hold still keeps of this player comes back, logged in or not: one who quits in the tick
+        // between the login and the give-back would otherwise be saved without it.
+        if (keeper.holds(player)) {
             keeper.leave(player);
         }
         sessions.close(id, mine.generation());

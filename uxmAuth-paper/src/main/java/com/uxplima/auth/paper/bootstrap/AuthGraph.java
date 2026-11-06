@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -29,6 +30,7 @@ import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.RecordedScheme;
 import com.uxplima.auth.adapter.outbound.ScreenFile;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAccountTallies;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlEmails;
@@ -36,6 +38,7 @@ import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.TableCopy;
+import com.uxplima.auth.adapter.outbound.TableUpkeep;
 import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
@@ -56,6 +59,7 @@ import com.uxplima.auth.application.account.SwitchToCracked;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.migrate.ChangeScheme;
 import com.uxplima.auth.application.migrate.MoveDatabase;
 import com.uxplima.auth.application.perf.TimedAccounts;
@@ -67,10 +71,12 @@ import com.uxplima.auth.application.port.NetworkEvents;
 import com.uxplima.auth.application.premium.AtTheDoor;
 import com.uxplima.auth.application.premium.ClaimName;
 import com.uxplima.auth.application.premium.LetPremiumIn;
+import com.uxplima.auth.application.premium.LookupBudget;
 import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.AccountCap;
+import com.uxplima.auth.application.protection.AccountLockout;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.Captchas;
@@ -90,6 +96,7 @@ import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.network.Bulletins;
 import com.uxplima.auth.domain.network.Claims;
 import com.uxplima.auth.domain.network.NetworkSecret;
+import com.uxplima.auth.domain.network.Nonces;
 import com.uxplima.auth.domain.state.AuthState;
 import com.uxplima.auth.paper.adapter.inbound.account.BackupPasswordNotice;
 import com.uxplima.auth.paper.adapter.inbound.account.BedrockBackupForm;
@@ -114,6 +121,8 @@ import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.auth.paper.adapter.inbound.command.SecretBranches;
 import com.uxplima.auth.paper.adapter.inbound.command.SessionCommand;
 import com.uxplima.auth.paper.adapter.inbound.command.TwoFactorCommand;
+import com.uxplima.auth.paper.adapter.inbound.hold.DeopWatch;
+import com.uxplima.auth.paper.adapter.inbound.hold.DialogWaits;
 import com.uxplima.auth.paper.adapter.inbound.hold.Door;
 import com.uxplima.auth.paper.adapter.inbound.hold.EndedSessions;
 import com.uxplima.auth.paper.adapter.inbound.hold.Greeter;
@@ -128,6 +137,7 @@ import com.uxplima.auth.paper.adapter.inbound.hold.WaitingBars;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingClock;
 import com.uxplima.auth.paper.adapter.inbound.hold.WaitingTimes;
 import com.uxplima.auth.paper.adapter.inbound.hold.Welcomes;
+import com.uxplima.auth.paper.adapter.inbound.listener.AddressRules;
 import com.uxplima.auth.paper.adapter.inbound.listener.Arrivals;
 import com.uxplima.auth.paper.adapter.inbound.listener.BedrockAdmission;
 import com.uxplima.auth.paper.adapter.inbound.listener.ClosedDoor;
@@ -171,6 +181,7 @@ import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 import com.uxplima.auth.paper.adapter.outbound.hold.LoginSpot;
 import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
+import com.uxplima.auth.paper.adapter.outbound.hold.PluginItems;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilter;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordMask;
@@ -225,6 +236,10 @@ final class AuthGraph implements AutoCloseable {
     private final ClosedDoor closedDoor;
     private final JoinMessages joinMessages;
     private final Rescue rescue;
+    private final DeopWatch deopWatch;
+    /** What the hold took from waiting players, given back to them all when the plugin stops. */
+    private final HoldKeeper keeper;
+
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -235,6 +250,8 @@ final class AuthGraph implements AutoCloseable {
     private final BedrockLink bedrock;
     /** What the start says of a name mark Paper refuses, read once with the settings of the start. */
     private final List<String> nameMarks;
+    /** What the start says of an ownership value it reads otherwise than written, read with the settings of the start. */
+    private final List<String> ownershipWarnings;
 
     private final Plugin plugin;
     private final PasswordLogFilters filters;
@@ -248,6 +265,7 @@ final class AuthGraph implements AutoCloseable {
     private @Nullable TaskHandle countryTask;
     private final TaskHandle historyTask;
     private final TaskHandle purgeTask;
+    private final TaskHandle upkeepTask;
     private final NetworkEvents events;
     private final Alerts alerts;
     private final DiscordNotices discord;
@@ -255,6 +273,12 @@ final class AuthGraph implements AutoCloseable {
     private static final int DISCORD_QUEUE = 100;
 
     private final ChannelReports channelReports;
+    /** Whether the console was told that the network is on without this server's name. */
+    private final AtomicBoolean namelessWarned = new AtomicBoolean();
+
+    /** The nonces of the proxy's claims this server took, kept across reloads so a copy is never taken twice. */
+    private final Nonces seenClaims = new Nonces();
+
     private final ServerHellos hellos;
     /** Who holds a name, by the operator's sources: the door asks it, and so do staff marking an account premium. */
     private final PremiumLookup lookup;
@@ -276,12 +300,20 @@ final class AuthGraph implements AutoCloseable {
         PluginSettings.Snapshot boot = settings.current();
         AuthSettings.Lane sizes = boot.lane();
         this.lane = new HashingLane(sizes.threads(), sizes.maxThreads(), sizes.queue());
-        this.channelReports = new ChannelReports(plugin, () -> claims(settings), Clock.systemUTC());
+        requireServerName(boot.network());
+        this.channelReports = new ChannelReports(
+                plugin,
+                () -> claims(settings),
+                () -> settings.current().network().serverName(),
+                Clock.systemUTC(),
+                scheduler,
+                messages);
         Hashing hashing = boot.hashers().observed(timings::start, spent -> timings.record(Timings.Kind.HASHING, spent));
         AccountRepository accounts = new TimedAccounts(
                 WebsiteAccounts.beside(
                         new SqlAccountRepository(database), database, boot.websiteTable(), Clock.systemUTC()),
                 timings);
+        boot.websiteTable().weakHashWarning().ifPresent(plugin.getLogger()::warning);
         SqlRememberedSessions remembered = new SqlRememberedSessions(database);
         this.history = new SqlLoginHistory(database);
         Remember remember = new Remember(
@@ -289,11 +321,21 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().sessions(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
+        SqlAddressTallies tallies = new SqlAddressTallies(database);
         AddressBans bans = new AddressBans(
-                new SqlAddressTallies(database),
+                tallies,
                 () -> settings.current().protection().bans(),
+                () -> settings.current().protection().wideBans(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
+        TableUpkeep upkeep = new TableUpkeep(
+                tallies,
+                remembered,
+                () -> settings.current().protection().bans().forgiveAfter(),
+                Clock.systemUTC(),
+                plugin.getLogger()::warning);
+        // Soon after the start, and once a day after, forgiven addresses and ended sessions go.
+        this.upkeepTask = scheduler.asyncTimer(Duration.ofMinutes(2), Duration.ofDays(1), task -> upkeep.run());
         this.events = bulletins(settings, plugin.getLogger());
         PaperEvents fired = new PaperEvents(
                 plugin.getServer()::getPlayer, plugin.getServer().getPluginManager()::callEvent);
@@ -307,8 +349,14 @@ final class AuthGraph implements AutoCloseable {
                 Instant::now,
                 AuthNotices.both(discord, AuthNotices.onBan(fired::banned)));
         LogIn.Failures failures = alerts.watching(bans);
+        AccountLockout lockout = new AccountLockout(
+                new SqlAccountTallies(database),
+                () -> settings.current().protection().lockout(),
+                () -> settings.current().protection().sharedAddresses(),
+                Instant::now);
         Clock clock = Clock.systemUTC();
         Set<String> labels = PlayerCommandLabels.of(commands);
+        Set<String> runnable = PlayerCommandLabels.enabled(commands);
 
         Passes passes = new Passes();
         LoginSpot loginSpot =
@@ -317,13 +365,16 @@ final class AuthGraph implements AutoCloseable {
         this.hold = new HoldListener(
                 sessions,
                 () -> settings.current().hold(),
-                () -> labels,
+                () -> runnable,
                 plugin.getName().toLowerCase(Locale.ROOT),
-                passes::isPassing);
+                passes::isPassing,
+                PlayerCommandLabels.ownedBy(plugin));
         // Paper reads config/ under the directory it was started in.
+        this.ownershipWarnings = boot.ownership().warnings();
         this.nameMarks = NameMarkCheck.warnings(
                 NameMarkCheck.paperChecksNames(Path.of("").toAbsolutePath()), boot.ownership());
         this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
+        PluginItems pluginItems = new PluginItems();
         HoldKeeper keeper = new HoldKeeper(
                 plugin,
                 scheduler,
@@ -333,7 +384,11 @@ final class AuthGraph implements AutoCloseable {
                 () -> loginWorld.room().or(loginSpot::where),
                 passes,
                 Player::teleportAsync,
-                rescue::safe);
+                rescue::safe,
+                player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)),
+                pluginItems);
+        this.keeper = keeper;
+        this.deopWatch = new DeopWatch(keeper, name -> onlineId(plugin, name));
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
         WaitingBars bars = new WaitingBars(sessions);
         MomentRunner moments = WaitingBars.endWithTheWait(
@@ -360,8 +415,10 @@ final class AuthGraph implements AutoCloseable {
                 clock,
                 timings);
         AtTheDoor atTheDoor = atTheDoor(settings, accounts, disputes, clock);
+        // Met at the hello where the handshake runs, before the web is asked, and at the pre-login otherwise.
+        AddressRules addressRules = new AddressRules(admission(settings, bans, countries, plugin.getLogger()), clock);
         this.hellos = ServerHellos.startOn(
-                new PremiumHelloDoor(atTheDoor, scheduler),
+                new PremiumHelloDoor(atTheDoor, addressRules, scheduler),
                 plugin.getLogger(),
                 settings.current().ownership().rule());
         ClaimName claims = new ClaimName(
@@ -391,7 +448,8 @@ final class AuthGraph implements AutoCloseable {
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
-        CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
+        CaptchaScreen captcha =
+                new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings, pluginItems));
         AuthSettings.Network network = settings.current().network();
         SqlFactors factorTable = new SqlFactors(
                 database,
@@ -410,7 +468,7 @@ final class AuthGraph implements AutoCloseable {
                 database,
                 accounts,
                 sessions,
-                failures,
+                new FactorGraph.Guards(failures, lockout, captchas),
                 id -> bedrock.player(id).isPresent(),
                 hashing,
                 lane,
@@ -420,7 +478,8 @@ final class AuthGraph implements AutoCloseable {
                 screens,
                 shower,
                 mail,
-                factorStates.watching(factorTable));
+                factorStates.watching(factorTable),
+                pluginItems);
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,
@@ -431,7 +490,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 captchas,
                 factors.secondStep,
-                fired);
+                fired,
+                lockout);
         AccountCap cap = new AccountCap(
                 accounts,
                 () -> settings.current().protection().accounts(),
@@ -462,8 +522,11 @@ final class AuthGraph implements AutoCloseable {
                 events,
                 remembered,
                 breaches,
-                fired);
-        RecoverPassword recovering = mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches);
+                fired,
+                failures,
+                lockout);
+        RecoverPassword recovering =
+                mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches, lockout::passed);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
                 registering,
@@ -528,6 +591,7 @@ final class AuthGraph implements AutoCloseable {
         PurgeInactive purge = new PurgeInactive(
                 new SqlAccountRepository(database),
                 accounts,
+                sessions::holdsAccount,
                 () -> settings.current().purge(),
                 clock);
         // It looks every hour and runs when its check is due, so a reload of check-hours counts.
@@ -585,8 +649,13 @@ final class AuthGraph implements AutoCloseable {
                         plugin.getServer()::createProfile,
                         () -> settings.current().ownership().crackedMark(),
                         boot.ownership().uuidScheme(),
-                        new NetworkDoor(() -> claims(settings), accounts::findById, clock, plugin.getLogger()),
-                        admission(settings, bans, countries, plugin.getLogger()),
+                        new NetworkDoor(
+                                () -> claims(settings),
+                                () -> settings.current().network().serverName(),
+                                accounts::findById,
+                                clock,
+                                plugin.getLogger()),
+                        addressRules,
                         remember::resumes,
                         factors.secondStep),
                 notices,
@@ -606,8 +675,8 @@ final class AuthGraph implements AutoCloseable {
         LogOut logOut =
                 new LogOut(sessions, () -> settings.current().passwords().maxAttempts(), remembered);
         this.logout = new LogoutCommand(logOut, door, moments, messages);
-        events.listen(
-                new EndedSessions(plugin.getServer()::getPlayer, sessions, scheduler, logOut, door, moments, messages));
+        events.listen(new EndedSessions(
+                plugin.getServer()::getPlayer, gate, sessions, scheduler, logOut, door, moments, messages));
         this.claim = new ClaimCommand(claims, hellos::installed, messages);
         this.premium = new PremiumCommand(claims, hellos::installed, sessions, messages);
         ProofForm proofForm = new BedrockProofForm(BedrockScreen.forServer(plugin.getServer()), messages);
@@ -621,7 +690,8 @@ final class AuthGraph implements AutoCloseable {
                         lane,
                         new Unregister(accounts, events, fired),
                         () -> settings.current().deleteConfirm(),
-                        clock),
+                        clock,
+                        new DeleteOwnAccount.Guards(failures, lockout)),
                 proofForm,
                 id -> bedrock.player(id).isPresent(),
                 replies,
@@ -633,7 +703,8 @@ final class AuthGraph implements AutoCloseable {
                         hashing,
                         lane,
                         change,
-                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events, fired)),
+                        new MarkKind(accounts, lookup::lookup, boot.ownership().uuidScheme(), events, fired),
+                        lockout),
                 proofForm,
                 id -> bedrock.player(id).isPresent(),
                 replies,
@@ -673,8 +744,8 @@ final class AuthGraph implements AutoCloseable {
                 id -> bedrock.player(id).isPresent());
         this.staff = staffing.view;
         ForceLogin force = new ForceLogin(accounts, sessions, events, clock);
-        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, force, lane, replies, door, messages));
-        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, scheduler, messages));
+        events.listen(new ForcedLogins(plugin.getServer()::getPlayer, gate, force, lane, replies, door, messages));
+        events.listen(new RemovedAccounts(plugin.getServer()::getPlayer, gate, scheduler, messages));
         events.listen(new AlertDelivery(plugin.getServer()::getOnlinePlayers, scheduler, messages));
         this.databases = databaseDesk(plugin, scheduler, settings, database, replies, messages);
         this.closedDoor = new ClosedDoor(databases::busy, messages);
@@ -711,14 +782,16 @@ final class AuthGraph implements AutoCloseable {
                                 clock)),
                 new StaffDesk.Reach(
                         name -> Optional.ofNullable(plugin.getServer().getPlayerExact(name))
-                                .map(Player::getUniqueId),
+                                .map(player -> new StaffDesk.Online(player.getUniqueId(), player.getName())),
                         new WaitingAccounts(
                                 plugin.getServer()::getPlayerExact,
                                 sessions,
                                 () -> settings.current().passwords().maxAttempts(),
                                 door,
                                 scheduler,
-                                messages)),
+                                messages),
+                        name -> waitsHere(plugin, gate, name),
+                        () -> claims(settings).isPresent()),
                 action -> settings.current().staff().allowsInGame(action),
                 alerts::staffActed);
         this.recover =
@@ -731,7 +804,7 @@ final class AuthGraph implements AutoCloseable {
     }
 
     /** The map the captcha is drawn on, or none when the server has no world to keep one in. */
-    private CaptchaScreen.Hand captchaHand(Plugin plugin, PluginSettings settings) {
+    private CaptchaScreen.Hand captchaHand(Plugin plugin, PluginSettings settings, PluginItems pluginItems) {
         return CaptchaMap.open(
                         plugin.getServer(),
                         plugin.getDataFolder().toPath().resolve("captcha-map.id"),
@@ -740,7 +813,10 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().hold().hideInventory(),
                         new SecureRandom(),
                         plugin.getLogger())
-                .<CaptchaScreen.Hand>map(map -> map)
+                .<CaptchaScreen.Hand>map(map -> {
+                    pluginItems.add(map::holds);
+                    return map;
+                })
                 .orElse(CaptchaScreen.Hand.NONE);
     }
 
@@ -757,6 +833,7 @@ final class AuthGraph implements AutoCloseable {
                                 + " name too, and an unlinked Bedrock player could then reach a Java player's account."
                                 + " Set it in Floodgate's config.yml to a character no Java name has, such as a dot."));
         nameMarks.forEach(plugin.getLogger()::warning);
+        ownershipWarnings.forEach(plugin.getLogger()::warning);
         // The door tells the proxy of a network what it did, on this channel; a server alone sends nothing on it.
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, Claims.CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(closedDoor, plugin);
@@ -765,6 +842,7 @@ final class AuthGraph implements AutoCloseable {
         plugin.getServer().getPluginManager().registerEvents(connections, plugin);
         plugin.getServer().getPluginManager().registerEvents(channelReports, plugin);
         plugin.getServer().getPluginManager().registerEvents(hold, plugin);
+        plugin.getServer().getPluginManager().registerEvents(deopWatch, plugin);
         plugin.getServer().getPluginManager().registerEvents(chatAnswers, plugin);
         plugin.getServer().getPluginManager().registerEvents(screenClicks, plugin);
         plugin.getServer().getPluginManager().registerEvents(factors.guard, plugin);
@@ -781,8 +859,10 @@ final class AuthGraph implements AutoCloseable {
 
     @Override
     public void close() {
+        keeper.releaseAll();
         historyTask.cancel();
         purgeTask.cancel();
+        upkeepTask.cancel();
         if (countryTask != null) {
             countryTask.cancel();
         }
@@ -834,12 +914,57 @@ final class AuthGraph implements AutoCloseable {
                                 () -> settings.current().protection().connections(), Instant::now)));
     }
 
-    /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */
-    private static Optional<Claims> claims(PluginSettings settings) {
+    /** The id of the player online under this name, or the id the text is written as. */
+    private static Optional<UUID> onlineId(Plugin plugin, String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        if (online != null) {
+            return Optional.of(online.getUniqueId());
+        }
+        try {
+            return Optional.of(UUID.fromString(name));
+        } catch (IllegalArgumentException notAnId) {
+            return Optional.empty();
+        }
+    }
+
+    /** Whether a connection under this name waits to log in on this server, in the world or at the dialog. */
+    private boolean waitsHere(Plugin plugin, DialogWaits dialogs, String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        return online != null ? hold.isHeld(online) : dialogs.waitsAs(name);
+    }
+
+    /**
+     * The reader of the proxy's claims, while the network is on. A reload that turned it on without this server's
+     * name takes no claim and writes no report, as a start refuses to: players are asked their password, and the
+     * console says why once.
+     */
+    private Optional<Claims> claims(PluginSettings settings) {
         AuthSettings.Network network = settings.current().network();
-        return network.enabled()
-                ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor()))
-                : Optional.empty();
+        if (!network.enabled()) {
+            return Optional.empty();
+        }
+        if (network.serverName().isBlank()) {
+            if (!namelessWarned.getAndSet(true)) {
+                plugin.getLogger()
+                        .severe("network.enabled is true and network.server-name is empty, so no claim of the proxy"
+                                + " is taken and every player is asked the password. Set it to this server's name"
+                                + " in the proxy's list and reload.");
+            }
+            return Optional.empty();
+        }
+        namelessWarned.set(false);
+        return Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor(), seenClaims));
+    }
+
+    /**
+     * A server on a network takes only the claims written for it, by its name in the proxy's list; without one it
+     * would take none, so it does not start.
+     */
+    private static void requireServerName(AuthSettings.Network network) {
+        if (network.enabled() && network.serverName().isBlank()) {
+            throw new IllegalStateException("network.enabled is true and network.server-name is empty. Set it to"
+                    + " this server's name in the proxy's list: the proxy writes every claim for one server.");
+        }
     }
 
     /** What a player reads after a login: the previous one, and a premium player's backup password, once. */
@@ -886,7 +1011,7 @@ final class AuthGraph implements AutoCloseable {
     }
 
     /** The bulletins of this server: on Redis while it is on a network that names one, and on itself otherwise. */
-    private static NetworkEvents bulletins(PluginSettings settings, java.util.logging.Logger logger) {
+    private NetworkEvents bulletins(PluginSettings settings, java.util.logging.Logger logger) {
         return claims(settings)
                 .map(claims -> NetworkBulletins.open(
                         settings.current().network().redis(), new Bulletins(claims), logger::warning))
@@ -904,7 +1029,9 @@ final class AuthGraph implements AutoCloseable {
                 new NameMemory(() -> settings.current().ownership().failedMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
                 new NameMemory(() -> settings.current().ownership().claimMemory(), clock),
-                disputes);
+                disputes,
+                () -> settings.current().protection().sharedAddresses(),
+                new LookupBudget(() -> settings.current().ownership().lookupsPerAddress(), clock));
     }
 
     /** The console's move of every account to another database: one at a time, off the server's threads. */

@@ -68,6 +68,28 @@ public final class Password implements AutoCloseable {
         return Character.codePointCount(chars, 0, chars.length);
     }
 
+    /**
+     * Whether a person could have typed this: no control character, no invisible format character such as a
+     * zero-width space or a direction mark, and no half of a surrogate pair. Nothing the plugin stores holds
+     * one, so an answer that does is wrong before any hash is read.
+     */
+    public boolean typeable() {
+        for (int i = 0; i < chars.length; i++) {
+            char c = chars[i];
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 >= chars.length || !Character.isLowSurrogate(chars[i + 1])) {
+                    return false;
+                }
+                i++;
+                continue;
+            }
+            if (Character.isLowSurrogate(c) || Character.isISOControl(c) || Character.getType(c) == Character.FORMAT) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Whether {@link #close()} has run. */
     public boolean isWiped() {
         return wiped;

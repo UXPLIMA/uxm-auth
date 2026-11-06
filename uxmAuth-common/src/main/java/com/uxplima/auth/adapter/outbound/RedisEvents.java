@@ -66,8 +66,8 @@ public final class RedisEvents implements NetworkEvents, AutoCloseable {
                             }
                         },
                         () -> warn.accept("A message on the Redis channel " + channel + " was not sealed with this"
-                                + " network's secret, or came too late, and was dropped. Every member must share"
-                                + " network.secret and a clock."));
+                                + " network's secret, came too late, or came from an older uxmAuth, and was dropped."
+                                + " Every member must share network.secret, a clock and the uxmAuth release."));
     }
 
     private void deliver(Bulletin bulletin) {

@@ -24,10 +24,15 @@ public final class LimboVisits implements LimboVisit.Reach, Consumer<Bulletin> {
         this.admit = Objects.requireNonNull(admit, "admit");
     }
 
+    /**
+     * A visit under an id another visit still waits under never takes its place: staff letting the account in
+     * reach the first one, and the door turns such a second connection away besides.
+     */
     @Override
     public void arrived(UUID id, LimboVisit visit) {
         Objects.requireNonNull(visit, "visit");
-        visits.compute(Objects.requireNonNull(id, "id"), (key, before) -> visit);
+        visits.compute(
+                Objects.requireNonNull(id, "id"), (key, before) -> before == null || before.over() ? visit : before);
     }
 
     @Override

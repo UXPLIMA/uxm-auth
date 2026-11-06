@@ -9,22 +9,29 @@ import org.bukkit.entity.Player;
 
 import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.domain.network.Bulletin;
+import com.uxplima.auth.paper.adapter.inbound.hold.DialogWaits;
 import com.uxplima.uxmlib.scheduler.Scheduler;
 import com.uxplima.uxmlib.text.message.Messages;
 import org.jspecify.annotations.Nullable;
 
 /**
  * What a server does when staff remove an account, or change how it logs in: its player here is sent away, on their
- * own thread, with the reason.
+ * own thread, with the reason. A connection still at the dialog before the world is sent away from there.
  */
 public final class RemovedAccounts implements Consumer<Bulletin> {
 
     private final Function<UUID, @Nullable Player> online;
+    private final DialogWaits dialogs;
     private final Scheduler scheduler;
     private final Messages messages;
 
-    /** @param online the player of this account on this server, when there is one */
-    public RemovedAccounts(Function<UUID, @Nullable Player> online, Scheduler scheduler, Messages messages) {
+    /**
+     * @param online the player of this account on this server, when there is one
+     * @param dialogs the connections waiting at the dialog, which have no player
+     */
+    public RemovedAccounts(
+            Function<UUID, @Nullable Player> online, DialogWaits dialogs, Scheduler scheduler, Messages messages) {
+        this.dialogs = Objects.requireNonNull(dialogs, "dialogs");
         this.online = Objects.requireNonNull(online, "online");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.messages = Objects.requireNonNull(messages, "messages");
@@ -51,6 +58,8 @@ public final class RemovedAccounts implements Consumer<Bulletin> {
         Player player = online.apply(account);
         if (player != null) {
             scheduler.entity(player, () -> player.kick(messages.render(player, reason)));
+        } else {
+            dialogs.sendAway(account, reason);
         }
     }
 }

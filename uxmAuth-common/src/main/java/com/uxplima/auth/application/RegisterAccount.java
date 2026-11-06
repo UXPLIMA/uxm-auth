@@ -4,11 +4,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import com.uxplima.auth.application.lane.HashingLane;
+import com.uxplima.auth.application.lane.LaneFullException;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.AuthEvents;
 import com.uxplima.auth.application.port.BreachedPasswords;
@@ -56,6 +59,8 @@ public final class RegisterAccount {
     private final BreachedPasswords breaches;
     private final AuthEvents events;
     private final Captcha captcha;
+    /** The connections whose registration is on the lane now: one each, so one client cannot fill the queue. */
+    private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
     public RegisterAccount(
             AccountRepository accounts,
@@ -172,6 +177,28 @@ public final class RegisterAccount {
         }
         long generation = held.generation();
         boolean unverified = unregistered.unverified();
+        if (!inFlight.add(connection)) {
+            // The answer before this one is still hashing: another would only queue one more hash for nothing.
+            return CompletableFuture.failedFuture(new LaneFullException());
+        }
+        CompletableFuture<RegisterResult> work;
+        try {
+            work = submit(connection, generation, name, password, address, held, unverified);
+        } catch (RuntimeException failed) {
+            inFlight.remove(connection);
+            throw failed;
+        }
+        return work.whenComplete((result, failure) -> inFlight.remove(connection));
+    }
+
+    private CompletableFuture<RegisterResult> submit(
+            UUID connection,
+            long generation,
+            PlayerName name,
+            Password password,
+            String address,
+            Sessions.Held held,
+            boolean unverified) {
         return lane.submit(() -> {
             Optional<String> refusedHere = events.beforeRegister(connection);
             if (refusedHere.isPresent()) {
@@ -215,6 +242,7 @@ public final class RegisterAccount {
             case AccountRepository.Inserted inserted ->
                 sessions.update(
                                 connection,
+                                generation,
                                 current -> current instanceof AuthState.Unregistered
                                         ? new AuthState.Authenticated(account, AuthMethod.REGISTERED)
                                         : current)

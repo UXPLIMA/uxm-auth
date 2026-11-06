@@ -86,6 +86,25 @@ public final class PluginHealth {
                                 + " nothing: every other part of the plugin works"));
     }
 
+    /**
+     * Whether the website table keeps passwords in a weak format.
+     *
+     * <p>A warning rather than a failure: the operator may run a website that reads nothing else, and logins work;
+     * what suffers is every password in a copy of the database.
+     */
+    public static HealthCheck websiteHash(Supplier<WebsiteTable> website) {
+        Objects.requireNonNull(website, "website");
+        return check("website-hash", () -> {
+            WebsiteTable table = website.get();
+            if (table.weakHashWarning().isPresent()) {
+                return HealthResult.warn("website-table.hash is sha256: every password here is one salted SHA-256,"
+                        + " this plugin's own row too");
+            }
+            return HealthResult.ok(
+                    table.enabled() ? "website-table.hash is " + table.hash().name() : "off");
+        });
+    }
+
     private static HealthCheck check(String name, Supplier<HealthResult> answer) {
         return new HealthCheck() {
 

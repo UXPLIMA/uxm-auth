@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import javax.net.ssl.SSLSocketFactory;
@@ -15,6 +16,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import com.uxplima.auth.adapter.outbound.PluginSettings;
+import com.uxplima.auth.adapter.outbound.SqlMailSends;
 import com.uxplima.auth.adapter.outbound.mail.MailFiles;
 import com.uxplima.auth.adapter.outbound.mail.SmtpClient;
 import com.uxplima.auth.adapter.outbound.mail.SmtpMailer;
@@ -25,6 +27,7 @@ import com.uxplima.auth.application.mail.LinkEmail;
 import com.uxplima.auth.application.mail.MailCodes;
 import com.uxplima.auth.application.mail.MailLogin;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.mail.RecoveryAsks;
 import com.uxplima.auth.application.port.AccountRepository;
 import com.uxplima.auth.application.port.BreachedPasswords;
 import com.uxplima.auth.application.port.Emails;
@@ -86,6 +89,7 @@ final class MailGraph implements AutoCloseable {
         this.emails = emails;
         this.codes = new MailCodes(
                 emails,
+                new SqlMailSends(database),
                 mailer,
                 hashing,
                 lane,
@@ -153,7 +157,8 @@ final class MailGraph implements AutoCloseable {
             Hashing hashing,
             RememberedSessions remembered,
             NetworkEvents events,
-            BreachedPasswords breaches) {
+            BreachedPasswords breaches,
+            Consumer<UUID> unlock) {
         return new RecoverPassword(
                 sessions,
                 emails,
@@ -164,7 +169,12 @@ final class MailGraph implements AutoCloseable {
                 () -> settings.current().passwordPolicy(),
                 breaches,
                 remembered,
-                events);
+                events,
+                new RecoveryAsks(
+                        () -> settings.current().email().recoverPerHour(),
+                        () -> settings.current().protection().sharedAddresses(),
+                        Instant::now),
+                unlock);
     }
 
     /** {@code /recover}, for a player at the login. */

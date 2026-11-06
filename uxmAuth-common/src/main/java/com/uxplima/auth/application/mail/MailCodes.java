@@ -17,6 +17,7 @@ import java.util.random.RandomGenerator;
 import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.Emails;
+import com.uxplima.auth.application.port.MailSends;
 import com.uxplima.auth.application.port.Mailer;
 import com.uxplima.auth.domain.hash.Hashing;
 import com.uxplima.auth.domain.hash.PasswordHash;
@@ -30,6 +31,12 @@ import org.jspecify.annotations.Nullable;
  * and for a few tries, and taken once. A try is spent before the code is checked, so codes typed together cannot
  * try more than the limit; a wrong one counts against the address as a wrong password does. A code is hashed as a
  * password is, so the work runs on the hashing lane, and the mail on the mailer's own threads.
+ *
+ * <p>When a code went is kept apart from the code, and so is how many went that day: a code that is spent, used up
+ * or past its time keeps its cooldown, and an account is sent no more than the day's cap of codes of one kind, so
+ * asking again never buys fresh tries sooner than the rules allow. Login codes, which only a right password sends,
+ * keep the cooldown but are not capped, so a player who logs in often is never left without one. Nothing is hashed
+ * for an ask the cooldown or the cap refuses.
  */
 public final class MailCodes {
 
@@ -40,8 +47,9 @@ public final class MailCodes {
      * @param attempts how many tries a code takes
      * @param cooldown how long before the same purpose sends another code
      * @param codeLength how many digits a code has
+     * @param perDay how many codes of one kind but the login code an account may be sent in a day
      */
-    public record Settings(Duration codeTime, int attempts, Duration cooldown, int codeLength) {
+    public record Settings(Duration codeTime, int attempts, Duration cooldown, int codeLength, int perDay) {
         public Settings {
             Objects.requireNonNull(codeTime, "codeTime");
             Objects.requireNonNull(cooldown, "cooldown");
@@ -57,6 +65,9 @@ public final class MailCodes {
             if (codeLength < 4 || codeLength > 10) {
                 throw new IllegalArgumentException("email.code-length must be 4 to 10, not " + codeLength);
             }
+            if (perDay < 1 || perDay > 1000) {
+                throw new IllegalArgumentException("email.codes-per-day must be 1 to 1000, not " + perDay);
+            }
         }
     }
 
@@ -65,7 +76,7 @@ public final class MailCodes {
         /** The code went to this address, good for this long. */
         record Sent(EmailAddress to, Duration lasts) implements Issued {}
 
-        /** A code of this purpose went out too recently; another may go after this long. */
+        /** A code of this purpose went out too recently, or the day's went; another may go after this long. */
         record Cooldown(Duration left) implements Issued {}
 
         /** A code of this purpose is out and still good; nothing was sent. */
@@ -100,6 +111,7 @@ public final class MailCodes {
     }
 
     private final Emails emails;
+    private final MailSends sends;
     private final Mailer mailer;
     private final Hashing hashing;
     private final HashingLane lane;
@@ -108,9 +120,13 @@ public final class MailCodes {
     private final RandomGenerator random;
     private final Supplier<Instant> clock;
 
-    /** @param random where codes come from; a server passes a secure one */
+    /**
+     * @param sends when codes of each kind went to each account, kept when the codes are gone
+     * @param random where codes come from; a server passes a secure one
+     */
     public MailCodes(
             Emails emails,
+            MailSends sends,
             Mailer mailer,
             Hashing hashing,
             HashingLane lane,
@@ -119,6 +135,7 @@ public final class MailCodes {
             RandomGenerator random,
             Supplier<Instant> clock) {
         this.emails = Objects.requireNonNull(emails, "emails");
+        this.sends = Objects.requireNonNull(sends, "sends");
         this.mailer = Objects.requireNonNull(mailer, "mailer");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
@@ -128,9 +145,26 @@ public final class MailCodes {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
+    /** How long a code sent now is good for. */
+    public Duration codeTime() {
+        return settings.get().codeTime();
+    }
+
+    /** One way of sending a code: {@link #issue} or {@link #issueUncapped}. */
+    @FunctionalInterface
+    public interface Issuer {
+        CompletableFuture<Issued> issue(
+                UUID account,
+                Emails.Purpose purpose,
+                EmailAddress to,
+                Mailer.Kind kind,
+                Locale language,
+                Map<String, String> values);
+    }
+
     /**
      * Sends a fresh code of this purpose to the address, in place of any before it, unless one went out inside
-     * the cooldown. The mail carries {@code code} and {@code minutes} beside the values given.
+     * the cooldown or the day's cap is reached. The mail carries {@code code} and {@code minutes} beside the values given.
      */
     public CompletableFuture<Issued> issue(
             UUID account,
@@ -139,7 +173,22 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values) {
-        return issue(account, purpose, to, kind, language, values, false);
+        return issue(account, purpose, to, kind, language, values, false, true);
+    }
+
+    /**
+     * As {@link #issue}, for an ask the account's owner made from where they last logged in or registered: the
+     * cooldown holds, the day's cap does not. Strangers under the owner's name can spend the cap from anywhere, and
+     * must not keep the owner from the code they ask for at home.
+     */
+    public CompletableFuture<Issued> issueUncapped(
+            UUID account,
+            Emails.Purpose purpose,
+            EmailAddress to,
+            Mailer.Kind kind,
+            Locale language,
+            Map<String, String> values) {
+        return issue(account, purpose, to, kind, language, values, false, false);
     }
 
     /**
@@ -153,7 +202,7 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values) {
-        return issue(account, purpose, to, kind, language, values, true);
+        return issue(account, purpose, to, kind, language, values, true, true);
     }
 
     private CompletableFuture<Issued> issue(
@@ -163,7 +212,8 @@ public final class MailCodes {
             Mailer.Kind kind,
             Locale language,
             Map<String, String> values,
-            boolean keepLive) {
+            boolean keepLive,
+            boolean capped) {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(purpose, "purpose");
         Objects.requireNonNull(to, "to");
@@ -172,7 +222,7 @@ public final class MailCodes {
         Map<String, String> filled = new HashMap<>(Objects.requireNonNull(values, "values"));
         Settings now = settings.get();
         String code = digits(now.codeLength());
-        return lane.submit(() -> stored(account, purpose, to, hash(code), now, keepLive))
+        return lane.submit(() -> stored(account, purpose, to, code, now, keepLive, capped))
                 .thenCompose(stored -> {
                     if (stored.isPresent()) {
                         return CompletableFuture.completedFuture(stored.get());
@@ -184,10 +234,31 @@ public final class MailCodes {
                 });
     }
 
-    /** Nothing when a fresh code is stored; the cooldown, or the live code, that refused one otherwise. */
+    /**
+     * Nothing when a fresh code is stored; the live code, the cooldown or the day's cap that refused one otherwise.
+     * The send is counted before the code is hashed, so a refused ask costs no hash.
+     */
     private Optional<Issued> stored(
-            UUID account, Emails.Purpose purpose, EmailAddress to, PasswordHash hash, Settings now, boolean keepLive) {
+            UUID account,
+            Emails.Purpose purpose,
+            EmailAddress to,
+            String code,
+            Settings now,
+            boolean keepLive,
+            boolean capped) {
         Instant at = clock.get();
+        if (keepLive) {
+            Optional<Emails.Code> out =
+                    emails.code(account, purpose).filter(live -> live.expires().isAfter(at) && live.attemptsLeft() > 0);
+            if (out.isPresent()) {
+                return Optional.of(new Issued.Live(out.get().to()));
+            }
+        }
+        Duration wait = counted(account, purpose, at, now, capped);
+        if (!wait.isZero()) {
+            return Optional.of(new Issued.Cooldown(wait));
+        }
+        PasswordHash hash = hash(code);
         AtomicReference<@Nullable Issued> refused = new AtomicReference<>();
         emails.changeCode(account, purpose, before -> {
             refused.set(refusal(before, at, now, keepLive));
@@ -197,6 +268,18 @@ public final class MailCodes {
             return Optional.of(new Emails.Code(to, hash, at.plus(now.codeTime()), now.attempts(), at));
         });
         return Optional.ofNullable(refused.get());
+    }
+
+    /** Counts a send of this purpose unless the cooldown or the day's cap refuses it, and answers the wait. */
+    private Duration counted(UUID account, Emails.Purpose purpose, Instant at, Settings now, boolean capped) {
+        int cap = purpose == Emails.Purpose.LOGIN || !capped ? Integer.MAX_VALUE : now.perDay();
+        AtomicReference<Duration> wait = new AtomicReference<>(Duration.ZERO);
+        sends.change(account, purpose, before -> {
+            Duration left = before.waitAt(at, now.cooldown(), cap);
+            wait.set(left);
+            return left.isZero() ? before.sentAt(at) : before;
+        });
+        return Objects.requireNonNull(wait.get(), "wait");
     }
 
     private static @Nullable Issued refusal(Optional<Emails.Code> before, Instant at, Settings now, boolean keepLive) {
@@ -215,7 +298,8 @@ public final class MailCodes {
         if (outcome == Mailer.Outcome.SENT) {
             return new Issued.Sent(to, now.codeTime());
         }
-        // Nothing reached the player, so nothing holds them back from asking again.
+        // Nothing reached the player, so the code goes; the send still counts, so a failing mail server is not
+        // asked again without end.
         emails.changeCode(account, purpose, before -> Optional.empty());
         return outcome == Mailer.Outcome.OFF ? new Issued.Off() : new Issued.Failed();
     }

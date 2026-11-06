@@ -18,8 +18,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * Takes the code of the second step. A try is spent on the session before the code is checked, so codes sent
  * together cannot try more than the limit allows; a code is taken once across every server, inside its window; a
- * wrong one counts against the address as a wrong password does; a backup code is spent the same way. The login is
- * recorded only once the code passed. The table is read and backup codes are hashed here, so this runs off the
+ * wrong one counts against the address, against the account wherever it came from, and toward the captcha of the
+ * name, as a wrong password does; a backup code is spent the same way. A locked account checks no code. The login
+ * is recorded only once the code passed. The table is read and backup codes are hashed here, so this runs off the
  * server thread.
  */
 public final class ConfirmFactor {
@@ -46,6 +47,13 @@ public final class ConfirmFactor {
             }
         }
 
+        /** Too many wrong passwords and codes were typed for the account lately: no code is checked for this long. */
+        record Locked(Duration left) implements Result {
+            public Locked {
+                Objects.requireNonNull(left, "left");
+            }
+        }
+
         /** The connection waits for no code. */
         record NotWaiting() implements Result {}
 
@@ -57,18 +65,28 @@ public final class ConfirmFactor {
     private final Sessions sessions;
     private final FactorCheck check;
     private final LogIn.Failures failures;
+    private final LogIn.Lockout lockout;
+    private final LogIn.Captcha captcha;
     private final Supplier<Instant> clock;
 
+    /**
+     * @param lockout where every code counts against the account it was typed for, and locks it after enough
+     * @param captcha where a wrong code counts toward the captcha of the name, as a wrong password does
+     */
     public ConfirmFactor(
             AccountRepository accounts,
             Sessions sessions,
             FactorCheck check,
             LogIn.Failures failures,
+            LogIn.Lockout lockout,
+            LogIn.Captcha captcha,
             Supplier<Instant> clock) {
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.check = Objects.requireNonNull(check, "check");
         this.failures = Objects.requireNonNull(failures, "failures");
+        this.lockout = Objects.requireNonNull(lockout, "lockout");
+        this.captcha = Objects.requireNonNull(captcha, "captcha");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -81,17 +99,31 @@ public final class ConfirmFactor {
         if (held == null) {
             return new Result.Gone();
         }
+        if (!(held.state() instanceof AuthState.SecondFactor waiting)
+                || waiting.attempts().exhausted()) {
+            return refusal(held.state());
+        }
+        LogIn.Lockout.Try.Taken taken;
+        switch (lockout.take(waiting.account(), address, held.host())) {
+            case LogIn.Lockout.Try.Refused refused -> {
+                return new Result.Locked(refused.left());
+            }
+            case LogIn.Lockout.Try.Taken took -> taken = took;
+        }
         AtomicReference<AuthState.SecondFactor> reserved = new AtomicReference<>();
         AuthState after = sessions.update(connection, held.generation(), current -> spend(current, reserved))
                 .orElse(null);
         AuthState.SecondFactor spent = reserved.get();
         if (spent == null) {
+            lockout.right(taken);
             return refusal(after);
         }
         Instant now = clock.get();
         if (!check.passes(spent.account().id(), code, now)) {
-            return wrong(spent, address, held.host());
+            captcha.failed(spent.account().name());
+            return wrong(spent, address, held.host(), taken);
         }
+        lockout.passed(taken.account());
         return logIn(connection, held.generation(), spent, address, now);
     }
 
@@ -113,10 +145,14 @@ public final class ConfirmFactor {
         return after instanceof AuthState.SecondFactor ? new Result.TooManyAttempts() : new Result.NotWaiting();
     }
 
-    private Result wrong(AuthState.SecondFactor spent, String address, String host) {
+    private Result wrong(AuthState.SecondFactor spent, String address, String host, LogIn.Lockout.Try.Taken taken) {
         Optional<Duration> banned = failures.failed(address, host);
         if (banned.isPresent()) {
             return new Result.Banned(banned.get());
+        }
+        Optional<Duration> locked = taken.locks();
+        if (locked.isPresent()) {
+            return new Result.Locked(locked.get());
         }
         return spent.attempts().exhausted()
                 ? new Result.TooManyAttempts()

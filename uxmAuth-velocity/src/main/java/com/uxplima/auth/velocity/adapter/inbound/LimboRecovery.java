@@ -43,7 +43,7 @@ public final class LimboRecovery implements LimboLogin.Recover {
         Objects.requireNonNull(typed, "typed");
         Objects.requireNonNull(address, "address");
         if (typed.isEmpty()) {
-            return recover.request(id, messages.localeOf(reader)).thenApply(outcome -> said(reader, outcome));
+            return recover.request(id, address, messages.localeOf(reader)).thenApply(outcome -> said(reader, outcome));
         }
         if (typed.size() != 2) {
             return CompletableFuture.completedFuture(

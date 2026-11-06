@@ -124,6 +124,12 @@ public final class FactorSetup {
     /** {@code /2fa setup}: a fresh key, its link and its QR code, answering when the player has been told. */
     public CompletableFuture<Void> setup(Player player) {
         Objects.requireNonNull(player, "player");
+        if (sessions.state(player.getUniqueId()).orElse(null) instanceof AuthState.Authenticated in
+                && in.method().remembered()) {
+            // The app would lock the account to whoever sets it up: not a session inherited from the address.
+            messages.send(player, Keys.FACTOR_PASSWORD_FIRST);
+            return done();
+        }
         Optional<Account> account = account(player);
         if (account.isEmpty()) {
             return done();

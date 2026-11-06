@@ -6,6 +6,11 @@ public enum Refusal {
     LOOKUP_FAILED,
     /** The name is a paid account's, this server lets only its owner use it, and the handshake failed. */
     PAID_NAME,
+    /**
+     * The name is a paid account's in another spelling. The owner's client always sends Mojang's, so this
+     * connection cannot be theirs, and the name is not taken in a spelling that would lock its owner out.
+     */
+    PAID_SPELLING,
     /** The handshake failed on the address for paid accounts; the other address takes a password. */
     PREMIUM_ADDRESS,
     /** A cracked account and a paid owner both want the name, and staff have not settled it yet. */

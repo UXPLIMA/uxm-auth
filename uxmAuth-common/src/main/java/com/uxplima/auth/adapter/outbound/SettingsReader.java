@@ -1,5 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,7 +58,8 @@ final class SettingsReader {
                 required(config),
                 config.getBoolean("passwords.confirm-on-register", true),
                 config.getBoolean("passwords.old-on-change", true),
-                config.getInt("passwords.max-attempts", 3));
+                config.getInt("passwords.max-attempts", 3),
+                config.getBoolean("passwords.screen-logins", false));
     }
 
     static AuthSettings.PasswordLists passwordLists(HoconConfig config) {
@@ -117,6 +120,7 @@ final class SettingsReader {
         return new AuthSettings.Network(
                 config.getBoolean("network.enabled", false),
                 config.getString("network.secret", "").trim(),
+                config.getString("network.server-name", "").trim(),
                 Duration.ofSeconds(positive(config, "network.claim-seconds", 30)),
                 list(config, "network", "allowed-commands", List.of()).stream()
                         .map(command -> command.trim().toLowerCase(Locale.ROOT).replaceFirst("^/", ""))
@@ -176,6 +180,16 @@ final class SettingsReader {
     /** Mojang refuses past this many requests in ten minutes. */
     private static final int MOJANG_LIMIT = 600;
 
+    /** The host an address names, for a message: the rest of an address may carry a key, so it is not repeated. */
+    private static String hostOf(String address) {
+        try {
+            String host = new URI(address.replace("{name}", "name")).getHost();
+            return host == null ? "no host" : host;
+        } catch (URISyntaxException notAnAddress) {
+            return "no host";
+        }
+    }
+
     static AuthSettings.Premium premium(HoconConfig config) {
         int cap = config.getInt("premium.mojang-cap-per-10-minutes", 550);
         if (cap < 1 || cap >= MOJANG_LIMIT) {
@@ -187,7 +201,8 @@ final class SettingsReader {
             String path = "premium.addresses." + source.key();
             String address = config.getString(path, source.shippedAddress());
             if (!address.contains("{name}")) {
-                throw new IllegalArgumentException(path + " must hold {name} where the name goes, got: " + address);
+                throw new IllegalArgumentException(path + " must hold {name} where the name goes, and the address on "
+                        + hostOf(address) + " holds none");
             }
             addresses.put(source, address);
         }
@@ -217,7 +232,18 @@ final class SettingsReader {
                 word(config, "ownership.conflict", "rename", ConflictStrategy.class),
                 renameMark(config),
                 crackedMark(config),
-                config.getBoolean("ownership.premium-password-fallback", true));
+                config.getBoolean("ownership.premium-password-fallback", true),
+                lookupsPerAddress(config));
+    }
+
+    /** How many names one address may have the web asked about in ten minutes; 0 lifts the limit. */
+    private static int lookupsPerAddress(HoconConfig config) {
+        int lookups = config.getInt("ownership.lookups-per-address-per-10-minutes", 30);
+        if (lookups < 0) {
+            throw new IllegalArgumentException(
+                    "ownership.lookups-per-address-per-10-minutes must be 0 or more, got: " + lookups);
+        }
+        return lookups;
     }
 
     private static DomainMark crackedMark(HoconConfig config) {

@@ -52,8 +52,16 @@ public record DiscordSettings(String url, String server, Map<Event, Notice> even
         Objects.requireNonNull(server, "server");
         events = Map.copyOf(new EnumMap<>(Objects.requireNonNull(events, "events")));
         if (!url.isBlank() && !webAddress(url)) {
-            throw new IllegalArgumentException("discord.url is no http or https address: " + url);
+            // The value is not repeated: a webhook address is its own password, and whoever reads it may post.
+            throw new IllegalArgumentException("discord.url is no http or https address. Copy the webhook's address"
+                    + " from the channel's integrations in Discord");
         }
+    }
+
+    /** Never the webhook's address: it is all anybody needs to post to the channel. */
+    @Override
+    public String toString() {
+        return "DiscordSettings[on=" + on() + ", server=" + server + ", events=" + events + "]";
     }
 
     /** The switch and the words of this event; every event has them. */
