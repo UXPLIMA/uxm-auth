@@ -147,6 +147,7 @@ final class ProxyGraph implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         AccountRepository accounts = WebsiteAccounts.beside(
                 new SqlAccountRepository(database), database, settings.current().websiteTable(), clock);
+        settings.current().websiteTable().weakHashWarning().ifPresent(logger::warn);
         ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
         NetworkSecret secret = secret(settings);
         // Sealed with the secret every member shares, so a code set up on any server reads here.

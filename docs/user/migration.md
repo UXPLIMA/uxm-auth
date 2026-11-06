@@ -47,7 +47,9 @@ names of `columns` when it is missing; an existing one is used as it is. Everyth
 - Premium and Bedrock accounts never read or write a row, and a registration in game never writes over one.
 - Removing an account in game removes its row. The plugin's own row is still kept, so turning the table off loses
   only what the website changed since.
-- `sha256` is weak: choose it only for a website that reads nothing else.
+- `hash` is the format of every password while the table is on, the plugin's own row included, because both keep
+  the one hash. `sha256` is one salted SHA-256, which a copy of the database gives up in hours rather than years:
+  choose it only for a website that reads nothing else. The start and `/uxmauth doctor` warn while it is on.
 
 ## Moving the database
 

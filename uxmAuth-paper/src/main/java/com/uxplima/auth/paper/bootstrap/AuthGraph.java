@@ -282,6 +282,7 @@ final class AuthGraph implements AutoCloseable {
                 WebsiteAccounts.beside(
                         new SqlAccountRepository(database), database, boot.websiteTable(), Clock.systemUTC()),
                 timings);
+        boot.websiteTable().weakHashWarning().ifPresent(plugin.getLogger()::warning);
         SqlRememberedSessions remembered = new SqlRememberedSessions(database);
         this.history = new SqlLoginHistory(database);
         Remember remember = new Remember(
