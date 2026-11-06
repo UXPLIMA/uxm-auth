@@ -42,6 +42,11 @@ public final class MemoryAccounts implements AccountRepository {
     }
 
     @Override
+    public void markVerified(UUID id) {
+        byId.computeIfPresent(id, (key, account) -> account.asVerified());
+    }
+
+    @Override
     public void recordLogin(UUID id, Instant at, String address) {
         byId.computeIfPresent(id, (key, account) -> account.loggedIn(at, address));
     }

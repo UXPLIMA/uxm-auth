@@ -32,6 +32,13 @@ public interface AccountRepository {
     /** Writes every field of an account that exists. For staff tools, which mean every field. */
     void update(Account account);
 
+    /**
+     * Settles an unverified account: only the flag changes. A caller that read the account before a slow
+     * question must use this rather than {@link #update}, which would write back every field it read, a
+     * password changed in the meantime too.
+     */
+    void markVerified(UUID id);
+
     /** Records a login, and touches nothing else on the row. */
     void recordLogin(UUID id, Instant at, String address);
 

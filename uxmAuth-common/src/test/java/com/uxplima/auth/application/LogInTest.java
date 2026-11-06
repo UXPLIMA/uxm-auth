@@ -201,6 +201,14 @@ class LogInTest {
         }
 
         @Override
+        public void markVerified(UUID id) {
+            Account account = byId.get(id);
+            if (account != null) {
+                byId.put(id, account.asVerified());
+            }
+        }
+
+        @Override
         public void recordLogin(UUID id, Instant at, String address) {
             lastLogin.put(id, at);
         }

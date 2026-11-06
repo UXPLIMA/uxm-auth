@@ -67,6 +67,16 @@ public final class TimedAccounts implements AccountRepository {
     }
 
     @Override
+    public void markVerified(UUID id) {
+        long start = timings.start();
+        try {
+            table.markVerified(id);
+        } finally {
+            done(start);
+        }
+    }
+
+    @Override
     public void recordLogin(UUID id, Instant at, String address) {
         long start = timings.start();
         try {

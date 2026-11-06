@@ -42,6 +42,7 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
     private static final String UPDATE = "UPDATE uxmauth_account SET name = ?, name_key = ?, kind = ?,"
             + " premium_id = ?, password = ?, registered_at = ?, registration_address = ?, last_login_at = ?,"
             + " last_address = ?, unverified = ?, registration_key = ? WHERE id = ?";
+    private static final String MARK_VERIFIED = "UPDATE uxmauth_account SET unverified = 0 WHERE id = ?";
     private static final String RECORD_LOGIN =
             "UPDATE uxmauth_account SET last_login_at = ?, last_address = ? WHERE id = ?";
     private static final String REPLACE_PASSWORD =
@@ -170,6 +171,12 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             bindFields(statement, 1, account);
             statement.setString(12, account.id().toString());
         }));
+    }
+
+    @Override
+    public void markVerified(UUID id) {
+        Objects.requireNonNull(id, "id");
+        database.inTransaction(sql -> sql.update(MARK_VERIFIED, statement -> statement.setString(1, id.toString())));
     }
 
     @Override
