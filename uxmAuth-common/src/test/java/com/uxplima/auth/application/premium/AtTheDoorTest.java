@@ -173,4 +173,29 @@ class AtTheDoorTest {
         assertThat(automatic.decide("Bravo", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
         assertThat(asked).isEqualTo(2);
     }
+
+    @Test
+    void aClaimThroughASharedAddressFilterIsNotTakenAndAskedOfNobody() {
+        web = new PremiumAnswer.Premium(NOTCH, "Notch");
+        accounts.cracked(UUID.randomUUID(), "Notch");
+        AtTheDoor filtered = door(NameRule.AUTOMATIC, 0, List.of(SQUATTER));
+
+        boolean taken = filtered.claim(SQUATTER, new PlayerName("Notch"));
+        boolean owner = filtered.ownerAsks(SQUATTER, new PlayerName("Notch"));
+
+        assertThat(taken).isFalse();
+        assertThat(owner).isFalse();
+        assertThat(filtered.decide("Notch", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+        assertThat(filtered.ownerAsked(SQUATTER, new PlayerName("Notch"))).isFalse();
+    }
+
+    @Test
+    void aClaimFromAnAddressOfItsOwnAsksItsNextConnection() {
+        accounts.cracked(UUID.randomUUID(), "Notch");
+        AtTheDoor door = door(NameRule.AUTOMATIC);
+
+        assertThat(door.claim(OWNER, new PlayerName("Notch"))).isTrue();
+        assertThat(door.decide("Notch", OWNER, HOST)).isEqualTo(new Decision.Handshake());
+        assertThat(door.decide("Notch", SQUATTER, HOST)).isEqualTo(new Decision.Cracked(false, false));
+    }
 }

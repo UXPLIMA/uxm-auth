@@ -181,6 +181,10 @@ public enum Keys implements MessageKey {
     CLAIM_NOT_THIS_RULE(
             "claim.not-this-rule",
             "<etag:'ERROR'> <body>This server proves paid names on its own, so there is nothing to claim."),
+    CLAIM_SHARED_ADDRESS(
+            "claim.shared-address",
+            "<etag:'ERROR'> <body>You connect through a service that hides your own address, so a claim cannot be"
+                    + " tied to your next connection. Ask staff to settle the name."),
     PREMIUM_LOG_IN_FIRST(
             "premium.log-in-first",
             "<etag:'ERROR'> <body>Log in first, then use <value>/premium<body> to prove your name on your next"

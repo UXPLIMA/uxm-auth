@@ -20,7 +20,7 @@ class NameOwnershipTest {
     }
 
     private static Arrival arriving(String typed, Holder holder, boolean otherCase) {
-        return new Arrival(typed, holder, otherCase, false, false, "play.example.org");
+        return new Arrival(typed, holder, otherCase, false, false, false, "play.example.org");
     }
 
     @Test
@@ -61,7 +61,7 @@ class NameOwnershipTest {
 
     @Test
     void aFailureUnderMojangsSpellingDoesNotOpenAnotherSpelling() {
-        Arrival failed = new Arrival("notch", Holder.NOBODY, false, false, true, "play.example.org");
+        Arrival failed = new Arrival("notch", Holder.NOBODY, false, false, true, false, "play.example.org");
 
         Decision decision = under(NameRule.AUTOMATIC, WhenUnknown.CRACKED).decide(failed, NameOwnershipTest::paid);
 
@@ -90,5 +90,15 @@ class NameOwnershipTest {
                 .decide(arriving("Steve", Holder.CRACKED, false), PremiumAnswer.Unknown::new);
 
         assertThat(decision).isInstanceOf(Decision.Cracked.class);
+    }
+
+    @Test
+    void aFailureRememberedForASharedAddressTurnsNobodyAway() {
+        Arrival direct = new Arrival("Notch", Holder.PREMIUM, false, false, true, false, "play.example.org");
+        Arrival filtered = new Arrival("Notch", Holder.PREMIUM, false, false, true, true, "play.example.org");
+        NameOwnership automatic = under(NameRule.AUTOMATIC, WhenUnknown.CRACKED);
+
+        assertThat(automatic.decide(direct, NameOwnershipTest::paid)).isEqualTo(new Decision.Refuse(Refusal.PAID_NAME));
+        assertThat(automatic.decide(filtered, NameOwnershipTest::paid)).isEqualTo(new Decision.Handshake());
     }
 }

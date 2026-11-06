@@ -43,9 +43,15 @@ a name in another case, a connection in Mojang's own spelling is asked for the h
 unverified and asked again next time), `premium` or `refuse`. Under `strict` a name no source could answer is never
 taken for cracked, because sources that are down or a Mojang cap spent by a flood of names would otherwise let a
 cracked player take a paid name: `cracked` is read as `refuse` there and the start says so, and a cracked account
-the web cleared when it was made keeps logging in with its password. `failed-memory-seconds` remembers a connection that
-failed the handshake so it is told why. `claim-minutes` is how long a claim waits for the next connection from
-the same address.
+the web cleared when it was made keeps logging in with its password.
+
+`failed-memory-seconds` remembers a connection that failed the handshake so it is told why. `claim-minutes` is
+how long a claim waits for the next connection from the same address.
+
+Behind a shared-address filter (`protection.shared-address-*`, TCPShield and the like) every player arrives from
+the filter's address, so neither memory can tell them apart. There `/claim` and `/premium` are not taken (staff
+settle the name with `/uxmauth markpremium` or `/uxmauth resolve`), and a failure remembered for the filter's
+address may let a player in with a password but never turns one away.
 
 The handshake itself runs on a lone server only in offline mode and not behind a proxy. In online mode the
 server proves every player, and behind a proxy the network's handshake belongs to the proxy; the console says

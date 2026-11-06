@@ -14,6 +14,10 @@ import java.util.function.Supplier;
  * spelling is therefore asked about when it arrives in Mojang's, so the paid owner can still prove it, and a new
  * name that differs from Mojang's spelling is not taken at all where the web was asked, because nobody under it
  * could ever pass the handshake.
+ *
+ * <p>Behind a shared-address filter a failure remembered for the address may have been another player's. There it
+ * may let a connection in with a password, as it would anyway, but it never turns one away: the handshake is
+ * asked again instead, so nobody behind the filter can lock a paid owner out by failing under their name.
  */
 public final class NameOwnership {
 
@@ -67,7 +71,7 @@ public final class NameOwnership {
         if (arrival.holder() == Holder.PREMIUM || arrival.holder() == Holder.PREMIUM_WITH_PASSWORD) {
             // An account that proved itself has no password to fall back on, or may not use it, under every
             // other rule. A try that failed lately is told why once, rather than shown "Invalid session" again.
-            return arrival.failedBefore() ? new Decision.Refuse(Refusal.PAID_NAME) : new Decision.Handshake();
+            return refusedAfterFailure(arrival, Refusal.PAID_NAME);
         }
         return switch (rule) {
             case AUTOMATIC -> automatic(arrival, lookup);
@@ -118,15 +122,23 @@ public final class NameOwnership {
             return new Decision.Refuse(Refusal.LOOKUP_FAILED);
         }
         Decision web = fromTheWeb(answer, arrival);
-        if (web instanceof Decision.Handshake && arrival.failedBefore()) {
-            return new Decision.Refuse(Refusal.PAID_NAME);
+        if (web instanceof Decision.Handshake) {
+            return refusedAfterFailure(arrival, Refusal.PAID_NAME);
         }
         return web;
     }
 
     /** Through the premium address, where the cracked one is decided before this. */
     private static Decision domain(Arrival arrival) {
-        return arrival.failedBefore() ? new Decision.Refuse(Refusal.PREMIUM_ADDRESS) : new Decision.Handshake();
+        return refusedAfterFailure(arrival, Refusal.PREMIUM_ADDRESS);
+    }
+
+    /**
+     * The handshake, or the refusal a failure lately earns. A failure remembered for a shared address may have
+     * been another player's, so it turns nobody away there.
+     */
+    private static Decision refusedAfterFailure(Arrival arrival, Refusal why) {
+        return arrival.failedBefore() && !arrival.shared() ? new Decision.Refuse(why) : new Decision.Handshake();
     }
 
     /** An address on both lists counts as cracked, and one on neither too. */

@@ -28,8 +28,9 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  * spelling of its own, because that may be its paid owner in Mojang's spelling, whom the pre-login would
  * otherwise send back to the holder's spelling forever. A name the web has not answered lately costs the
  * address that brought it one lookup of its budget; past that the name counts as one nobody could look up. A
- * shared-address filter is everybody's address, so no budget holds it. This may wait on the database and the
- * network, so it never runs on a thread the server needs.
+ * shared-address filter is everybody's address, so no budget holds it, no claim is taken from it, and a failure
+ * remembered for it turns nobody away. This may wait on the database and the network, so it never runs on a
+ * thread the server needs.
  */
 public final class AtTheDoor {
 
@@ -109,12 +110,12 @@ public final class AtTheDoor {
         }
         Optional<Account> account = accounts.findByName(name);
         boolean otherCase = account.isPresent() && !account.get().name().value().equals(raw);
-        boolean claimed = claims.holds(address, name);
-        boolean asked = claimed || ownerClaims.holds(address, name);
+        boolean throughAFilter = shared.get().through(address, host);
+        boolean claimed = !throughAFilter && claims.holds(address, name);
+        boolean asked = claimed || (!throughAFilter && ownerClaims.holds(address, name));
         Holder holder = holder(account);
         AtomicReference<PremiumAnswer> answered = new AtomicReference<>();
-        Arrival arrival = new Arrival(raw, holder, otherCase, asked, failed.holds(address, name), host);
-        boolean throughAFilter = shared.get().through(address, host);
+        Arrival arrival = new Arrival(raw, holder, otherCase, asked, failed.holds(address, name), throughAFilter, host);
         Decision decision = ownership.get().decide(arrival, () -> {
             PremiumAnswer answer = lookup.known(name)
                     .orElseGet(() ->
@@ -140,24 +141,46 @@ public final class AtTheDoor {
         return decision;
     }
 
-    /** A player at this address says the name is theirs: their next connection from here is asked. */
-    public void claim(String address, PlayerName name) {
+    /**
+     * A player at this address says the name is theirs: their next connection from here is asked. Not through a
+     * shared-address filter, whose next connection may be anybody's: then nothing is remembered, and the answer
+     * is false.
+     */
+    public boolean claim(String address, PlayerName name) {
+        if (sharedAddress(address)) {
+            return false;
+        }
         claims.remember(address, name);
+        return true;
     }
 
     /**
      * The owner of the account, logged in, asks for the handshake: their next connection from here is asked, and
-     * its pre-login reads {@link #ownerAsked} to know the account turns premium rather than changes hands.
+     * its pre-login reads {@link #ownerAsked} to know the account turns premium rather than changes hands. Not
+     * through a shared-address filter, where the next proved connection may be another player's, who would be
+     * handed the account: then nothing is remembered, and the answer is false.
      */
-    public void ownerAsks(String address, PlayerName name) {
+    public boolean ownerAsks(String address, PlayerName name) {
+        if (sharedAddress(address)) {
+            return false;
+        }
         ownerClaims.remember(address, name);
+        return true;
     }
 
     /** Whether the owner of the account asked for this connection's handshake. Read once, by the pre-login. */
     public boolean ownerAsked(String address, PlayerName name) {
-        boolean asked = ownerClaims.holds(address, name);
+        boolean asked = ownerClaims.holds(address, name) && !sharedAddress(address);
         ownerClaims.forget(address, name);
         return asked;
+    }
+
+    /**
+     * Whether this is a shared-address filter's address, whatever host was typed: a claim kept under it would be
+     * every player's behind the filter.
+     */
+    private boolean sharedAddress(String address) {
+        return shared.get().through(address, "");
     }
 
     /**

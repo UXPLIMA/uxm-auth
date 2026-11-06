@@ -563,6 +563,8 @@ public final class ScreenAnswers {
                 shower.show(reader, screens.login(reader, messages.render(reader, Keys.CLAIM_ALREADY_PREMIUM)));
             case NOT_THIS_RULE ->
                 shower.show(reader, screens.login(reader, messages.render(reader, Keys.CLAIM_NOT_THIS_RULE)));
+            case SHARED_ADDRESS ->
+                shower.show(reader, screens.login(reader, messages.render(reader, Keys.CLAIM_SHARED_ADDRESS)));
             case GONE -> {
                 // The connection is leaving; there is nobody to answer.
             }
