@@ -63,7 +63,8 @@ database.
   uxmAuth.
 - `limbo`: a world built inside the proxy that no server sees, where the player types `/login` or `/register`.
   It needs LimboAPI on the proxy, version 1.1 or 2. `network.limbo-file` names a schematic in the data folder
-  the world is built from; without it the player stands on a small platform at `network.limbo-spawn`.
+  the world is built from; without it the player stands on a small platform at `network.limbo-spawn`. A player
+  Mojang proved whose account asks for a second-factor code waits there too and types `/2fa <code>`.
 
 A proxy asked for its own world that cannot build it, because LimboAPI is missing or is a release the plugin does
 not know, refuses every login and says why in its console. A server without uxmAuth would let a waiting player

@@ -19,6 +19,7 @@ import com.uxplima.auth.domain.account.Account;
 import com.uxplima.auth.domain.network.Claim;
 import com.uxplima.auth.domain.premium.Refusal;
 import com.uxplima.auth.domain.state.AuthMethod;
+import com.uxplima.auth.domain.state.AuthState;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.Subscribe;
@@ -256,10 +257,12 @@ public final class DoorListener {
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Premium premium -> {
-                        passed(
-                                player.getUniqueId(),
-                                premium.state().account(),
-                                premium.state().method());
+                        if (!settledEarly.remove(player.getRemoteAddress())) {
+                            passed(
+                                    player.getUniqueId(),
+                                    premium.state().account(),
+                                    premium.state().method());
+                        }
                         yield Optional.empty();
                     }
                     case ProxyDoor.Arrival.Untouched untouched -> {
@@ -277,7 +280,7 @@ public final class DoorListener {
     /** What the door made of a player when LimboAPI asked whether to hold them. */
     public sealed interface Early {
 
-        /** The player waits for the password, under this profile. */
+        /** The player waits for the password, or for the app's code, under this profile. */
         record Waits(GameProfile profile) implements Early {
             public Waits {
                 Objects.requireNonNull(profile, "profile");
@@ -307,17 +310,48 @@ public final class DoorListener {
     public Early settleEarly(Player player, Predicate<GameProfile> taken) {
         Objects.requireNonNull(taken, "taken");
         InetSocketAddress remote = Objects.requireNonNull(player, "player").getRemoteAddress();
-        if (!(door.arrival(remote).orElse(null) instanceof ProxyDoor.Arrival.Usual usual)) {
+        ProxyDoor.Arrival arrival = door.arrival(remote).orElse(null);
+        if (arrival instanceof ProxyDoor.Arrival.Premium premium) {
+            return owesTheCode(player, remote, premium.state(), taken);
+        }
+        if (!(arrival instanceof ProxyDoor.Arrival.Usual usual)) {
             return new Early.Free();
         }
         GameProfile profile = door.profile(player.getGameProfile(), false, remote);
-        if (taken.test(profile) || !waiters.hold(remote, profile.getId(), profile.getName())) {
-            turnedAway.add(remote);
+        if (!hold(remote, profile, taken)) {
             return new Early.Taken();
         }
         waitOrResume(profile.getId(), profile.getName(), player, usual);
         settledEarly.add(remote);
         return sessions.waitsAtTheProxy(profile.getId()) ? new Early.Waits(profile) : new Early.Free();
+    }
+
+    /**
+     * A player Mojang proved, whose account asks the app's code: they wait in the world for it, under the account's
+     * id and name, since no server may be reached before the code. Any other proved player goes on.
+     */
+    private Early owesTheCode(
+            Player player, InetSocketAddress remote, AuthState.Authenticated proved, Predicate<GameProfile> taken) {
+        Account account = proved.account();
+        if (!secondStep.asks(account, proved.method())) {
+            return new Early.Free();
+        }
+        GameProfile profile = new GameProfile(account.id(), account.name().value(), player.getGameProfileProperties());
+        if (!hold(remote, profile, taken)) {
+            return new Early.Taken();
+        }
+        passed(account.id(), account, proved.method());
+        settledEarly.add(remote);
+        return sessions.waitsAtTheProxy(account.id()) ? new Early.Waits(profile) : new Early.Free();
+    }
+
+    /** The connection holds the profile's id and name, unless a player online or waiting holds either already. */
+    private boolean hold(InetSocketAddress remote, GameProfile profile, Predicate<GameProfile> taken) {
+        if (taken.test(profile) || !waiters.hold(remote, profile.getId(), profile.getName())) {
+            turnedAway.add(remote);
+            return false;
+        }
+        return true;
     }
 
     /** A player with a password waits for it, unless a session from this address lets them in. */
