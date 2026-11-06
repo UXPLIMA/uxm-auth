@@ -160,6 +160,7 @@ final class ProxyGraph implements AutoCloseable {
         AddressBans bans = new AddressBans(
                 new SqlAddressTallies(database),
                 () -> settings.current().protection().bans(),
+                () -> settings.current().protection().wideBans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
         // The proxy tells its own wrong passwords; the servers behind it deliver every alert to their staff.

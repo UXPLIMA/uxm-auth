@@ -14,7 +14,9 @@ address end the session. `sessions.skip-second-factor` decides whether a session
 
 `protection.bans` bans the address of wrong passwords. Every `failures` wrong passwords earn the next step of
 `steps-minutes`, and the last step repeats. An address quiet for `forgive-after-hours` starts again from the first
-step. An IPv6 address counts by its /64. `/uxmauth unban <address>` lifts a ban. `passwords.max-attempts` kicks a
+step. An IPv6 address counts by its /64, and with every other address of its /48 too: `failures-per-48` wrong
+passwords across a /48 ban the whole /48, so hopping between the /64s of one provider block does not escape a
+ban. `/uxmauth unban <address>` lifts a ban, the /48's with it. `passwords.max-attempts` kicks a
 player after that many wrong passwords on one connection.
 
 ## Limits

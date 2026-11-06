@@ -292,6 +292,7 @@ final class AuthGraph implements AutoCloseable {
         AddressBans bans = new AddressBans(
                 new SqlAddressTallies(database),
                 () -> settings.current().protection().bans(),
+                () -> settings.current().protection().wideBans(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
         this.events = bulletins(settings, plugin.getLogger());

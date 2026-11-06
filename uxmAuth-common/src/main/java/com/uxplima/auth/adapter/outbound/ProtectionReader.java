@@ -30,6 +30,7 @@ final class ProtectionReader {
                 list(config, "shared-address-sources"),
                 sessions(config),
                 bans(config),
+                wideBans(config),
                 connections(config),
                 accounts(config),
                 countries(config),
@@ -116,6 +117,17 @@ final class ProtectionReader {
         } catch (IllegalArgumentException wrong) {
             throw new IllegalArgumentException("protection.bans: " + wrong.getMessage(), wrong);
         }
+    }
+
+    /** The bans of a whole IPv6 /48: the same steps, after more wrong passwords than one /64 may make. */
+    private static BanSteps wideBans(HoconConfig config) {
+        BanSteps bans = bans(config);
+        int failures = config.getInt("protection.bans.failures-per-48", 12);
+        if (failures < bans.failures()) {
+            throw new IllegalArgumentException("protection.bans.failures-per-48 must be at least bans.failures ("
+                    + bans.failures() + "), got: " + failures);
+        }
+        return new BanSteps(bans.lengths(), failures, bans.forgiveAfter());
     }
 
     private static Remember.Settings sessions(HoconConfig config) {
