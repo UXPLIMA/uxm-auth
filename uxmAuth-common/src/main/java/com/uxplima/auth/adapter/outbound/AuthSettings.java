@@ -277,7 +277,8 @@ public final class AuthSettings {
             Set<CharClass> required,
             boolean confirmOnRegister,
             boolean oldOnChange,
-            int maxAttempts) {
+            int maxAttempts,
+            boolean screenLogins) {
         public Passwords {
             Objects.requireNonNull(allowed, "allowed");
             required = Set.copyOf(Objects.requireNonNull(required, "required"));

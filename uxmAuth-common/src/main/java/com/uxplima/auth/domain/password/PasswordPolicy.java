@@ -11,10 +11,20 @@ import java.util.regex.Pattern;
  *
  * <p>{@code maxBytes} is the limit the current hash reads, zero when it reads everything. It is set by the
  * settings when BCrypt is the current algorithm, and it is counted in UTF-8 bytes because that is what BCrypt
- * counts. {@code common} lists the passwords too common to keep.
+ * counts. {@code common} lists the passwords too common to keep. {@code screensLogins} holds a login answer to
+ * the length and the characters too, so an answer no password under these rules could be is wrong at once.
  */
 public record PasswordPolicy(
-        int minLength, int maxLength, Pattern allowed, Set<CharClass> required, int maxBytes, CommonPasswords common) {
+        int minLength,
+        int maxLength,
+        Pattern allowed,
+        Set<CharClass> required,
+        int maxBytes,
+        CommonPasswords common,
+        boolean screensLogins) {
+
+    /** The longest login answer that is ever read, whatever the rules say. */
+    public static final int LONGEST_ANSWER = 256;
 
     public PasswordPolicy {
         Objects.requireNonNull(allowed, "allowed");
@@ -35,6 +45,42 @@ public record PasswordPolicy(
         this(minLength, maxLength, allowed, required, maxBytes, CommonPasswords.none());
     }
 
+    /** The rules, with login answers screened only for what nobody types. */
+    public PasswordPolicy(
+            int minLength,
+            int maxLength,
+            Pattern allowed,
+            Set<CharClass> required,
+            int maxBytes,
+            CommonPasswords common) {
+        this(minLength, maxLength, allowed, required, maxBytes, common, false);
+    }
+
+    /**
+     * Whether a login answer is wrong before the account is read or a hash is computed: it holds a character
+     * nobody types, it is longer than {@link #LONGEST_ANSWER}, or the rules screen logins and it breaks their
+     * length or their characters.
+     */
+    public boolean refusesAtLogin(Password password) {
+        Objects.requireNonNull(password, "password");
+        int length = password.length();
+        if (length > LONGEST_ANSWER || !password.typeable()) {
+            return true;
+        }
+        if (!screensLogins) {
+            return false;
+        }
+        if (length > maxLength) {
+            return true;
+        }
+        char[] chars = password.chars();
+        try {
+            return !allowed.matcher(CharBuffer.wrap(chars)).matches();
+        } finally {
+            java.util.Arrays.fill(chars, '\0');
+        }
+    }
+
     /** What the policy says about one password. */
     public PasswordVerdict check(Password password) {
         Objects.requireNonNull(password, "password");
@@ -42,8 +88,13 @@ public record PasswordPolicy(
         if (length < minLength) {
             return new PasswordVerdict.TooShort(minLength);
         }
-        if (length > maxLength) {
-            return new PasswordVerdict.TooLong(maxLength);
+        int longest = Math.min(maxLength, LONGEST_ANSWER);
+        if (length > longest) {
+            return new PasswordVerdict.TooLong(longest);
+        }
+        // A password a login answer can never match would lock its owner out.
+        if (!password.typeable()) {
+            return new PasswordVerdict.BadCharacters();
         }
         char[] chars = password.chars();
         try {

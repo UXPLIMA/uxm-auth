@@ -50,6 +50,14 @@ or runs out of time; a second connection under the same name is turned away rath
 login. With `kick-existing-players` on, a stranger who keeps reconnecting under a password player's name can
 therefore keep the owner waiting until their wait runs out; a premium name is proved by Mojang and is not affected.
 
+## Login answers
+
+A login answer with a control character, an invisible character such as a zero-width space, or more than 256
+characters is a wrong password at once: it costs an attempt, but no database read and no hash. With
+`passwords.screen-logins` on, an answer longer than `passwords.max-length` or outside `passwords.allowed` is
+refused the same way. Turn it on for a server whose passwords were all made under today's rules; leave it off while
+imported accounts may hold passwords outside them.
+
 ## Limits
 
 - `protection.connections`: how many connections one address may make inside `window-seconds`, counted at every
