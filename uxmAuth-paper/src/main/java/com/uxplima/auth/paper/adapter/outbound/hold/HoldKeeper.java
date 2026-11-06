@@ -172,6 +172,11 @@ public final class HoldKeeper {
         restore(player, true);
     }
 
+    /** Whether the hold took something from this player that it has not given back yet. */
+    public boolean holds(Player player) {
+        return taken.containsKey(Objects.requireNonNull(player, "player").getUniqueId());
+    }
+
     private void settle(Player player, Optional<HeldState> leftover, Optional<HeldPlace> left) {
         UUID id = player.getUniqueId();
         if (!player.isOnline()) {
