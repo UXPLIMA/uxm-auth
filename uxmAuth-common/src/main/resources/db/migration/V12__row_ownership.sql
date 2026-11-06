@@ -1,9 +1,6 @@
--- Which website row a link is bound to. row_mark is a SHA-256, in hex, of what tells the row the link was made
--- for from a row made later under the same name: its registration date, or its number when it has no date, or its
--- password when it has neither. A row whose mark differs was made again, by whoever registered the name on the
--- website after the first one went, and is not the account's. A link made before this column has no mark, and
--- takes the mark of the row it finds first.
-ALTER TABLE uxmauth_website_link ADD COLUMN row_mark VARCHAR(64);
+-- Each migration holds at most one statement that cannot run twice, and holds it last: MySQL and MariaDB commit
+-- every statement of a schema change on its own, so a migration that failed after one of them ran would fail again
+-- at every later start, and a failed start refuses every login.
 
 -- The accounts an import made, one row each, under the source it read. A run that failed halfway runs again from
 -- the start and writes over what it made itself; an account under a name this plugin held before the import is
@@ -14,8 +11,9 @@ CREATE TABLE IF NOT EXISTS uxmauth_import_account (
     PRIMARY KEY (source, account_id)
 );
 
--- Finds an account by the Mojang id that proved it, which every premium connection asks. It is not unique: a
--- database from before imports refused a second account under one premium id may hold two, and a unique index
--- would then fail this migration and keep every server of the database from starting. The lookup answers the one
--- that played last, and an import no longer writes a premium id another account holds.
-CREATE INDEX uxmauth_account_premium_id ON uxmauth_account (premium_id);
+-- Which website row a link is bound to. row_mark is a SHA-256, in hex, of what tells the row the link was made
+-- for from a row made later under the same name: its registration date, or its number when it has no date, or its
+-- password when it has neither. A row whose mark differs was made again, by whoever registered the name on the
+-- website after the first one went, and is not the account's. A link made before this column has no mark, and
+-- takes the mark of the row it finds first.
+ALTER TABLE uxmauth_website_link ADD COLUMN row_mark VARCHAR(64);
