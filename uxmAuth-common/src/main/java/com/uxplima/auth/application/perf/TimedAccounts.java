@@ -157,6 +157,16 @@ public final class TimedAccounts implements AccountRepository {
     }
 
     @Override
+    public boolean deleteIfInactive(UUID id, Instant before) {
+        long start = timings.start();
+        try {
+            return table.deleteIfInactive(id, before);
+        } finally {
+            done(start);
+        }
+    }
+
+    @Override
     public void moveId(UUID from, UUID to) {
         long start = timings.start();
         try {

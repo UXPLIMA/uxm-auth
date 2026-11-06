@@ -33,6 +33,7 @@ import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLastServers;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
+import com.uxplima.auth.adapter.outbound.TableUpkeep;
 import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
@@ -116,6 +117,7 @@ final class ProxyGraph implements AutoCloseable {
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;
     private @Nullable ScheduledTask countryTask;
+    private @Nullable ScheduledTask upkeepTask;
     private @Nullable ProxyMail mail;
     /** The API's Velocity events, fired for what happens at this proxy. */
     private final VelocityEvents fired;
@@ -154,6 +156,7 @@ final class ProxyGraph implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         AccountRepository accounts = WebsiteAccounts.beside(
                 new SqlAccountRepository(database), database, settings.current().websiteTable(), clock);
+        settings.current().websiteTable().weakHashWarning().ifPresent(logger::warn);
         ProxyDoor door = door(settings, accounts, new SqlDisputes(database), clock);
         NetworkSecret secret = secret(settings);
         // Sealed with the secret every member shares, so a code set up on any server reads here.
@@ -164,11 +167,25 @@ final class ProxyGraph implements AutoCloseable {
                 () -> settings.current().protection().sessions(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
+        SqlAddressTallies tallies = new SqlAddressTallies(database);
         AddressBans bans = new AddressBans(
-                new SqlAddressTallies(database),
+                tallies,
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 clock::instant);
+        // Soon after the start, and once a day after, forgiven addresses and ended sessions go.
+        this.upkeepTask = proxy.getScheduler()
+                .buildTask(
+                        plugin,
+                        new TableUpkeep(
+                                tallies,
+                                remembered,
+                                () -> settings.current().protection().bans().forgiveAfter(),
+                                clock,
+                                logger::warn))
+                .delay(2, TimeUnit.MINUTES)
+                .repeat(1, TimeUnit.DAYS)
+                .schedule();
         // The proxy tells its own wrong passwords; the servers behind it deliver every alert to their staff.
         LogIn.Failures failures = new Alerts(
                         () -> settings.current().staff().alerts(),
@@ -400,6 +417,9 @@ final class ProxyGraph implements AutoCloseable {
     public void close() {
         if (countryTask != null) {
             countryTask.cancel();
+        }
+        if (upkeepTask != null) {
+            upkeepTask.cancel();
         }
         if (countries != null) {
             try {

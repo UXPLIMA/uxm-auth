@@ -85,7 +85,7 @@ public final class WebsiteAccounts implements AccountRepository {
                 .asUnverified();
         return switch (accounts.insert(made)) {
             case Inserted inserted -> {
-                rows.link(made.id());
+                rows.link(made.id(), row);
                 yield Optional.of(made);
             }
             case NameTaken taken -> findByName(taken.stored());
@@ -116,19 +116,36 @@ public final class WebsiteAccounts implements AccountRepository {
 
     /**
      * The website's row of this account, if the row is the account's. A row is the account's once the plugin wrote
-     * it, adopted it, or found the account's own hash in it, as an imported account's row holds. A row somebody made
-     * on the website under the name of an account the plugin held first is theirs, and opens nothing here.
+     * it, adopted it, or found the account's own hash in it, as an imported account's row holds, and only while it is
+     * that same row. A row somebody made on the website under the name of an account the plugin held first is theirs,
+     * and opens nothing here; so is a row registered again after the account's own was deleted. A linked row that is
+     * gone ends the link, so a row made under the name later is never taken for the account's.
      */
     private Optional<WebsiteRows.Row> ours(Account account, Optional<WebsiteRows.Row> row) {
-        if (!mirrored(account) || row.isEmpty()) {
+        if (!mirrored(account)) {
             return Optional.empty();
         }
-        if (rows.linked(account.id())) {
+        Optional<WebsiteRows.Link> link = rows.link(account.id());
+        if (row.isEmpty()) {
+            if (link.isPresent()) {
+                rows.unlink(account.id());
+            }
+            return Optional.empty();
+        }
+        WebsiteRows.Row found = row.get();
+        if (link.isPresent() && link.get().binds(found)) {
+            if (link.get().mark() == null) {
+                // A link made before links were bound takes the row it finds now.
+                rows.link(account.id(), found);
+            }
             return row;
         }
+        if (link.isPresent()) {
+            rows.unlink(account.id());
+        }
         PasswordHash own = account.password();
-        if (own != null && own.encoded().equals(row.get().password())) {
-            rows.link(account.id());
+        if (own != null && own.encoded().equals(found.password())) {
+            rows.link(account.id(), found);
             return row;
         }
         return Optional.empty();
@@ -178,7 +195,7 @@ public final class WebsiteAccounts implements AccountRepository {
         if (!rows.add(account, password)) {
             return false;
         }
-        rows.link(account.id());
+        rows.relink(account.id(), account.name());
         return true;
     }
 
@@ -193,9 +210,11 @@ public final class WebsiteAccounts implements AccountRepository {
         if (password == null || !mirrored(account)) {
             return;
         }
-        if (rows.linked(account.id())) {
+        Optional<WebsiteRows.Row> row = rows.find(account.name());
+        if (ours(account, row).isPresent()) {
             rows.write(account, password);
-        } else {
+            rows.relink(account.id(), account.name());
+        } else if (row.isEmpty()) {
             added(account);
         }
     }
@@ -229,6 +248,8 @@ public final class WebsiteAccounts implements AccountRepository {
         if (expected == null || !rows.replace(account.get().name(), expected.encoded(), fresh)) {
             return false;
         }
+        // A row told apart only by its password is bound to the new one.
+        rows.relink(id, account.get().name());
         accounts.update(account.get().withPassword(fresh));
         return true;
     }
@@ -248,7 +269,8 @@ public final class WebsiteAccounts implements AccountRepository {
                 && !theirs.get().name().equalsIgnoreCase(before.get().name().value())) {
             return new NameTaken(nameOf(theirs.get()).orElse(to));
         }
-        Optional<Account> moving = before.filter(account -> rows.linked(account.id()));
+        Optional<Account> moving = before.filter(
+                account -> ours(account, rows.find(account.name())).isPresent());
         Insert result = accounts.rename(id, to, at);
         if (result instanceof Inserted) {
             moving.ifPresent(account -> rows.rename(account.name(), to));
@@ -275,10 +297,21 @@ public final class WebsiteAccounts implements AccountRepository {
     @Override
     public void delete(UUID id) {
         Optional<Account> gone = accounts.findById(Objects.requireNonNull(id, "id"))
-                .filter(WebsiteAccounts::mirrored)
-                .filter(account -> rows.linked(account.id()));
+                .filter(account -> ours(account, rows.find(account.name())).isPresent());
         accounts.delete(id);
         gone.ifPresent(account -> rows.delete(account.name()));
+    }
+
+    /** Removes the idle account as {@link #delete} does, and its website row only once the account went. */
+    @Override
+    public boolean deleteIfInactive(UUID id, Instant before) {
+        Optional<Account> withRow = accounts.findById(Objects.requireNonNull(id, "id"))
+                .filter(account -> ours(account, rows.find(account.name())).isPresent());
+        boolean removed = accounts.deleteIfInactive(id, before);
+        if (removed) {
+            withRow.ifPresent(account -> rows.delete(account.name()));
+        }
+        return removed;
     }
 
     @Override

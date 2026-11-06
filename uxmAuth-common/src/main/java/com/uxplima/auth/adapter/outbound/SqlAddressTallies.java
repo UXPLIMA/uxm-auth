@@ -30,6 +30,9 @@ public final class SqlAddressTallies implements AddressTallies {
     private static final String WRITE = "UPDATE uxmauth_address"
             + " SET failures = ?, ban_step = ?, banned_until = ?, last_failure = ? WHERE address = ?";
     private static final String CLEAR = "DELETE FROM uxmauth_address WHERE address = ?";
+    /** Never-ban and never-failed are written as 0, so they count as quiet since the epoch. */
+    private static final String FORGET_QUIET =
+            "DELETE FROM uxmauth_address WHERE banned_until <= ? AND last_failure <= ?";
 
     private final Database database;
 
@@ -78,6 +81,19 @@ public final class SqlAddressTallies implements AddressTallies {
     public void clear(String key) {
         Objects.requireNonNull(key, "key");
         database.inTransaction(sql -> sql.update(CLEAR, statement -> statement.setString(1, key)));
+    }
+
+    /**
+     * Forgets every address that has been quiet since this moment: no ban past it and no failure after it. Such an
+     * address would start from a clean tally at its next failure anyway, so its row only takes room, and an address
+     * that tried once and never came back, as a botnet's do, would otherwise stay forever. Answers how many went.
+     */
+    public int forgetQuietSince(Instant quietSince) {
+        long at = Objects.requireNonNull(quietSince, "quietSince").toEpochMilli();
+        return database.transaction(sql -> sql.update(FORGET_QUIET, statement -> {
+            statement.setLong(1, at);
+            statement.setLong(2, at);
+        }));
     }
 
     private static Optional<AddressTally> read(TxSql sql, String key) {

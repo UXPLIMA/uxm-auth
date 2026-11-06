@@ -102,6 +102,19 @@ public final class Sessions {
         return states.containsKey(connection);
     }
 
+    /** Whether a connection here is in, or at the door of, this account: waiting for its password or past it. */
+    public boolean holdsAccount(UUID account) {
+        Objects.requireNonNull(account, "account");
+        return states.values().stream().anyMatch(held -> switch (held.state()) {
+            case AuthState.Unregistered unregistered -> false;
+            case AuthState.Registered registered -> registered.account().id().equals(account);
+            case AuthState.Replacing replacing -> replacing.account().id().equals(account);
+            case AuthState.SecondFactor second -> second.account().id().equals(account);
+            case AuthState.SettingUp settingUp -> settingUp.account().id().equals(account);
+            case AuthState.Authenticated in -> in.account().id().equals(account);
+        });
+    }
+
     /** Whether this opening of the connection is still the one held. */
     public boolean isOpen(UUID connection, long generation) {
         return held(connection).filter(held -> held.generation() == generation).isPresent();

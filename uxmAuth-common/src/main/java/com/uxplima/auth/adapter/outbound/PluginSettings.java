@@ -250,11 +250,14 @@ public final class PluginSettings {
             }
         }
 
-        /** Everything but the password, because a settings snapshot is the kind of thing that gets logged. */
+        /**
+         * Neither the password nor the parts of the address that may hold one, because a settings snapshot is the kind
+         * of thing that gets logged.
+         */
         @Override
         public String toString() {
-            return "Storage[jdbcUrl=" + jdbcUrl + ", username=" + username + ", password=hidden, poolSize=" + poolSize
-                    + "]";
+            return "Storage[jdbcUrl=" + AuthDatabase.shown(jdbcUrl) + ", username=" + username
+                    + ", password=hidden, poolSize=" + poolSize + "]";
         }
     }
 

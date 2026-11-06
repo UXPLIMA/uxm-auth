@@ -3,6 +3,7 @@ package com.uxplima.auth.adapter.outbound;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import com.uxplima.uxmlib.storage.sql.Database;
 
@@ -23,6 +24,9 @@ public final class AuthDatabase {
             "mysql", "org.mariadb.jdbc.Driver",
             "postgresql", "org.postgresql.Driver",
             "h2", "org.h2.Driver");
+
+    /** What a database's name in an address may be. */
+    private static final Pattern SCHEME = Pattern.compile("[a-z0-9]+");
 
     private AuthDatabase() {}
 
@@ -96,12 +100,38 @@ public final class AuthDatabase {
                 : jdbcUrl;
     }
 
+    /**
+     * The address as a message may show it: the database and the host, never a user, a password or a parameter,
+     * which an address may carry and a console line or a stack trace in a bug report would then hand on.
+     */
+    public static String shown(String jdbcUrl) {
+        Objects.requireNonNull(jdbcUrl, "jdbcUrl");
+        String lower = jdbcUrl.toLowerCase(Locale.ROOT);
+        int colon = lower.indexOf(':', "jdbc:".length());
+        if (!lower.startsWith("jdbc:")
+                || colon < 0
+                || !SCHEME.matcher(lower.substring("jdbc:".length(), colon)).matches()) {
+            return "an address that does not start with jdbc:<database>:";
+        }
+        String scheme = lower.substring(0, colon);
+        String rest = jdbcUrl.substring(colon + 1);
+        if (!rest.startsWith("//")) {
+            return scheme;
+        }
+        String authority = rest.substring(2).split("[/?;]", 2)[0];
+        return scheme + "://" + authority.substring(authority.lastIndexOf('@') + 1);
+    }
+
     private static String schemeOf(String jdbcUrl, String key) {
         Objects.requireNonNull(jdbcUrl, "jdbcUrl");
         String lower = jdbcUrl.toLowerCase(Locale.ROOT);
         int colon = lower.indexOf(':', "jdbc:".length());
-        if (!lower.startsWith("jdbc:") || colon < 0) {
-            throw new IllegalArgumentException(key + " is not a JDBC address: " + jdbcUrl);
+        // The address is never repeated: it may hold the database's password.
+        if (!lower.startsWith("jdbc:")
+                || colon < 0
+                || !SCHEME.matcher(lower.substring("jdbc:".length(), colon)).matches()) {
+            throw new IllegalArgumentException(
+                    key + " is not a JDBC address: it starts with jdbc:<database>:, such as jdbc:mysql://host/db");
         }
         return lower.substring("jdbc:".length(), colon);
     }

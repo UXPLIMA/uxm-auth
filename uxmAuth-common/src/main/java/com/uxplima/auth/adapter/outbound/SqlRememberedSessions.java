@@ -22,6 +22,7 @@ public final class SqlRememberedSessions implements RememberedSessions {
     private static final String HOLDS =
             "SELECT expires_at FROM uxmauth_session WHERE account_id = ? AND address = ? AND expires_at > ?";
     private static final String FORGET = "DELETE FROM uxmauth_session WHERE account_id = ?";
+    private static final String DROP_ALL_EXPIRED = "DELETE FROM uxmauth_session WHERE expires_at <= ?";
     private static final String READ_CHOICE = "SELECT remember FROM uxmauth_session_choice WHERE account_id = ?";
     private static final String DROP_CHOICE = "DELETE FROM uxmauth_session_choice WHERE account_id = ?";
     private static final String WRITE_CHOICE =
@@ -83,6 +84,15 @@ public final class SqlRememberedSessions implements RememberedSessions {
     public void forget(UUID account) {
         String id = Objects.requireNonNull(account, "account").toString();
         database.inTransaction(sql -> sql.update(FORGET, statement -> statement.setString(1, id)));
+    }
+
+    /**
+     * Drops every session that ran out by now, of every account. A new session drops its own account's, but one
+     * whose player never came back would stay. Answers how many went.
+     */
+    public int dropExpired(Instant now) {
+        long at = Objects.requireNonNull(now, "now").toEpochMilli();
+        return database.transaction(sql -> sql.update(DROP_ALL_EXPIRED, statement -> statement.setLong(1, at)));
     }
 
     @Override

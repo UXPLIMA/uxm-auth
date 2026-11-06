@@ -1,6 +1,7 @@
 package com.uxplima.auth.adapter.outbound;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 import com.uxplima.auth.domain.hash.Argon2iHasher;
@@ -62,6 +63,21 @@ public record WebsiteTable(boolean enabled, String table, Hash hash, Columns col
         requireName(table);
         Objects.requireNonNull(hash, "hash");
         Objects.requireNonNull(columns, "columns");
+    }
+
+    /**
+     * What the start says when the table is on in a weak format. Every password is written in the website's format,
+     * the plugin's own row too, because one hash is what both tables hold and what tells an account's row from
+     * somebody else's; so sha256 here downgrades every account at its next login, and the operator must hear it.
+     */
+    public Optional<String> weakHashWarning() {
+        if (!enabled || hash != Hash.SHA256) {
+            return Optional.empty();
+        }
+        return Optional.of("website-table is on with hash = sha256, so every new password, and every older one at its"
+                + " player's next login, is kept as one salted SHA-256 in this plugin's table as well as the"
+                + " website's, whatever hashing.algorithm says. A copy of the database is then cracked in hours"
+                + " rather than years. Set website-table.hash to bcrypt, pbkdf2 or argon2 if the website reads it.");
     }
 
     private static void requireName(String name) {

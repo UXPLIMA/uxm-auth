@@ -15,6 +15,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.zip.GZIPInputStream;
@@ -43,6 +45,12 @@ public final class CountryDownload {
     }
 
     private static final Duration TIMEOUT = Duration.ofMinutes(2);
+
+    /** The answers that send a download elsewhere. */
+    private static final Set<Integer> REDIRECTS = Set.of(301, 302, 303, 307, 308);
+
+    /** How many times a download is sent on before it is given up: MaxMind sends it once, to its storage. */
+    private static final int HOPS = 3;
 
     private final HttpClient web;
     private final URI from;
@@ -99,6 +107,11 @@ public final class CountryDownload {
         }
     }
 
+    /**
+     * Asks MaxMind with the account, and follows the redirect it answers with to the storage that serves the file.
+     * The client follows no redirect itself, and must not: the account and licence go to MaxMind alone, never to the
+     * host a redirect names, so each hop is asked again here without them, and only over HTTPS.
+     */
     private Outcome fetch(GeoSettings.Licence account, Path target) throws IOException, InterruptedException {
         String basic = Base64.getEncoder()
                 .encodeToString((account.accountId() + ":" + account.key()).getBytes(StandardCharsets.UTF_8));
@@ -107,25 +120,93 @@ public final class CountryDownload {
                 .header("Authorization", "Basic " + basic)
                 .GET()
                 .build();
-        HttpResponse<InputStream> response = web.send(request, HttpResponse.BodyHandlers.ofInputStream());
-        try (InputStream body = response.body()) {
-            if (response.statusCode() != 200) {
-                console.accept("Could not fetch the country file from MaxMind: it answered " + response.statusCode()
-                        + ". Check protection.countries.account-id and licence-key.");
-                return Outcome.FAILED;
-            }
-            Path unpacked = Files.createTempFile(folder, "countries", ".part");
-            try {
-                if (!TarGz.extract(new GZIPInputStream(body), CountryFile.NAME, unpacked)
-                        || CountryFile.open(unpacked).isEmpty()) {
-                    console.accept("MaxMind's answer held no country file; the one there is stays.");
+        for (int hop = 0; ; hop++) {
+            HttpResponse<InputStream> response = web.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream body = response.body()) {
+                int status = response.statusCode();
+                if (status == 200) {
+                    return unpack(body, target);
+                }
+                if (status == 401) {
+                    console.accept("MaxMind refused the account and licence key (401), so the country file was not"
+                            + " fetched and country rules have nothing to read. Check protection.countries.account-id"
+                            + " and licence-key.");
                     return Outcome.FAILED;
                 }
-                Files.move(unpacked, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                return Outcome.FETCHED;
-            } finally {
-                Files.deleteIfExists(unpacked);
+                if (!REDIRECTS.contains(status)) {
+                    console.accept("Could not fetch the country file from MaxMind: it answered " + status
+                            + ". The file there is stays; the next check tries again.");
+                    return Outcome.FAILED;
+                }
+                Optional<URI> next = locationOf(response, request.uri());
+                Optional<String> refused = refusal(next, hop);
+                if (refused.isPresent()) {
+                    console.accept("MaxMind sent the download elsewhere (" + status + ") and it was not followed: "
+                            + refused.get() + ". The file there is stays; the next check tries again.");
+                    return Outcome.FAILED;
+                }
+                request = HttpRequest.newBuilder(next.orElseThrow())
+                        .timeout(TIMEOUT)
+                        .GET()
+                        .build();
             }
         }
+    }
+
+    /** Where a redirect sends the download, read against the address that answered; nothing when it names none. */
+    private static Optional<URI> locationOf(HttpResponse<?> response, URI asked) {
+        Optional<String> written = response.headers().firstValue("Location");
+        if (written.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(asked.resolve(written.get().trim()));
+        } catch (IllegalArgumentException notAnAddress) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Why a redirect is not followed, or nothing when it is. The address is never printed: the storage MaxMind sends a
+     * download to signs it into the address.
+     */
+    private static Optional<String> refusal(Optional<URI> next, int hop) {
+        if (next.isEmpty()) {
+            return Optional.of("it named no address");
+        }
+        if (hop >= HOPS) {
+            return Optional.of("it sent it on more than " + HOPS + " times");
+        }
+        if (!"https".equalsIgnoreCase(next.get().getScheme()) || next.get().getHost() == null) {
+            return Optional.of("the address it named is not HTTPS");
+        }
+        return Optional.empty();
+    }
+
+    private Outcome unpack(InputStream body, Path target) throws IOException {
+        Path unpacked = Files.createTempFile(folder, "countries", ".part");
+        try {
+            if (!TarGz.extract(new GZIPInputStream(body), CountryFile.NAME, unpacked) || !readable(unpacked)) {
+                console.accept("MaxMind's answer held no country file; the one there is stays.");
+                return Outcome.FAILED;
+            }
+            Files.move(unpacked, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            return Outcome.FETCHED;
+        } finally {
+            Files.deleteIfExists(unpacked);
+        }
+    }
+
+    /**
+     * Whether the file opens as a country database. It is closed again at once: an open file is mapped into memory
+     * and held, and would stay held after the move put it in place, or keep the move from replacing it on Windows.
+     */
+    private static boolean readable(Path unpacked) throws IOException {
+        Optional<CountryFile> opened = CountryFile.open(unpacked);
+        if (opened.isEmpty()) {
+            return false;
+        }
+        opened.get().close();
+        return true;
     }
 }

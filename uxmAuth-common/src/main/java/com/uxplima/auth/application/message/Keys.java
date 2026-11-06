@@ -390,7 +390,7 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Players are online. Move the database while nobody plays."),
     DATABASE_MOVE_TARGET_FULL(
             "database.move-target-full",
-            "<etag:'ERROR'> <body>The target holds this plugin's accounts already, and nothing was written. Name an empty database."),
+            "<etag:'ERROR'> <body>The target holds rows of this plugin already, and nothing was written. A move that stopped halfway can leave them: empty this plugin's tables there, or name an empty database, and run this again."),
     DATABASE_MOVE_DONE(
             "database.move-done",
             "<tag:'AUTH'> <body>Copied <value><rows><body> rows in <value><tables><body> tables. Copy the three lines of <value>storage.move-to<body> into <value>storage<body>, empty <value>storage.move-to<body>, and restart the server to finish the move."),
