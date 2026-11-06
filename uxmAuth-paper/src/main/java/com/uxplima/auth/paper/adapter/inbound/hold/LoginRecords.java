@@ -89,7 +89,7 @@ public final class LoginRecords {
             UUID id = Objects.requireNonNull(in, "in").account().id();
             async.accept(() -> readFactors(known, id));
         }
-        if (Objects.requireNonNull(in, "in").method() == AuthMethod.NETWORK) {
+        if (Objects.requireNonNull(in, "in").method().fromTheNetwork()) {
             return;
         }
         InetSocketAddress from = player.getAddress();

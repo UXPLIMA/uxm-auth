@@ -140,7 +140,7 @@ public final class Door {
 
     /** A player who arrives already let in: told to the proxy, remembered, and greeted. */
     private void arrivedIn(Player player, AuthState.Authenticated in) {
-        if (in.method() != AuthMethod.NETWORK) {
+        if (!in.method().fromTheNetwork()) {
             // A login the network vouched for came from the proxy, which already knows it.
             reports.loggedIn(player, in.method());
         }

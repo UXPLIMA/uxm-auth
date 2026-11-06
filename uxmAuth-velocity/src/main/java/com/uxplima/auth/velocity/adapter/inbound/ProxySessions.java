@@ -120,7 +120,8 @@ public final class ProxySessions {
 
     /**
      * What the claim to the next server says. A login is told by its own method once, so the first server greets
-     * it; every server after that reads a login the network already greeted.
+     * it; every server after that reads a login the network already greeted, one a remembered session made as
+     * such.
      */
     public Optional<Claim.Standing> nextStanding(UUID id) {
         Objects.requireNonNull(id, "id");
@@ -135,7 +136,13 @@ public final class ProxySessions {
         if (session == null) {
             return Optional.empty();
         }
-        return Optional.of(session.greeted() ? new Claim.LoggedIn(AuthMethod.NETWORK) : session.standing());
+        if (!session.greeted()) {
+            return Optional.of(session.standing());
+        }
+        // A login a remembered session made stays one on every server: no password was typed anywhere.
+        boolean remembered =
+                session.standing() instanceof Claim.LoggedIn in && in.method().remembered();
+        return Optional.of(new Claim.LoggedIn(remembered ? AuthMethod.NETWORK_SESSION : AuthMethod.NETWORK));
     }
 
     /** What the door decided of the player, for as long as they are on the proxy. */

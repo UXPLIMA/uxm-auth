@@ -384,7 +384,7 @@ public final class AuthSettings {
                 case BEDROCK -> Optional.of(LOGGED_IN_BEDROCK);
                 case SESSION -> Optional.of(LOGGED_IN_SESSION);
                 case FORCED -> Optional.of(LOGGED_IN_FORCED);
-                case REGISTERED, NETWORK -> Optional.empty();
+                case REGISTERED, NETWORK, NETWORK_SESSION -> Optional.empty();
             };
         }
     }

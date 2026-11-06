@@ -44,7 +44,7 @@ public final class ProxyAuthApi implements AuthApi {
             case PASSWORD, REGISTERED -> Optional.of(AccountType.CRACKED);
             case PREMIUM -> Optional.of(AccountType.PREMIUM);
             case BEDROCK -> Optional.of(AccountType.BEDROCK);
-            case SESSION, FORCED, NETWORK -> Optional.empty();
+            case SESSION, FORCED, NETWORK, NETWORK_SESSION -> Optional.empty();
         };
     }
 }
