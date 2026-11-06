@@ -7,6 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 import com.uxplima.auth.application.ChangePassword;
 import com.uxplima.auth.application.ChangeResult;
+import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.port.AccountRepository;
@@ -53,6 +54,7 @@ public final class SwitchToCracked {
     private final HashingLane lane;
     private final ChangePassword change;
     private final MarkKind mark;
+    private final LogIn.Lockout lockout;
 
     /** @param change sets the first password of an account that has none, on the password rules */
     public SwitchToCracked(
@@ -62,12 +64,28 @@ public final class SwitchToCracked {
             HashingLane lane,
             ChangePassword change,
             MarkKind mark) {
+        this(sessions, accounts, hashing, lane, change, mark, LogIn.Lockout.NONE);
+    }
+
+    /**
+     * @param lockout counts a wrong password against the account like a wrong login, so the switch is no way to
+     *     guess the account's password without limit, nor to keep the hashing lane busy
+     */
+    public SwitchToCracked(
+            Sessions sessions,
+            AccountRepository accounts,
+            Hashing hashing,
+            HashingLane lane,
+            ChangePassword change,
+            MarkKind mark,
+            LogIn.Lockout lockout) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.accounts = Objects.requireNonNull(accounts, "accounts");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
         this.lane = Objects.requireNonNull(lane, "lane");
         this.change = Objects.requireNonNull(change, "change");
         this.mark = Objects.requireNonNull(mark, "mark");
+        this.lockout = Objects.requireNonNull(lockout, "lockout");
     }
 
     /** Switches the logged-in player of this connection, proven by the password typed. Hashing runs on the lane. */
@@ -89,7 +107,17 @@ public final class SwitchToCracked {
         if (stored == null) {
             return change.replace(connection, Password.of(typed)).thenApply(result -> afterFirst(account, result));
         }
-        return lane.submit(() -> matches(typed, stored) ? switched(account) : new Switched.WrongPassword());
+        return lane.submit(() -> {
+            // Counted before the hash, like a login: a locked account is not checked at all.
+            if (!(lockout.take(account.id()) instanceof LogIn.Lockout.Try.Taken taken)) {
+                return new Switched.WrongPassword();
+            }
+            if (!matches(typed, stored)) {
+                return new Switched.WrongPassword();
+            }
+            lockout.right(taken);
+            return switched(account);
+        });
     }
 
     private Switched afterFirst(Account account, ChangeResult result) {
