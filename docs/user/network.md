@@ -28,6 +28,11 @@ report the server that wrote it, and each use of the secret signs with a key of 
 claim from an older proxy and the proxy takes no report from an older server. Such a claim or report is refused
 and the console says `OUTDATED`; update the proxy and every server together, during one restart.
 
+Every server now needs `network.server-name`, its name in the proxy's list: a server with the network on and no
+name refuses every login until it is set, because it could not tell a claim written for it from one written for
+another server. Redis bulletins change format with the same release, so members of older and newer releases do
+not hear each other.
+
 ## Routing
 
 On the proxy:
