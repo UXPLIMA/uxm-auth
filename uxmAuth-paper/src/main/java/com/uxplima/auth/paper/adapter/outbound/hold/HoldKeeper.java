@@ -22,6 +22,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -68,12 +69,23 @@ public final class HoldKeeper {
     private final UnaryOperator<Location> safe;
     private final BiFunction<Player, Location, CompletableFuture<Boolean>> mover;
     private final Map<UUID, HeldState> taken = new ConcurrentHashMap<>();
+    /** The connection each snapshot in {@link #taken} was taken from, so a later join never meets a stale one. */
+    private final Map<UUID, Player> holders = new ConcurrentHashMap<>();
+    /**
+     * The snapshot each held player's inventory was emptied for. Such a player's inventory holds only what reached
+     * them while they waited, and the snapshot is given back under it. A player not in here, or here for another
+     * snapshot, was never emptied for the one given back now.
+     */
+    private final Map<UUID, HeldState> emptied = new ConcurrentHashMap<>();
+
     private final Set<UUID> blinded = ConcurrentHashMap.newKeySet();
     private final Map<UUID, CompletableFuture<Void>> disk = new ConcurrentHashMap<>();
     /** The waiting players staff took operator status from while they waited, who do not get it back. */
     private final Set<UUID> deopped = ConcurrentHashMap.newKeySet();
 
     private final Consumer<Player> unwritten;
+    /** Items of this plugin a held player is handed, the captcha and the app's QR code, which stay behind. */
+    private final Predicate<ItemStack> ours;
 
     public HoldKeeper(
             Plugin plugin,
@@ -144,6 +156,23 @@ public final class HoldKeeper {
             BiFunction<Player, Location, CompletableFuture<Boolean>> mover,
             UnaryOperator<Location> safe,
             Consumer<Player> unwritten) {
+        this(plugin, scheduler, store, hold, isHeld, room, passes, mover, safe, unwritten, item -> false);
+    }
+
+    /** @param ours the items of this plugin a held player is handed, which are never kept as theirs */
+    public HoldKeeper(
+            Plugin plugin,
+            Scheduler scheduler,
+            HeldStateStore store,
+            Supplier<AuthSettings.Hold> hold,
+            Predicate<Player> isHeld,
+            Supplier<Optional<Location>> room,
+            Passes passes,
+            BiFunction<Player, Location, CompletableFuture<Boolean>> mover,
+            UnaryOperator<Location> safe,
+            Consumer<Player> unwritten,
+            Predicate<ItemStack> ours) {
+        this.ours = Objects.requireNonNull(ours, "ours");
         this.unwritten = Objects.requireNonNull(unwritten, "unwritten");
         this.safe = Objects.requireNonNull(safe, "safe");
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -236,13 +265,19 @@ public final class HoldKeeper {
             return;
         }
         if (taken.containsKey(id)) {
-            // Held already, as a player whose sessions ended goes back to the password. The file on disk is this
-            // hold's own snapshot, not a crash's leftover: giving it back now would hand a player who is not
-            // logged in their things, their game mode and their place. What they hold now is not taken twice.
-            if (isHeld.test(player)) {
-                hideTheWaitingFrom(player);
+            if (holders.get(id) == player) {
+                // Held already, as a player whose sessions ended goes back to the password. The file on disk is
+                // this hold's own snapshot, not a crash's leftover: giving it back now would hand a player who is
+                // not logged in their things, their game mode and their place. What they hold now is not taken
+                // twice.
+                if (isHeld.test(player)) {
+                    hideTheWaitingFrom(player);
+                }
+                return;
             }
-            return;
+            // A snapshot of an earlier connection whose give-back never ran: the file on disk is that snapshot and
+            // is given back below, so the copy in memory must not be given again.
+            forget(id);
         }
         leftover.ifPresent(state -> giveBackLeftover(player, state));
         hideTheWaitingFrom(player);
@@ -262,7 +297,8 @@ public final class HoldKeeper {
         player.closeInventory();
         HeldState snapshot = capture(player, hold.get(), place);
         taken.put(id, snapshot);
-        strip(player);
+        holders.put(id, player);
+        strip(player, snapshot);
         // A /logout holds a player whose client has every command; the hold's listener cuts the tree it sends.
         player.updateCommands();
         onDisk(id, () -> {
@@ -294,7 +330,9 @@ public final class HoldKeeper {
      * whoever joined has not proved the name yet, and the file may be older than a {@code /deop}.
      */
     private void giveBackLeftover(Player player, HeldState state) {
-        apply(player, state, true);
+        // After a crash the saved inventory may be the full one or the emptied one: the snapshot replaces it, and
+        // what reached the player while they waited before the crash is not known.
+        apply(player, state, true, Inventory.REPLACE);
         player.setGameMode(state.gameMode());
         if (state.op() && !player.isOp()) {
             plugin.getLogger()
@@ -304,14 +342,20 @@ public final class HoldKeeper {
         }
     }
 
-    /** Takes what the switches say, if the player still waits. A login that came first leaves them whole. */
-    private void strip(Player player) {
-        if (!player.isOnline() || !isHeld.test(player)) {
+    /**
+     * Takes what the switches say, in the same step that read the snapshot, if the player still waits for it. The
+     * snapshot decides whether the inventory goes, not today's switch: an inventory it did not take is not touched.
+     */
+    private void strip(Player player, HeldState snapshot) {
+        UUID id = player.getUniqueId();
+        if (!player.isOnline() || !isHeld.test(player) || taken.get(id) != snapshot) {
             return;
         }
         AuthSettings.Hold switches = hold.get();
         stripStats(player, switches);
-        if (switches.hideInventory()) {
+        if (!snapshot.inventory().isEmpty()) {
+            // Marked first: a failure while emptying must still give the snapshot back under what is there.
+            emptied.put(id, snapshot);
             player.getInventory().clear();
         }
         if (switches.blindness()) {
@@ -357,9 +401,11 @@ public final class HoldKeeper {
     private void restore(Player player, boolean leaving) {
         UUID id = player.getUniqueId();
         HeldState state = taken.remove(id);
+        holders.remove(id);
+        HeldState emptiedFor = emptied.remove(id);
         boolean withdrawn = deopped.remove(id);
         if (state != null) {
-            apply(player, state, !leaving);
+            apply(player, state, !leaving, emptiedFor == state ? Inventory.ON_TOP : Inventory.UNTOUCHED);
             giveBackStanding(player, state, withdrawn);
         }
         if (blinded.remove(id)) {
@@ -480,19 +526,66 @@ public final class HoldKeeper {
         }
     }
 
-    private void apply(Player player, HeldState state, boolean moveBack) {
+    /** Lets go of everything the hold keeps in memory for this player. */
+    private void forget(UUID id) {
+        taken.remove(id);
+        holders.remove(id);
+        emptied.remove(id);
+        deopped.remove(id);
+    }
+
+    /** How the snapshot's inventory comes back. */
+    private enum Inventory {
+        /** The hold emptied it for this snapshot: what arrived since stays, and the snapshot goes under it. */
+        ON_TOP,
+        /** A leftover from a crash: the snapshot replaces whatever the saved player holds. */
+        REPLACE,
+        /** The hold never emptied it: the player still holds everything, so nothing is given again. */
+        UNTOUCHED
+    }
+
+    /** Gives back what was taken, the inventory as the hold left it says. */
+    private void apply(Player player, HeldState state, boolean moveBack, Inventory inventoryBack) {
         player.setAllowFlight(state.allowFlight());
         player.setFlying(state.allowFlight() && state.flying());
         player.setWalkSpeed(state.walkSpeed());
         player.setFlySpeed(state.flySpeed());
         player.setHealth(Math.min(state.health(), maxHealth(player)));
         player.setFoodLevel(state.food());
-        if (!state.inventory().isEmpty()) {
+        if (inventoryBack == Inventory.ON_TOP) {
+            // What reached the player while they waited (a vote reward, a crate key, a refund) stays theirs; the
+            // plugin's own captcha or QR map does not.
+            PlayerInventory inventory = player.getInventory();
+            List<ItemStack> arrived = Arrays.stream(inventory.getContents())
+                    .map(HoldKeeper::orEmpty)
+                    .filter(item -> !item.isEmpty() && !ours.test(item))
+                    .map(ItemStack::clone)
+                    .toList();
+            inventory.setContents(state.inventory().toArray(ItemStack[]::new));
+            give(player, arrived);
+        } else if (inventoryBack == Inventory.REPLACE && !state.inventory().isEmpty()) {
             player.getInventory().setContents(state.inventory().toArray(ItemStack[]::new));
         }
         HeldPlace place = state.place();
         if (moveBack && place != null) {
             place.on(plugin.getServer()).ifPresent(target -> move(player, target));
+        }
+    }
+
+    /**
+     * Adds the items to the inventory; what does not fit goes to the ender chest, and only what fits in neither
+     * drops at the player's feet, with a line in the log.
+     */
+    private void give(Player player, List<ItemStack> items) {
+        for (ItemStack item : items) {
+            for (ItemStack rest : player.getInventory().addItem(item).values()) {
+                for (ItemStack last : player.getEnderChest().addItem(rest).values()) {
+                    plugin.getLogger()
+                            .warning("No room for " + last.getAmount() + " " + last.getType() + " given to "
+                                    + player.getName() + " while held; dropped at their feet.");
+                    player.getWorld().dropItemNaturally(player.getLocation(), last);
+                }
+            }
         }
     }
 

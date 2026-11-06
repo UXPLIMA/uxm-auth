@@ -181,6 +181,7 @@ import com.uxplima.auth.paper.adapter.outbound.hold.HeldStateStore;
 import com.uxplima.auth.paper.adapter.outbound.hold.HoldKeeper;
 import com.uxplima.auth.paper.adapter.outbound.hold.LoginSpot;
 import com.uxplima.auth.paper.adapter.outbound.hold.Passes;
+import com.uxplima.auth.paper.adapter.outbound.hold.PluginItems;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilter;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordLogFilters;
 import com.uxplima.auth.paper.adapter.outbound.log.PasswordMask;
@@ -373,6 +374,7 @@ final class AuthGraph implements AutoCloseable {
         this.nameMarks = NameMarkCheck.warnings(
                 NameMarkCheck.paperChecksNames(Path.of("").toAbsolutePath()), boot.ownership());
         this.rescue = new Rescue(() -> settings.current().spots(), passes, Player::teleportAsync);
+        PluginItems pluginItems = new PluginItems();
         HoldKeeper keeper = new HoldKeeper(
                 plugin,
                 scheduler,
@@ -383,7 +385,8 @@ final class AuthGraph implements AutoCloseable {
                 passes,
                 Player::teleportAsync,
                 rescue::safe,
-                player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)));
+                player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)),
+                pluginItems);
         this.keeper = keeper;
         this.deopWatch = new DeopWatch(keeper, name -> onlineId(plugin, name));
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
@@ -445,7 +448,8 @@ final class AuthGraph implements AutoCloseable {
         Replies replies = new Replies(scheduler, messages, plugin.getLogger());
         Captchas captchas =
                 new Captchas(() -> settings.current().protection().captcha(), new SecureRandom(), Instant::now);
-        CaptchaScreen captcha = new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings));
+        CaptchaScreen captcha =
+                new CaptchaScreen(captchas, screens, shower, messages, captchaHand(plugin, settings, pluginItems));
         AuthSettings.Network network = settings.current().network();
         SqlFactors factorTable = new SqlFactors(
                 database,
@@ -474,7 +478,8 @@ final class AuthGraph implements AutoCloseable {
                 screens,
                 shower,
                 mail,
-                factorStates.watching(factorTable));
+                factorStates.watching(factorTable),
+                pluginItems);
         LogIn logIn = new LogIn(
                 accounts,
                 hashing,
@@ -799,7 +804,7 @@ final class AuthGraph implements AutoCloseable {
     }
 
     /** The map the captcha is drawn on, or none when the server has no world to keep one in. */
-    private CaptchaScreen.Hand captchaHand(Plugin plugin, PluginSettings settings) {
+    private CaptchaScreen.Hand captchaHand(Plugin plugin, PluginSettings settings, PluginItems pluginItems) {
         return CaptchaMap.open(
                         plugin.getServer(),
                         plugin.getDataFolder().toPath().resolve("captcha-map.id"),
@@ -808,7 +813,10 @@ final class AuthGraph implements AutoCloseable {
                         () -> settings.current().hold().hideInventory(),
                         new SecureRandom(),
                         plugin.getLogger())
-                .<CaptchaScreen.Hand>map(map -> map)
+                .<CaptchaScreen.Hand>map(map -> {
+                    pluginItems.add(map::holds);
+                    return map;
+                })
                 .orElse(CaptchaScreen.Hand.NONE);
     }
 

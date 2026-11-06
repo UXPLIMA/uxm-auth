@@ -41,6 +41,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.FactorScreen;
 import com.uxplima.auth.paper.adapter.inbound.screen.Guest;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
 import com.uxplima.auth.paper.adapter.outbound.factor.QrMap;
+import com.uxplima.auth.paper.adapter.outbound.hold.PluginItems;
 import com.uxplima.uxmlib.bedrock.BedrockScreen;
 import com.uxplima.uxmlib.storage.sql.Database;
 import com.uxplima.uxmlib.text.message.Messages;
@@ -92,7 +93,8 @@ final class FactorGraph {
             AuthScreens screens,
             ScreenShower shower,
             MailGraph mail,
-            Factors factors) {
+            Factors factors,
+            PluginItems pluginItems) {
         this.sessions = sessions;
         this.messages = messages;
         LogIn.Failures failures = guards.failures();
@@ -117,6 +119,8 @@ final class FactorGraph {
                 new SecureRandom(),
                 Instant::now);
         Optional<QrMap> qr = QrMap.open(plugin.getServer(), folder.resolve("qr-map.id"), plugin.getLogger());
+        // The QR map is the plugin's: the hold never keeps it as something that reached a waiting player.
+        qr.ifPresent(map -> pluginItems.add(map::holds));
         OwedSetups owed = new OwedSetups(sessions);
         this.setup = new FactorSetup(
                 setUp,
