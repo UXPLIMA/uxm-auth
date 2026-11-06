@@ -186,8 +186,7 @@ public final class CountryDownload {
     private Outcome unpack(InputStream body, Path target) throws IOException {
         Path unpacked = Files.createTempFile(folder, "countries", ".part");
         try {
-            if (!TarGz.extract(new GZIPInputStream(body), CountryFile.NAME, unpacked)
-                    || CountryFile.open(unpacked).isEmpty()) {
+            if (!TarGz.extract(new GZIPInputStream(body), CountryFile.NAME, unpacked) || !readable(unpacked)) {
                 console.accept("MaxMind's answer held no country file; the one there is stays.");
                 return Outcome.FAILED;
             }
@@ -196,5 +195,18 @@ public final class CountryDownload {
         } finally {
             Files.deleteIfExists(unpacked);
         }
+    }
+
+    /**
+     * Whether the file opens as a country database. It is closed again at once: an open file is mapped into memory
+     * and held, and would stay held after the move put it in place, or keep the move from replacing it on Windows.
+     */
+    private static boolean readable(Path unpacked) throws IOException {
+        Optional<CountryFile> opened = CountryFile.open(unpacked);
+        if (opened.isEmpty()) {
+            return false;
+        }
+        opened.get().close();
+        return true;
     }
 }
