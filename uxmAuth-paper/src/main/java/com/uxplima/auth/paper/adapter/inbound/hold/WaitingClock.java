@@ -89,8 +89,12 @@ public final class WaitingClock {
         if (Duration.between(arrived, now).compareTo(registering ? limits.register() : limits.login()) >= 0) {
             handle.cancel();
             times.gone(player.getUniqueId());
-            moments.fire(player, AuthSettings.Moment.TIMEOUT);
-            player.kick(messages.render(player, registering ? Keys.KICK_TIMEOUT_REGISTER : Keys.KICK_TIMEOUT));
+            try {
+                moments.fire(player, AuthSettings.Moment.TIMEOUT);
+            } finally {
+                // The kick is the point; no effect an operator wrote may keep the player here.
+                player.kick(messages.render(player, registering ? Keys.KICK_TIMEOUT_REGISTER : Keys.KICK_TIMEOUT));
+            }
             return;
         }
         if (Duration.between(reminded.get(), now).compareTo(limits.reminder()) >= 0) {

@@ -48,8 +48,9 @@ public final class LogoutCommand {
             // No password to come back with: the way back in is the one they came by, a new join.
             case NO_PASSWORD -> player.kick(messages.render(player, Keys.KICK_LOGGED_OUT));
             case LOGGED_OUT -> {
-                moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
+                // Held first, so no effect an operator wrote can leave a logged-out player free.
                 door.hold(player);
+                moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
             }
         }
     }

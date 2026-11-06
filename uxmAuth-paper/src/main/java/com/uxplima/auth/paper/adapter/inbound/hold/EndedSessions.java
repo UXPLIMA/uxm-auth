@@ -82,9 +82,10 @@ public final class EndedSessions implements Consumer<Bulletin> {
             // No password to come back with: the way back in is a new join.
             case NO_PASSWORD -> player.kick(messages.render(player, Keys.LOGOUT_SESSIONS_ENDED));
             case LOGGED_OUT -> {
+                // Held first, so no effect an operator wrote can leave a logged-out player free.
+                door.hold(player);
                 messages.send(player, Keys.LOGOUT_SESSIONS_ENDED);
                 moments.fire(player, AuthSettings.Moment.LOGGED_OUT);
-                door.hold(player);
             }
         }
     }
