@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -81,6 +82,7 @@ public final class ConfigurationGate implements Listener, DialogWaits {
     private final Predicate<String> everyoneHolds;
     private final Welcomes welcomes;
     private final Logger logger;
+    private final UnansweredPresses unanswered;
     private final Map<UUID, Waiting> waiting = new ConcurrentHashMap<>();
     private final Set<UUID> toTheWorld = ConcurrentHashMap.newKeySet();
 
@@ -102,6 +104,38 @@ public final class ConfigurationGate implements Listener, DialogWaits {
             Predicate<String> everyoneHolds,
             Welcomes welcomes,
             Logger logger) {
+        this(
+                sessions,
+                settings,
+                timeouts,
+                screens,
+                answers,
+                shower,
+                messages,
+                showsDialogs,
+                readsForms,
+                everyoneHolds,
+                welcomes,
+                logger,
+                new UnansweredPresses(shower, logger));
+    }
+
+    /** @param unanswered what logs and answers a press this gate does not run */
+    public ConfigurationGate(
+            Sessions sessions,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Timeouts> timeouts,
+            AuthScreens screens,
+            ScreenAnswers answers,
+            ScreenShower shower,
+            Messages messages,
+            Predicate<UUID> showsDialogs,
+            Predicate<UUID> readsForms,
+            Predicate<String> everyoneHolds,
+            Welcomes welcomes,
+            Logger logger,
+            UnansweredPresses unanswered) {
+        this.unanswered = Objects.requireNonNull(unanswered, "unanswered");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
@@ -245,10 +279,19 @@ public final class ConfigurationGate implements Listener, DialogWaits {
             PlayerConfigurationConnection connection, String action, ScreenAnswers.Answer answer) {
         UUID id = connection.getProfile().getId();
         Waiting entry = id == null ? null : waiting.get(id);
-        if (entry == null || entry.connection() != connection) {
+        Optional<UnansweredPresses.Dropped> dropped =
+                UnansweredPresses.dropFor(entry != null, entry != null && entry.connection() == connection);
+        if (dropped.isPresent()) {
+            // The screen waits for an answer: a press that is not run still gets one, and the log says why.
+            String name = connection.getProfile().getName();
+            unanswered.dropped(
+                    connection.getAudience(),
+                    name == null ? "?" : name,
+                    entry == null ? OptionalLong.empty() : OptionalLong.of(entry.opening()),
+                    dropped.get());
             return CompletableFuture.completedFuture(null);
         }
-        return answers.answer(new ConnectingGuest(entry, this), action, answer);
+        return answers.answer(new ConnectingGuest(Objects.requireNonNull(entry, "entry"), this), action, answer);
     }
 
     void letIn(Waiting entry, AuthSettings.Moment moment) {

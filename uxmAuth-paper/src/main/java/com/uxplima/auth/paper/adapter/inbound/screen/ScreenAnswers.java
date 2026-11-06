@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
@@ -63,6 +64,7 @@ public final class ScreenAnswers {
     private final FactorOffer factor;
     private final RecoveryOffer recovery;
     private final TimeWords times;
+    private final UnansweredPresses unanswered;
     private final PinPad pad = new PinPad();
 
     /** What the player ticked in the "remember me" box, kept with the session of this connection. */
@@ -144,7 +146,10 @@ public final class ScreenAnswers {
                 choices,
                 (Replacer) (id, fresh) -> CompletableFuture.completedFuture(new ChangeResult.NotLoggedIn()),
                 new CaptchaScreen(Captchas.off(), screens, shower, messages, CaptchaScreen.Hand.NONE),
-                new Offers(FactorOffer.NONE, RecoveryOffer.NONE));
+                new Offers(
+                        FactorOffer.NONE,
+                        RecoveryOffer.NONE,
+                        new UnansweredPresses(shower, Logger.getLogger("uxmAuth"))));
     }
 
     /**
@@ -267,16 +272,52 @@ public final class ScreenAnswers {
                 registering,
                 claims,
                 choices,
+                change,
+                captcha,
+                factor,
+                recovery,
+                new UnansweredPresses(shower, Logger.getLogger("uxmAuth")));
+    }
+
+    /** @param unanswered what logs and answers a login press that found its session gone */
+    public ScreenAnswers(
+            AuthScreens screens,
+            RegisterAccount register,
+            LogIn logIn,
+            Supplier<ScreenSettings> settings,
+            Supplier<AuthSettings.Passwords> passwords,
+            Messages messages,
+            ScreenShower shower,
+            Predicate<UUID> registering,
+            Claims claims,
+            Choices choices,
+            ChangePassword change,
+            CaptchaScreen captcha,
+            FactorOffer factor,
+            RecoveryOffer recovery,
+            UnansweredPresses unanswered) {
+        this(
+                screens,
+                register,
+                logIn,
+                settings,
+                passwords,
+                messages,
+                shower,
+                registering,
+                claims,
+                choices,
                 (Replacer) Objects.requireNonNull(change, "change")::replaceWeak,
                 captcha,
-                new Offers(factor, recovery));
+                new Offers(factor, recovery, unanswered));
     }
 
     /** What the screen hands on: the code of the second step, and a forgotten password. */
-    private record Offers(FactorOffer factor, RecoveryOffer recovery) {
+    private record Offers(FactorOffer factor, RecoveryOffer recovery, UnansweredPresses unanswered) {
         Offers {
             Objects.requireNonNull(factor, "factor");
             Objects.requireNonNull(recovery, "recovery");
+            Objects.requireNonNull(unanswered, "unanswered");
         }
     }
 
@@ -308,6 +349,7 @@ public final class ScreenAnswers {
         this.captcha = Objects.requireNonNull(captcha, "captcha");
         this.factor = offers.factor();
         this.recovery = offers.recovery();
+        this.unanswered = offers.unanswered();
         this.times = new TimeWords(messages);
     }
 
@@ -441,7 +483,9 @@ public final class ScreenAnswers {
                 shower.show(
                         reader,
                         screens.login(reader, RefusalWords.of(messages, reader, refused.reason(), Keys.LOGIN_REFUSED)));
-            case LoginResult.Gone gone -> {}
+            // The screen waits for an answer; a login with nothing left to log into still gets one.
+            case LoginResult.Gone gone ->
+                unanswered.gone(reader, guest.name(), guest.opening(), screens.login(reader, null));
         }
     }
 
