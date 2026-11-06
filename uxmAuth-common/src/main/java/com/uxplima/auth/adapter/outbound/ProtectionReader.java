@@ -146,15 +146,19 @@ final class ProtectionReader {
         }
     }
 
-    /** The bans of a whole IPv6 /48: the same steps, after more wrong passwords than one /64 may make. */
+    /**
+     * The bans of a whole IPv6 /48: the same steps, after more wrong passwords than one /64 may make. A limit
+     * below {@code bans.failures} counts as {@code bans.failures} rather than refusing the start: the key arrives
+     * with a release at 12, and an operator who had raised {@code bans.failures} past that must not find every
+     * login refused after the update.
+     */
     private static BanSteps wideBans(HoconConfig config) {
         BanSteps bans = bans(config);
         int failures = config.getInt("protection.bans.failures-per-48", 12);
-        if (failures < bans.failures()) {
-            throw new IllegalArgumentException("protection.bans.failures-per-48 must be at least bans.failures ("
-                    + bans.failures() + "), got: " + failures);
+        if (failures < 1) {
+            throw new IllegalArgumentException("protection.bans.failures-per-48 must be at least 1, got: " + failures);
         }
-        return new BanSteps(bans.lengths(), failures, bans.forgiveAfter());
+        return new BanSteps(bans.lengths(), Math.max(failures, bans.failures()), bans.forgiveAfter());
     }
 
     private static Remember.Settings sessions(HoconConfig config) {
