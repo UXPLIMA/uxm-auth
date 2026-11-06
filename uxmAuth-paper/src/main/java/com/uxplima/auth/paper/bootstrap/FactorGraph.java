@@ -70,13 +70,19 @@ final class FactorGraph {
     private final Sessions sessions;
     private final Messages messages;
 
+    /**
+     * Where a wrong code counts: against the address, against the account wherever it came from, and toward the
+     * captcha of the name.
+     */
+    record Guards(LogIn.Failures failures, LogIn.Lockout lockout, LogIn.Captcha captcha) {}
+
     FactorGraph(
             Plugin plugin,
             PluginSettings settings,
             Database database,
             AccountRepository accounts,
             Sessions sessions,
-            LogIn.Failures failures,
+            Guards guards,
             Predicate<UUID> bedrock,
             Hashing hashing,
             HashingLane lane,
@@ -89,6 +95,7 @@ final class FactorGraph {
             Factors factors) {
         this.sessions = sessions;
         this.messages = messages;
+        LogIn.Failures failures = guards.failures();
         Path folder = plugin.getDataFolder().toPath();
         this.factors = factors;
         this.secondStep = new SecondStep(
@@ -99,7 +106,8 @@ final class FactorGraph {
                 () -> settings.current().secondFactor().setup().totp(),
                 () -> settings.current().secondFactor().setup().backup(),
                 new MailedLoginCode(mail.emails, mail.codes));
-        ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, failures, Instant::now);
+        ConfirmFactor confirm = new ConfirmFactor(
+                accounts, sessions, check, failures, guards.lockout(), guards.captcha(), Instant::now);
         this.screen = new FactorScreen(confirm, screens, shower, messages, lane);
         SetUpTotp setUp = new SetUpTotp(
                 factors,

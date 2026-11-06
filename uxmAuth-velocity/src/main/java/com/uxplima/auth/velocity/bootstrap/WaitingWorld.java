@@ -168,13 +168,14 @@ final class WaitingWorld implements AutoCloseable {
     }
 
     /**
-     * What guards the waiting world's door: the remembered sessions, where a wrong password counts, the limit on
-     * the accounts one address makes, the breach check, and where a changed password ends the account's other
-     * sessions.
+     * What guards the waiting world's door: the remembered sessions, where a wrong password counts against its
+     * address and against its account, the limit on the accounts one address makes, the breach check, and where a
+     * changed password ends the account's other sessions.
      */
     record Guards(
             Remember remember,
             LogIn.Failures failures,
+            LogIn.Lockout lockout,
             RegisterAccount.Cap cap,
             BreachedPasswords breaches,
             NetworkEvents bulletins,
@@ -217,7 +218,8 @@ final class WaitingWorld implements AutoCloseable {
                         () -> settings.current().passwordPolicy(),
                         captchas,
                         guards.secondStep(),
-                        guards.events()),
+                        guards.events(),
+                        guards.lockout()),
                 new RegisterAccount(
                         accounts,
                         hashing,
@@ -236,7 +238,7 @@ final class WaitingWorld implements AutoCloseable {
                 labels,
                 () -> settings.current().passwords().confirmOnRegister(),
                 guards.secondStep(),
-                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane)),
+                codes(settings, accounts, sessions, guards, new Hashers(hashing, hashingLane), captchas),
                 recovery(settings, accounts, sessions, words, guards, new Hashers(hashing, hashingLane)));
     }
 
@@ -264,14 +266,20 @@ final class WaitingWorld implements AutoCloseable {
 
     /** The code of the second step, checked on the hashing lane: the factor table is read, backup codes hashed. */
     private static LimboLogin.CodeCheck codes(
-            PluginSettings settings, AccountRepository accounts, Sessions sessions, Guards guards, Hashers hashers) {
+            PluginSettings settings,
+            AccountRepository accounts,
+            Sessions sessions,
+            Guards guards,
+            Hashers hashers,
+            Captchas captchas) {
         FactorCheck check = new FactorCheck(
                 guards.factors(),
                 hashers.hashing(),
                 () -> settings.current().secondFactor().setup().totp(),
                 () -> settings.current().secondFactor().setup().backup(),
                 guards.mailedCode());
-        ConfirmFactor confirm = new ConfirmFactor(accounts, sessions, check, guards.failures(), Instant::now);
+        ConfirmFactor confirm = new ConfirmFactor(
+                accounts, sessions, check, guards.failures(), guards.lockout(), captchas, Instant::now);
         return (id, code, address) -> hashers.lane().submit(() -> confirm.confirm(id, code, address));
     }
 

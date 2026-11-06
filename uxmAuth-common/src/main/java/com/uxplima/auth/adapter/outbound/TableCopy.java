@@ -48,7 +48,8 @@ public final class TableCopy implements DatabaseCopy {
             "uxmauth_email",
             "uxmauth_mail_code",
             "uxmauth_login",
-            "uxmauth_website_link");
+            "uxmauth_website_link",
+            "uxmauth_account_lock");
 
     /** The rows sent in one batch. */
     private static final int BATCH = 500;

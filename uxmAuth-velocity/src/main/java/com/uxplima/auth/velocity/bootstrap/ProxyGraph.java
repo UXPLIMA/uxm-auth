@@ -26,6 +26,7 @@ import com.uxplima.auth.adapter.outbound.PremiumStartLine;
 import com.uxplima.auth.adapter.outbound.PwnedPasswords;
 import com.uxplima.auth.adapter.outbound.SecretSeal;
 import com.uxplima.auth.adapter.outbound.SqlAccountRepository;
+import com.uxplima.auth.adapter.outbound.SqlAccountTallies;
 import com.uxplima.auth.adapter.outbound.SqlAddressTallies;
 import com.uxplima.auth.adapter.outbound.SqlDisputes;
 import com.uxplima.auth.adapter.outbound.SqlFactors;
@@ -55,6 +56,7 @@ import com.uxplima.auth.application.premium.Moves;
 import com.uxplima.auth.application.premium.NameMemory;
 import com.uxplima.auth.application.premium.PremiumLookup;
 import com.uxplima.auth.application.protection.AccountCap;
+import com.uxplima.auth.application.protection.AccountLockout;
 import com.uxplima.auth.application.protection.AddressBans;
 import com.uxplima.auth.application.protection.Admission;
 import com.uxplima.auth.application.protection.ConnectionWindow;
@@ -172,6 +174,11 @@ final class ProxyGraph implements AutoCloseable {
                         clock::instant,
                         AuthNotices.onBan(fired::banned))
                 .watching(bans);
+        AccountLockout lockout = new AccountLockout(
+                new SqlAccountTallies(database),
+                () -> settings.current().protection().lockout(),
+                () -> settings.current().protection().sharedAddresses(),
+                clock::instant);
         ProxyMail mail = new ProxyMail(proxy, logger, folder, settings, database, failures, words);
         this.mail = mail;
         SecondStep secondStep = new SecondStep(
@@ -194,7 +201,14 @@ final class ProxyGraph implements AutoCloseable {
                 words,
                 sessions,
                 settleEarly,
-                guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
+                guards(
+                        settings,
+                        accounts,
+                        remember,
+                        new Counted(failures, lockout),
+                        clock,
+                        remembered,
+                        Codes.of(factors, secondStep, mail)));
         logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
     }
 
@@ -218,7 +232,7 @@ final class ProxyGraph implements AutoCloseable {
             PluginSettings settings,
             AccountRepository accounts,
             Remember remember,
-            LogIn.Failures failures,
+            Counted counted,
             Clock clock,
             SqlRememberedSessions remembered,
             Codes codes) {
@@ -230,7 +244,8 @@ final class ProxyGraph implements AutoCloseable {
                 logger::warn);
         return new WaitingWorld.Guards(
                 remember,
-                failures,
+                counted.failures(),
+                counted.lockout(),
                 cap::full,
                 breaches,
                 events,
@@ -432,6 +447,9 @@ final class ProxyGraph implements AutoCloseable {
     private static Supplier<Optional<Claims>> claims(PluginSettings settings, NetworkSecret secret) {
         return () -> Optional.of(new Claims(secret, settings.current().network().claimFor()));
     }
+
+    /** Where a wrong password or code counts: against its address, and against the account it was typed for. */
+    private record Counted(LogIn.Failures failures, LogIn.Lockout lockout) {}
 
     /** The network secret and the step after the password, which the door and the claims read. */
     private record Steps(NetworkSecret secret, SecondStep secondStep) {}

@@ -19,6 +19,23 @@ passwords across a /48 ban the whole /48, so hopping between the /64s of one pro
 ban. `/uxmauth unban <address>` lifts a ban, the /48's with it. `passwords.max-attempts` kicks a
 player after that many wrong passwords on one connection.
 
+## Account locks
+
+`protection.account-lock` counts wrong passwords, app codes, backup codes and mailed login codes against the
+account they were typed for, from any address and through any filter, so changing address or hiding behind a
+shared filter does not buy more guesses. Every `failures` of them lock the account for the next step of
+`steps-minutes` (the last step repeats, none may pass a day), and while it is locked no password or code is
+checked for it: the player reads when to try again, the same whether the password was right or not. A try counts
+before it is checked, so tries sent together cannot pass the limit, and a right one gives it back. A finished
+login starts the count again, and an account quiet for `forgive-after-hours` starts from the first step. A wrong
+old password in `/changepassword` and a wrong proof in `/unregister` count too.
+
+A stranger can lock somebody else's account on purpose, so the lock is a short, growing delay and never a ban:
+premium and Bedrock logins and remembered sessions are never held back, nor is the owner back on the address
+they last logged in from (its /64 for IPv6) unless a filter shares it, and the right password works as soon as
+the lock runs out. The cost is that an owner who types their password from somewhere new may wait a few minutes
+while somebody is guessing at their account.
+
 ## Limits
 
 - `protection.connections`: how many connections one address may make inside `window-seconds`, counted at every
@@ -57,7 +74,7 @@ dialog is shown. Premium and Bedrock players never meet it.
 A player turns on an authenticator app with `/2fa setup` and `/2fa confirm`, or a code by mail with
 `/2fa email on`. `second-factor` sets the issuer, the label (`{player}` is the name), the digits (6 to 8), the
 period (15 to 300 seconds), the window steps, the setup time and the backup codes. A wrong code costs a try as a
-wrong password does and counts toward the address bans. `premium-skips` lets a proven premium or Bedrock player
+wrong password does and counts toward the address bans, the account lock and the captcha of the name. `premium-skips` lets a proven premium or Bedrock player
 skip the code. `required-permission` (default `uxmauth.2fa.required`) holds a player until the app is set up,
 for as long as they hold the node outright; give it to staff through a permission plugin.
 

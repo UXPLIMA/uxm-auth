@@ -65,7 +65,7 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
 
     /**
      * What every other store keeps under an account's id: the app and backup codes, the mail address and its codes,
-     * the login history and the last server. A deleted account drops them, so a later account under the same id,
+     * the login history, the last server and the lock of wrong tries. A deleted account drops them, so a later account under the same id,
      * which an offline id derived from the name is, inherits none of them; a moved id takes them along.
      */
     private static final List<String> DROP_KEPT = List.of(
@@ -75,7 +75,8 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             "DELETE FROM uxmauth_mail_code WHERE account_id = ?",
             "DELETE FROM uxmauth_login WHERE account_id = ?",
             "DELETE FROM uxmauth_last_server WHERE account_id = ?",
-            "DELETE FROM uxmauth_website_link WHERE account_id = ?");
+            "DELETE FROM uxmauth_website_link WHERE account_id = ?",
+            "DELETE FROM uxmauth_account_lock WHERE account_id = ?");
 
     private static final List<String> MOVE_KEPT = List.of(
             "UPDATE uxmauth_factor SET account_id = ? WHERE account_id = ?",
@@ -84,7 +85,8 @@ public final class SqlAccountRepository implements AccountRepository, AccountLis
             "UPDATE uxmauth_mail_code SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_login SET account_id = ? WHERE account_id = ?",
             "UPDATE uxmauth_last_server SET account_id = ? WHERE account_id = ?",
-            "UPDATE uxmauth_website_link SET account_id = ? WHERE account_id = ?");
+            "UPDATE uxmauth_website_link SET account_id = ? WHERE account_id = ?",
+            "UPDATE uxmauth_account_lock SET account_id = ? WHERE account_id = ?");
 
     private final Database database;
 

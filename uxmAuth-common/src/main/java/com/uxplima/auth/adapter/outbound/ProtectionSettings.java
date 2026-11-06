@@ -22,6 +22,7 @@ import com.uxplima.auth.domain.protection.SharedAddresses;
  * @param sessions for whom remembered sessions are on, and how long one lasts
  * @param bans how wrong passwords ban the address they came from
  * @param wideBans how the wrong passwords of a whole IPv6 /48 ban it: the steps of the bans, with a limit of its own
+ * @param lockout how the wrong passwords and codes typed for one account, from anywhere, lock it for a while
  * @param connections how often one address may connect
  * @param accounts how many password accounts one address may make
  * @param countries which countries come in, and how the country file is fetched
@@ -33,6 +34,7 @@ public record ProtectionSettings(
         Remember.Settings sessions,
         BanSteps bans,
         BanSteps wideBans,
+        BanSteps lockout,
         ConnectionWindow.Settings connections,
         AccountCap.Settings accounts,
         GeoSettings countries,
@@ -48,6 +50,7 @@ public record ProtectionSettings(
         Objects.requireNonNull(sessions, "sessions");
         Objects.requireNonNull(bans, "bans");
         Objects.requireNonNull(wideBans, "wideBans");
+        Objects.requireNonNull(lockout, "lockout");
         Objects.requireNonNull(connections, "connections");
         Objects.requireNonNull(accounts, "accounts");
         Objects.requireNonNull(countries, "countries");

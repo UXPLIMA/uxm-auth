@@ -332,6 +332,8 @@ public final class LimboLogin {
                 new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
             case ConfirmFactor.Result.Banned banned ->
                 new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            case ConfirmFactor.Result.Locked locked ->
+                new Outcome.Stay(messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left())));
             case ConfirmFactor.Result.NotWaiting notWaiting ->
                 new Outcome.Stay(messages.render(reader, Keys.FACTOR_NOTHING_ASKED));
             case ConfirmFactor.Result.Gone gone -> new Outcome.Stay(reminder(reader, id));
@@ -428,6 +430,8 @@ public final class LimboLogin {
                 new Outcome.Out(messages.render(reader, Keys.KICK_TOO_MANY_ATTEMPTS));
             case LoginResult.Banned banned ->
                 new Outcome.Out(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            case LoginResult.Locked locked ->
+                new Outcome.Stay(messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left())));
             case LoginResult.MustReplace mustReplace ->
                 new Outcome.Stay(PasswordWords.reason(messages, reader, mustReplace.why())
                         .map(why -> why.append(Component.newline()).append(reminder(reader, id)))
