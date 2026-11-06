@@ -518,6 +518,16 @@ public final class ScreenAnswers {
             case ChangeResult.WrongOld wrongOld -> shower.show(reader, screens.login(reader, null));
             case ChangeResult.ChangedElsewhere elsewhere ->
                 guest.kick(messages.render(reader, Keys.LOGOUT_SESSIONS_ENDED));
+            case ChangeResult.Locked locked ->
+                shower.show(
+                        reader,
+                        screens.replace(
+                                reader,
+                                messages.render(reader, Keys.LOGIN_LOCKED, times.placeholder(reader, locked.left()))));
+            case ChangeResult.Banned banned -> {
+                guest.fire(AuthSettings.Moment.BANNED);
+                guest.kick(messages.render(reader, Keys.KICK_BANNED, times.placeholder(reader, banned.lasts())));
+            }
             case ChangeResult.Gone gone -> {}
         }
     }

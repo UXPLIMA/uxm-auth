@@ -7,9 +7,11 @@ import java.util.function.Predicate;
 
 import org.bukkit.entity.Player;
 
+import com.uxplima.auth.adapter.outbound.TimeWords;
 import com.uxplima.auth.application.account.DeleteOwnAccount;
 import com.uxplima.auth.application.account.DeleteOwnAccount.Deleted;
 import com.uxplima.auth.application.message.Keys;
+import com.uxplima.auth.paper.adapter.inbound.command.Addresses;
 import com.uxplima.auth.paper.adapter.inbound.command.Replies;
 import com.uxplima.uxmlib.command.Sender;
 import com.uxplima.uxmlib.command.annotation.annotations.Arg;
@@ -39,6 +41,7 @@ public final class UnregisterCommand {
     private final Predicate<UUID> bedrock;
     private final Replies replies;
     private final Messages messages;
+    private final TimeWords times;
 
     public UnregisterCommand(
             DeleteOwnAccount delete, ProofForm form, Predicate<UUID> bedrock, Replies replies, Messages messages) {
@@ -47,6 +50,7 @@ public final class UnregisterCommand {
         this.bedrock = Objects.requireNonNull(bedrock, "bedrock");
         this.replies = Objects.requireNonNull(replies, "replies");
         this.messages = Objects.requireNonNull(messages, "messages");
+        this.times = new TimeWords(messages);
     }
 
     @Subcommand("")
@@ -76,7 +80,10 @@ public final class UnregisterCommand {
 
     /** Deletes the account when the time is open and the proof is right; answers when the player has been told. */
     CompletableFuture<Void> confirm(Player player, String proof) {
-        return replies.on(player, delete.confirm(player.getUniqueId(), proof), deleted -> answer(player, deleted));
+        return replies.on(
+                player,
+                delete.confirm(player.getUniqueId(), proof, Addresses.of(player)),
+                deleted -> answer(player, deleted));
     }
 
     private void answer(Player player, Deleted deleted) {
@@ -93,6 +100,10 @@ public final class UnregisterCommand {
             case Deleted.NotAsked notAsked -> messages.send(player, Keys.ACCOUNT_DELETE_NOT_ASKED);
             case Deleted.NotLoggedIn notLoggedIn -> messages.send(player, Keys.ACCOUNT_LOG_IN_FIRST);
             case Deleted.NoProof noProof -> messages.send(player, Keys.ACCOUNT_DELETE_NO_PROOF);
+            case Deleted.Locked locked ->
+                messages.send(player, Keys.LOGIN_LOCKED, times.placeholder(player, locked.left()));
+            case Deleted.Banned banned ->
+                player.kick(messages.render(player, Keys.KICK_BANNED, times.placeholder(player, banned.lasts())));
         }
     }
 }

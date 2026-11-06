@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import com.uxplima.auth.application.LogIn;
 import com.uxplima.auth.application.Sessions;
 import com.uxplima.auth.application.factor.FactorCheck;
 import com.uxplima.auth.application.lane.HashingLane;
@@ -30,7 +31,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * A player removes their own account. They ask first, and then prove it is theirs inside a window: by the app's
  * code when the account has the app, by the password otherwise. A wrong proof closes the window, so every guess
- * costs an ask.
+ * costs an ask, and counts as a wrong login does: against the address it came from and against the account, which
+ * a lock then shuts to every proof for a while. The command is no oracle for the password.
  */
 public final class DeleteOwnAccount {
 
@@ -53,6 +55,28 @@ public final class DeleteOwnAccount {
 
         /** The account has no password and no app to prove it by. */
         record NoProof() implements Deleted {}
+
+        /** The wrong proof banned the address it came from, for this long; the platform sends the player away. */
+        record Banned(Duration lasts) implements Deleted {
+            public Banned {
+                Objects.requireNonNull(lasts, "lasts");
+            }
+        }
+
+        /** Too many wrong passwords and codes were typed for the account lately: no proof is checked for this long. */
+        record Locked(Duration left) implements Deleted {
+            public Locked {
+                Objects.requireNonNull(left, "left");
+            }
+        }
+    }
+
+    /** Where a wrong proof counts: against its address, and against the account it was typed for. */
+    public record Guards(LogIn.Failures failures, LogIn.Lockout lockout) {
+        public Guards {
+            Objects.requireNonNull(failures, "failures");
+            Objects.requireNonNull(lockout, "lockout");
+        }
     }
 
     /** The collaborators that read and remove the account. */
@@ -71,6 +95,7 @@ public final class DeleteOwnAccount {
     private final HashingLane lane;
     private final Supplier<Duration> window;
     private final Clock clock;
+    private final Guards guards;
 
     /** When each connection asked; changed only through compute. */
     private final Map<UUID, Instant> asked = new ConcurrentHashMap<>();
@@ -84,7 +109,9 @@ public final class DeleteOwnAccount {
             HashingLane lane,
             Unregister unregister,
             Supplier<Duration> window,
-            Clock clock) {
+            Clock clock,
+            Guards guards) {
+        this.guards = Objects.requireNonNull(guards, "guards");
         this.tables = new Tables(sessions, accounts, factors, unregister);
         this.codes = Objects.requireNonNull(codes, "codes");
         this.hashing = Objects.requireNonNull(hashing, "hashing");
@@ -117,9 +144,13 @@ public final class DeleteOwnAccount {
         }
     }
 
-    /** Removes the account when the window is open and the proof is right. Hashing runs on the lane. */
-    public CompletableFuture<Deleted> confirm(UUID connection, String proof) {
+    /**
+     * Removes the account when the window is open and the proof, typed from this address, is right. Hashing runs on
+     * the lane.
+     */
+    public CompletableFuture<Deleted> confirm(UUID connection, String proof, String address) {
         Objects.requireNonNull(proof, "proof");
+        Objects.requireNonNull(address, "address");
         Optional<Account> account = loggedIn(Objects.requireNonNull(connection, "connection"));
         if (account.isEmpty()) {
             return CompletableFuture.completedFuture(new Deleted.NotLoggedIn());
@@ -129,7 +160,29 @@ public final class DeleteOwnAccount {
             return CompletableFuture.completedFuture(new Deleted.NotAsked());
         }
         Account owner = account.get();
-        return lane.submit(() -> proves(owner, proof) ? remove(owner) : new Deleted.WrongProof());
+        String host =
+                tables.sessions().held(connection).map(Sessions.Held::host).orElse("");
+        return lane.submit(() -> proved(owner, proof, address, host));
+    }
+
+    /** Takes a try at the account before the proof is checked, unless it is locked, and removes it on a right one. */
+    private Deleted proved(Account owner, String proof, String address, String host) {
+        LogIn.Lockout.Try.Taken taken;
+        switch (guards.lockout().take(owner.id())) {
+            case LogIn.Lockout.Try.Refused refused -> {
+                return new Deleted.Locked(refused.left());
+            }
+            case LogIn.Lockout.Try.Taken took -> taken = took;
+        }
+        if (proves(owner, proof)) {
+            guards.lockout().right(taken);
+            return remove(owner);
+        }
+        Optional<Duration> banned = guards.failures().failed(address, host);
+        if (banned.isPresent()) {
+            return new Deleted.Banned(banned.get());
+        }
+        return taken.locks().<Deleted>map(Deleted.Locked::new).orElseGet(Deleted.WrongProof::new);
     }
 
     /** How many asks are held, for the test that proves a closed one is let go. */

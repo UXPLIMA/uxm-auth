@@ -471,7 +471,9 @@ final class AuthGraph implements AutoCloseable {
                 events,
                 remembered,
                 breaches,
-                fired);
+                fired,
+                failures,
+                lockout);
         RecoverPassword recovering = mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
@@ -630,7 +632,8 @@ final class AuthGraph implements AutoCloseable {
                         lane,
                         new Unregister(accounts, events, fired),
                         () -> settings.current().deleteConfirm(),
-                        clock),
+                        clock,
+                        new DeleteOwnAccount.Guards(failures, lockout)),
                 proofForm,
                 id -> bedrock.player(id).isPresent(),
                 replies,
