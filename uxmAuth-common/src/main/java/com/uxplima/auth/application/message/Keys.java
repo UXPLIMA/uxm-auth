@@ -297,6 +297,10 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>Your account must ask a code from an authenticator app before you can play. Type"
                     + " <value>/2fa setup<body> to set it up."),
     FACTOR_LOG_IN_FIRST("factor.log-in-first", "<etag:'ERROR'> <body>Log in first."),
+    FACTOR_PASSWORD_FIRST(
+            "factor.password-first",
+            "<etag:'ERROR'> <body>A remembered session cannot set up the app. Log out with <value>/logout<body> and"
+                    + " log in with your password first."),
     FACTOR_CODE_NEEDED(
             "factor.code-needed",
             "<body>Now type the code from your authenticator app or the one mailed to you, or a backup code, with"
@@ -354,6 +358,10 @@ public enum Keys implements MessageKey {
             "<etag:'ERROR'> <body>This server requires an address, so it cannot be removed. Link another with"
                     + " <value>/email add <address><body> to replace it."),
     EMAIL_LOG_IN_FIRST("email.log-in-first", "<etag:'ERROR'> <body>Log in first."),
+    EMAIL_PASSWORD_FIRST(
+            "email.password-first",
+            "<etag:'ERROR'> <body>A remembered session cannot link an address. Log out with <value>/logout<body> and"
+                    + " log in with your password first."),
     RECOVER_REQUESTED(
             "recover.requested",
             "<good>If this account has a confirmed address, a code went to it. Type <value>/recover <code> <new"
