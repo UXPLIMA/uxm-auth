@@ -36,6 +36,7 @@ import com.uxplima.auth.adapter.outbound.SqlFactors;
 import com.uxplima.auth.adapter.outbound.SqlLoginHistory;
 import com.uxplima.auth.adapter.outbound.SqlRememberedSessions;
 import com.uxplima.auth.adapter.outbound.TableCopy;
+import com.uxplima.auth.adapter.outbound.TableUpkeep;
 import com.uxplima.auth.adapter.outbound.WebsiteAccounts;
 import com.uxplima.auth.adapter.outbound.geo.CountryBook;
 import com.uxplima.auth.adapter.outbound.geo.CountryDownload;
@@ -248,6 +249,7 @@ final class AuthGraph implements AutoCloseable {
     private @Nullable TaskHandle countryTask;
     private final TaskHandle historyTask;
     private final TaskHandle purgeTask;
+    private final TaskHandle upkeepTask;
     private final NetworkEvents events;
     private final Alerts alerts;
     private final DiscordNotices discord;
@@ -290,11 +292,20 @@ final class AuthGraph implements AutoCloseable {
                 () -> settings.current().protection().sessions(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
+        SqlAddressTallies tallies = new SqlAddressTallies(database);
         AddressBans bans = new AddressBans(
-                new SqlAddressTallies(database),
+                tallies,
                 () -> settings.current().protection().bans(),
                 () -> settings.current().protection().sharedAddresses(),
                 Instant::now);
+        TableUpkeep upkeep = new TableUpkeep(
+                tallies,
+                remembered,
+                () -> settings.current().protection().bans().forgiveAfter(),
+                Clock.systemUTC(),
+                plugin.getLogger()::warning);
+        // Soon after the start, and once a day after, forgiven addresses and ended sessions go.
+        this.upkeepTask = scheduler.asyncTimer(Duration.ofMinutes(2), Duration.ofDays(1), task -> upkeep.run());
         this.events = bulletins(settings, plugin.getLogger());
         PaperEvents fired = new PaperEvents(
                 plugin.getServer()::getPlayer, plugin.getServer().getPluginManager()::callEvent);
@@ -785,6 +796,7 @@ final class AuthGraph implements AutoCloseable {
     public void close() {
         historyTask.cancel();
         purgeTask.cancel();
+        upkeepTask.cancel();
         if (countryTask != null) {
             countryTask.cancel();
         }
