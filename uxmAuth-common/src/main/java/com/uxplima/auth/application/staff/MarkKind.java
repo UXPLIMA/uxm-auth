@@ -33,7 +33,7 @@ public final class MarkKind {
         NOT_PAID,
         /** No source could say who holds the name. */
         NO_ANSWER,
-        /** Another account holds the paid account already. */
+        /** Another account holds the paid account already, or the id the scheme gives it. */
         TAKEN,
         /** A cracked account logs in with a password, and this one has none. */
         NO_PASSWORD,
@@ -117,6 +117,11 @@ public final class MarkKind {
             return Marked.TAKEN;
         }
         UUID id = scheme.idFor(account.name(), Optional.of(mojangId), Optional.of(account));
+        if (!id.equals(account.id()) && accounts.findById(id).isPresent()) {
+            // Another account plays under that id, as the owner's own one that turned cracked does: moving onto it
+            // would fail half way, so staff are told and nothing changes.
+            return Marked.TAKEN;
+        }
         if (!id.equals(account.id())) {
             accounts.moveId(account.id(), id);
         }

@@ -27,7 +27,13 @@ import com.uxplima.auth.domain.state.AuthState;
  * UUID. A name another account holds changes hands: a premium account still under a name Mojang has given to
  * somebody else moves away, to come back under its owner's new name when they next join; a cracked account
  * goes through the strategy the operator chose, unless its own owner asked for the handshake, in which case it
- * simply turns premium. This runs on the thread the server gives the pre-login, which may wait on the database.
+ * simply turns premium. An account that plays under the Mojang id itself is the owner's own, turned cracked with
+ * {@code /cracked} or by staff, and turns premium again rather than meeting the strategy as a stranger.
+ *
+ * <p>Freeing the name and making the new account are separate writes. The new account's id is chosen after the
+ * name is free and only among ids nobody holds, so the insert cannot fail on the id a moved account kept, and a
+ * write that fails on a race leaves the name free for the next connection rather than half taken. This runs on
+ * the thread the server gives the pre-login, which may wait on the database.
  */
 public final class LetPremiumIn {
 
@@ -80,7 +86,8 @@ public final class LetPremiumIn {
         if (disputed.isPresent()) {
             return new PremiumAdmission.Refused(disputed.get());
         }
-        Optional<Account> mine = accounts.findByPremiumId(mojangId);
+        Optional<Account> proved = accounts.findByPremiumId(mojangId);
+        Optional<Account> mine = proved.isEmpty() && !ownerAsked ? turnedCracked(mojangId) : proved;
         Optional<Account> holder = accounts.findByName(name)
                 .filter(found -> mine.isEmpty() || !found.id().equals(mine.get().id()));
         if (holder.isPresent()) {
@@ -89,7 +96,7 @@ public final class LetPremiumIn {
                 return new PremiumAdmission.Refused(refused.get());
             }
         }
-        Account account = mine.map(found -> underName(found, name))
+        Account account = mine.map(found -> underName(provedAgain(found, mojangId), name))
                 .or(() -> accounts.findByName(name).filter(turned -> turned.premiumId() != null))
                 .orElseGet(() -> made(mojangId, name, address));
         Instant now = clock.instant();
@@ -162,9 +169,45 @@ public final class LetPremiumIn {
         }
     }
 
-    /** The owner of a cracked account proved the name: the account turns premium, under the scheme's id. */
+    /**
+     * The account that plays under the Mojang id itself and proved no paid account now: the owner's own, made when
+     * they first proved the name and turned cracked since. Only a proved connection is ever given a Mojang id, so
+     * no stranger's account holds one.
+     */
+    private Optional<Account> turnedCracked(UUID mojangId) {
+        return accounts.findById(mojangId)
+                .filter(found -> found.kind() == AccountKind.CRACKED && found.premiumId() == null);
+    }
+
+    /** The owner's own account, premium again if it had turned cracked. */
+    private Account provedAgain(Account account, UUID mojangId) {
+        if (account.kind() != AccountKind.CRACKED) {
+            return account;
+        }
+        Account premium = new Account(
+                account.id(),
+                account.name(),
+                AccountKind.PREMIUM,
+                mojangId,
+                account.password(),
+                account.registeredAt(),
+                account.registrationAddress(),
+                account.lastLoginAt(),
+                account.lastAddress());
+        accounts.update(premium);
+        listeners.kindSwitched(premium.id(), premium.name(), AccountKind.PREMIUM);
+        return premium;
+    }
+
+    /**
+     * The owner of a cracked account proved the name: the account turns premium, under the scheme's id. An id
+     * another account holds already is not taken from it; the account keeps its own.
+     */
     private void turnPremium(Account holder, UUID mojangId, PlayerName name) {
         UUID id = scheme.idFor(name, Optional.of(mojangId), Optional.of(holder));
+        if (!id.equals(holder.id()) && accounts.findById(id).isPresent()) {
+            id = holder.id();
+        }
         if (!id.equals(holder.id())) {
             accounts.moveId(holder.id(), id);
         }
@@ -193,11 +236,30 @@ public final class LetPremiumIn {
     }
 
     private Account made(UUID mojangId, PlayerName name, String address) {
-        UUID id = scheme.idFor(name, Optional.of(mojangId), Optional.empty());
+        UUID id = freeId(name, mojangId);
         Account fresh =
                 new Account(id, name, AccountKind.PREMIUM, mojangId, null, clock.instant(), address, null, null);
         if (accounts.insert(fresh) instanceof AccountRepository.NameTaken) {
             throw new IllegalStateException("the name " + name.value() + " was taken while its paid owner joined");
+        }
+        return fresh;
+    }
+
+    /**
+     * The id a new premium account plays under: the scheme's, unless an account holds it already, as one that
+     * moved away from the name keeps the offline id of its old name. Then Mojang's, and past that one nobody holds.
+     */
+    private UUID freeId(PlayerName name, UUID mojangId) {
+        UUID wanted = scheme.idFor(name, Optional.of(mojangId), Optional.empty());
+        if (accounts.findById(wanted).isEmpty()) {
+            return wanted;
+        }
+        if (accounts.findById(mojangId).isEmpty()) {
+            return mojangId;
+        }
+        UUID fresh = UUID.randomUUID();
+        while (accounts.findById(fresh).isPresent()) {
+            fresh = UUID.randomUUID();
         }
         return fresh;
     }
