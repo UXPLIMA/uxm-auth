@@ -162,6 +162,7 @@ import com.uxplima.auth.paper.adapter.inbound.screen.ScreenClickListener;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRecovery;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenRouter;
 import com.uxplima.auth.paper.adapter.inbound.screen.ScreenShower;
+import com.uxplima.auth.paper.adapter.inbound.screen.UnansweredPresses;
 import com.uxplima.auth.paper.adapter.inbound.staff.AlertDelivery;
 import com.uxplima.auth.paper.adapter.inbound.staff.DatabaseDesk;
 import com.uxplima.auth.paper.adapter.inbound.staff.ForcedLogins;
@@ -541,7 +542,8 @@ final class AuthGraph implements AutoCloseable {
                 change,
                 captcha,
                 factors.screen,
-                new ScreenRecovery(recovering, sessions, screens, shower, messages));
+                new ScreenRecovery(recovering, sessions, screens, shower, messages),
+                new UnansweredPresses(shower, plugin.getLogger()));
         this.gate = new ConfigurationGate(
                 sessions,
                 screenFile::current,
