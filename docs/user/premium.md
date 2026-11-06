@@ -27,6 +27,12 @@ handshake fails because Mojang is down or the Mojang account is lost.
 | `strict` | Every name that exists at Mojang must pass the handshake. A cracked player can never hold a paid name. |
 | `domain` | The address a player joins through decides: `ownership.domains.premium` for paid accounts, `ownership.domains.cracked` for the rest. An address on neither list counts as cracked. A cracked name gets `cracked-mark` at `mark-at`. |
 
+Names are held once whatever their case. A client of a paid account always sends Mojang's spelling, so where the
+web is asked a new name in another spelling of a paid one (`notch` for `Notch`) is refused: nobody under it could
+pass the handshake, and its paid owner would be sent to that spelling forever. When an account here already holds
+a name in another case, a connection in Mojang's own spelling is asked for the handshake under every rule but
+`domain`, and once it passes the holder meets `ownership.conflict` like any other.
+
 `when-every-source-fails` says what a new name is taken for when no source could answer: `cracked` (marked
 unverified and asked again next time), `premium` or `refuse`. `failed-memory-seconds` remembers a connection that
 failed the handshake so it is told why. `claim-minutes` is how long a claim waits for the next connection from

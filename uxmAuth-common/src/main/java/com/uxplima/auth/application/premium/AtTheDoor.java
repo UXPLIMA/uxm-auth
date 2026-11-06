@@ -22,9 +22,11 @@ import com.uxplima.auth.domain.premium.Refusal;
  * A connection at the hello, before the server makes a profile for it: is it asked for the handshake?
  *
  * <p>The account is read first, and the web only where the operator's rule needs it. A name the door will
- * refuse anyway, for its spelling or for the case it was registered in, is never asked about: the name check
- * at the pre-login says why, and the web and Mojang's cap are not spent on it. This may wait on the database
- * and the network, so it never runs on a thread the server needs.
+ * refuse anyway for its spelling is never asked about: the name check at the pre-login says why, and the web and
+ * Mojang's cap are not spent on it. A name registered here in another case is asked about once it arrives in a
+ * spelling of its own, because that may be its paid owner in Mojang's spelling, whom the pre-login would
+ * otherwise send back to the holder's spelling forever. This may wait on the database and the network, so it
+ * never runs on a thread the server needs.
  */
 public final class AtTheDoor {
 
@@ -70,14 +72,12 @@ public final class AtTheDoor {
             return new Decision.Refuse(Refusal.NAME_DISPUTED);
         }
         Optional<Account> account = accounts.findByName(name);
-        if (account.isPresent() && !account.get().name().value().equals(raw)) {
-            return new Decision.Cracked(false, false);
-        }
+        boolean otherCase = account.isPresent() && !account.get().name().value().equals(raw);
         boolean claimed = claims.holds(address, name);
         boolean asked = claimed || ownerClaims.holds(address, name);
         Holder holder = holder(account);
         AtomicReference<PremiumAnswer> answered = new AtomicReference<>();
-        Arrival arrival = new Arrival(holder, asked, failed.holds(address, name), host);
+        Arrival arrival = new Arrival(raw, holder, otherCase, asked, failed.holds(address, name), host);
         Decision decision = ownership.get().decide(arrival, () -> {
             PremiumAnswer answer = lookup.lookup(name);
             answered.set(answer);
@@ -91,7 +91,11 @@ public final class AtTheDoor {
             // The failure is explained now, and the next connection is asked again rather than refused again.
             failed.forget(address, name);
         }
-        if (holder == Holder.CRACKED_UNVERIFIED && answered.get() instanceof PremiumAnswer.Cracked) {
+        if (holder == Holder.CRACKED_UNVERIFIED
+                && decision instanceof Decision.Cracked
+                && answered.get() != null
+                && !(answered.get() instanceof PremiumAnswer.Unknown)) {
+            // A source answered and the account goes on with its password: who owns the name is settled.
             account.ifPresent(found -> accounts.update(found.asVerified()));
         }
         return decision;

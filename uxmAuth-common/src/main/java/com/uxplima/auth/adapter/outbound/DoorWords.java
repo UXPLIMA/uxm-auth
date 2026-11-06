@@ -44,6 +44,7 @@ public final class DoorWords {
                 movedTo.map(to -> messages.render(
                                 nobody, Keys.KICK_PAID_NAME_MOVED, Text.placeholder("name", to.value())))
                         .orElseGet(() -> messages.render(nobody, Keys.KICK_PAID_NAME));
+            case PAID_SPELLING -> messages.render(nobody, Keys.KICK_PAID_SPELLING);
             case PREMIUM_ADDRESS -> messages.render(nobody, Keys.KICK_PREMIUM_ADDRESS);
             case NAME_DISPUTED -> messages.render(nobody, Keys.KICK_NAME_DISPUTED);
             case NAME_KEPT -> messages.render(nobody, Keys.KICK_NAME_KEPT);

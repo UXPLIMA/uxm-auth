@@ -143,6 +143,10 @@ public enum Keys implements MessageKey {
             "kick.paid-name-moved",
             "<body>This name now belongs to its paid owner. Your account here is now <value><name><body>:"
                     + " change your name to it and join again. Your password and everything you had are as they were."),
+    KICK_PAID_SPELLING(
+            "kick.paid-spelling",
+            "<body>This name belongs to a paid Minecraft account, written with other capital letters."
+                    + " If the account is yours, join from the official launcher. If it is not, join under another name."),
     KICK_PREMIUM_ADDRESS(
             "kick.premium-address",
             "<body>This address is for paid Minecraft accounts, and your last try did not pass Mojang's check."

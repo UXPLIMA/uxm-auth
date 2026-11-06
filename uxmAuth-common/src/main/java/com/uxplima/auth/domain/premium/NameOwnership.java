@@ -9,6 +9,11 @@ import java.util.function.Supplier;
  * <p>The web is asked only where the rule needs it, through a supplier the decision calls at most once: a name
  * a cracked player took first is not asked about under the automatic rule, and opt-in and the domain rule never
  * ask. A player who failed the handshake lately is never asked for it again until the memory of it ends.
+ *
+ * <p>Mojang's spelling of a paid name is the only one its owner's client ever sends. A name held here in another
+ * spelling is therefore asked about when it arrives in Mojang's, so the paid owner can still prove it, and a new
+ * name that differs from Mojang's spelling is not taken at all where the web was asked, because nobody under it
+ * could ever pass the handshake.
  */
 public final class NameOwnership {
 
@@ -52,6 +57,9 @@ public final class NameOwnership {
             // and a failure there is told of the other address.
             return throughThePremiumAddress(arrival) ? domain(arrival) : new Decision.Cracked(false, false, true);
         }
+        if (arrival.otherCase()) {
+            return otherCase(arrival, lookup);
+        }
         if (arrival.holder() == Holder.PREMIUM_WITH_PASSWORD && passwordFallback) {
             // Its password is the way in while Mojang cannot confirm the player, and the player is told why.
             return arrival.failedBefore() ? new Decision.Cracked(false, true) : new Decision.Handshake();
@@ -73,8 +81,19 @@ public final class NameOwnership {
         return switch (arrival.holder()) {
             case CRACKED -> asked(arrival);
             case NOBODY, CRACKED_UNVERIFIED, PREMIUM, PREMIUM_WITH_PASSWORD, BEDROCK ->
-                arrival.failedBefore() ? new Decision.Cracked(false, true) : fromTheWeb(lookup.get());
+                arrival.failedBefore() ? afterFailure(arrival, lookup) : fromTheWeb(lookup.get(), arrival);
         };
+    }
+
+    /**
+     * Under the automatic rule a player who failed lately joins with a password, but a new name in a spelling the
+     * paid owner never sends is still not taken: the failure may have been under Mojang's spelling.
+     */
+    private Decision afterFailure(Arrival arrival, Supplier<PremiumAnswer> lookup) {
+        if (arrival.holder() == Holder.NOBODY && misspelled(lookup.get(), arrival)) {
+            return new Decision.Refuse(Refusal.PAID_SPELLING);
+        }
+        return new Decision.Cracked(false, true);
     }
 
     private static Decision optIn(Arrival arrival) {
@@ -85,7 +104,7 @@ public final class NameOwnership {
     }
 
     private Decision strict(Arrival arrival, Supplier<PremiumAnswer> lookup) {
-        Decision web = fromTheWeb(lookup.get());
+        Decision web = fromTheWeb(lookup.get(), arrival);
         if (web instanceof Decision.Handshake && arrival.failedBefore()) {
             return new Decision.Refuse(Refusal.PAID_NAME);
         }
@@ -110,7 +129,42 @@ public final class NameOwnership {
         return new Decision.Cracked(false, arrival.failedBefore());
     }
 
-    private Decision fromTheWeb(PremiumAnswer answer) {
+    /**
+     * An account holds the name in another spelling. Only the paid owner stands on a name in a spelling of their
+     * own, and only in Mojang's: then the handshake decides, and once it passes the holder meets the operator's
+     * conflict strategy. Any other spelling goes on to the pre-login, which says how the name is registered.
+     */
+    private static Decision otherCase(Arrival arrival, Supplier<PremiumAnswer> lookup) {
+        if (arrival.failedBefore()) {
+            return new Decision.Cracked(false, true);
+        }
+        return lookup.get() instanceof PremiumAnswer.Premium paid
+                        && paid.exactName().equals(arrival.typed())
+                ? new Decision.Handshake()
+                : new Decision.Cracked(false, false);
+    }
+
+    /** Whether Mojang names a paid account under this name, spelled otherwise than the connection typed it. */
+    private static boolean misspelled(PremiumAnswer answer, Arrival arrival) {
+        return answer instanceof PremiumAnswer.Premium paid && !paid.exactName().equals(arrival.typed());
+    }
+
+    /**
+     * A paid name in another spelling cannot be proved under the typed one. A new name is refused; a cracked
+     * account that already holds it goes on with its password, now that the web has said who owns the name,
+     * except under the strict rule, where a cracked player holds no paid name in any spelling.
+     */
+    private Decision misspelledName(Arrival arrival) {
+        if (rule == NameRule.STRICT || arrival.holder() == Holder.NOBODY) {
+            return new Decision.Refuse(Refusal.PAID_SPELLING);
+        }
+        return new Decision.Cracked(false, false);
+    }
+
+    private Decision fromTheWeb(PremiumAnswer answer, Arrival arrival) {
+        if (misspelled(answer, arrival)) {
+            return misspelledName(arrival);
+        }
         return switch (answer) {
             case PremiumAnswer.Premium premium -> new Decision.Handshake();
             case PremiumAnswer.Cracked cracked -> new Decision.Cracked(false, false);
