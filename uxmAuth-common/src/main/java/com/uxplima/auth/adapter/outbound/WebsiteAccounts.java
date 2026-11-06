@@ -200,6 +200,12 @@ public final class WebsiteAccounts implements AccountRepository {
         }
     }
 
+    /** The website's row holds no such flag, so only the plugin's table changes. */
+    @Override
+    public void markVerified(UUID id) {
+        accounts.markVerified(id);
+    }
+
     @Override
     public void recordLogin(UUID id, Instant at, String address) {
         accounts.recordLogin(id, at, address);

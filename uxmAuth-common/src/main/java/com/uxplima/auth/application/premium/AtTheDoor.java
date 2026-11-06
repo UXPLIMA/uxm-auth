@@ -92,7 +92,7 @@ public final class AtTheDoor {
             failed.forget(address, name);
         }
         if (holder == Holder.CRACKED_UNVERIFIED && answered.get() instanceof PremiumAnswer.Cracked) {
-            account.ifPresent(found -> accounts.update(found.asVerified()));
+            account.ifPresent(found -> accounts.markVerified(found.id()));
         }
         return decision;
     }
@@ -123,7 +123,7 @@ public final class AtTheDoor {
      */
     public void failed(String address, PlayerName name) {
         failed.remember(address, name);
-        accounts.findByName(name).filter(Account::unverified).ifPresent(found -> accounts.update(found.asVerified()));
+        accounts.findByName(name).filter(Account::unverified).ifPresent(found -> accounts.markVerified(found.id()));
     }
 
     /** A connection from this address under this name passed the handshake. */
