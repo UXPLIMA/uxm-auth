@@ -236,56 +236,85 @@ public final class LimboLogin {
     }
 
     /**
+     * A wait opened in the world: the generation of its opening, which every later line of the same visit names,
+     * and what the player reads first.
+     */
+    public record Opened(long opening, List<Component> said) {
+        public Opened {
+            said = List.copyOf(Objects.requireNonNull(said, "said"));
+        }
+    }
+
+    /**
      * The player arrived in the waiting world: their wait opens under the door's flags, and the answer is what to
      * type, after why their last try failed when the door says they should read it.
      */
-    public List<Component> arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door) {
+    public Opened arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door) {
         return arrive(reader, id, name, door, "");
     }
 
     /** The same, through the host the player typed, which a wrong password is counted with. */
-    public List<Component> arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door, String host) {
+    public Opened arrive(Audience reader, UUID id, PlayerName name, Claim.Waiting door, String host) {
         return arrive(reader, id, name, door, host, Optional.empty());
     }
 
     /**
      * The same, for a player the door let past the password by this way, who owes only the app's code: the wait
-     * opens on the code.
+     * opens on the code, when the account the name holds is the one the door let past, under this id.
      */
-    public List<Component> arrive(
+    public Opened arrive(
             Audience reader, UUID id, PlayerName name, Claim.Waiting door, String host, Optional<AuthMethod> passed) {
         Objects.requireNonNull(reader, "reader");
+        Objects.requireNonNull(id, "id");
         Objects.requireNonNull(passed, "passed");
-        sessions.close(Objects.requireNonNull(id, "id"));
         Objects.requireNonNull(door, "door");
         AuthState state = names.waiting(Objects.requireNonNull(name, "name"));
         if (door.unverified() && state instanceof AuthState.Unregistered unregistered) {
             state = new AuthState.Unregistered(unregistered.name(), true);
         }
-        if (passed.isPresent() && state instanceof AuthState.Registered registered) {
+        if (passed.isPresent()
+                && state instanceof AuthState.Registered registered
+                && registered.account().id().equals(id)) {
             AuthState owed = secondStep.awaiting(registered.account(), passed.get());
             state = owed instanceof AuthState.SecondFactor ? owed : state;
         }
-        sessions.open(id, state, UUID.randomUUID().toString(), Objects.requireNonNull(host, "host"));
+        long opening = sessions.open(id, state, UUID.randomUUID().toString(), Objects.requireNonNull(host, "host"));
         Component reminder = reminder(reader, id);
-        return door.explain()
-                ? List.of(messages.render(reader, Keys.LOGIN_HANDSHAKE_FAILED), reminder)
-                : List.of(reminder);
+        return new Opened(
+                opening,
+                door.explain()
+                        ? List.of(messages.render(reader, Keys.LOGIN_HANDSHAKE_FAILED), reminder)
+                        : List.of(reminder));
     }
 
-    /** What a line the player typed comes to. It may wait on the hashing lane and the database. */
-    public CompletableFuture<Outcome> say(Audience reader, UUID id, PlayerName name, String line, String address) {
+    /**
+     * What a line the player typed in the wait of this opening comes to. It may wait on the hashing lane and the
+     * database. A login of a later opening under the same id never lets this one in.
+     */
+    public CompletableFuture<Outcome> say(
+            Audience reader, UUID id, long opening, PlayerName name, String line, String address) {
         Objects.requireNonNull(reader, "reader");
         Objects.requireNonNull(id, "id");
+        return heard(reader, id, opening, name, line, address)
+                .thenApply(outcome -> outcome instanceof Outcome.In && !sessions.isOpen(id, opening)
+                        ? new Outcome.Stay(reminder(reader, id))
+                        : outcome);
+    }
+
+    private CompletableFuture<Outcome> heard(
+            Audience reader, UUID id, long opening, PlayerName name, String line, String address) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(line, "line");
         Objects.requireNonNull(address, "address");
+        if (!sessions.isOpen(id, opening)) {
+            return CompletableFuture.completedFuture(new Outcome.Stay(reminder(reader, id)));
+        }
         List<String> typed =
                 line.startsWith("/") ? Arrays.asList(line.substring(1).strip().split("\\s+")) : List.of();
         String label = typed.isEmpty() ? "" : typed.getFirst().toLowerCase(Locale.ROOT);
         List<String> rest = typed.isEmpty() ? List.of() : typed.subList(1, typed.size());
         if (words.loginLabels().get().contains(label) && rest.size() == 1) {
-            return logIn.run(id, Password.of(rest.getFirst()), address)
+            return logIn.run(id, opening, Password.of(rest.getFirst()), address)
                     .thenApply(result -> loggedIn(reader, id, result));
         }
         if (words.registerLabels().get().contains(label) && !rest.isEmpty()) {
@@ -356,10 +385,11 @@ public final class LimboLogin {
         return messages.render(Objects.requireNonNull(reader, "reader"), Keys.STAFF_LET_IN);
     }
 
-    /** The player left the waiting world. */
-    public void leave(UUID id) {
-        sessions.close(Objects.requireNonNull(id, "id"));
-        captchas.forget(id);
+    /** The player of this opening left the waiting world; a later opening under the same id stays as it is. */
+    public void leave(UUID id, long opening) {
+        if (sessions.close(Objects.requireNonNull(id, "id"), opening)) {
+            captchas.forget(id);
+        }
     }
 
     /** The answer to the latest captcha: the right code frees the way, any other draws a new one. */
@@ -418,7 +448,9 @@ public final class LimboLogin {
     private Outcome loggedIn(Audience reader, UUID id, LoginResult result) {
         return switch (result) {
             case LoginResult.LoggedIn in -> new Outcome.In(AuthMethod.PASSWORD);
-            case LoginResult.AlreadyLoggedIn already -> new Outcome.In(AuthMethod.PASSWORD);
+            // Never a way out: whatever logged this opening in lets the player out itself, and a login this line
+            // did not make is not this line's to answer with.
+            case LoginResult.AlreadyLoggedIn already -> new Outcome.Stay(messages.render(reader, Keys.LOGIN_ALREADY));
             case LoginResult.Wrong wrong ->
                 new Outcome.Stay(messages.render(
                         reader, Keys.LOGIN_WRONG, Text.placeholder("left", String.valueOf(wrong.attemptsLeft()))));

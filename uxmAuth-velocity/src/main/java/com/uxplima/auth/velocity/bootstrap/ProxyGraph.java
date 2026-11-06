@@ -79,6 +79,7 @@ import com.uxplima.auth.velocity.adapter.inbound.ProxySessions;
 import com.uxplima.auth.velocity.adapter.inbound.RemovedAccounts;
 import com.uxplima.auth.velocity.adapter.inbound.ReportListener;
 import com.uxplima.auth.velocity.adapter.inbound.RouteListener;
+import com.uxplima.auth.velocity.adapter.inbound.Waiters;
 import com.uxplima.auth.velocity.adapter.outbound.ProxyCommands;
 import com.uxplima.auth.velocity.adapter.outbound.ProxySecret;
 import com.uxplima.auth.velocity.adapter.outbound.event.VelocityEvents;
@@ -108,6 +109,8 @@ final class ProxyGraph implements AutoCloseable {
     /** What the door makes of a player when LimboAPI asks, before the proxy's login events; set once it listens. */
     private BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> settleEarly =
             (player, taken) -> new DoorListener.Early.Free();
+    /** What the door lets go of a player who left the waiting world without being let out; set once it listens. */
+    private Consumer<Player> leftTheWorld = player -> {};
 
     private NetworkEvents events = new LocalEvents();
     private @Nullable CountryBook countries;
@@ -196,6 +199,7 @@ final class ProxyGraph implements AutoCloseable {
                 words,
                 sessions,
                 settleEarly,
+                leftTheWorld,
                 guards(settings, accounts, remember, failures, clock, remembered, Codes.of(factors, secondStep, mail)));
         logger.info(PremiumStartLine.of(settings.current().ownership().rule(), "the proxy"));
     }
@@ -355,8 +359,10 @@ final class ProxyGraph implements AutoCloseable {
                 new DoorWords(words),
                 logger,
                 steps.secondStep(),
-                proxy::getPlayer);
+                proxy::getPlayer,
+                new Waiters(clock, () -> longestWait(settings.current().timeouts())));
         this.settleEarly = doorListener::settleEarly;
+        this.leftTheWorld = doorListener::leftTheWorld;
         register(doorListener);
         register(new HoldListener(
                 sessions,

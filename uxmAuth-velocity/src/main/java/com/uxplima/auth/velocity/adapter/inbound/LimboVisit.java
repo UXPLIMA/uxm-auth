@@ -65,6 +65,9 @@ public final class LimboVisit {
 
     private static final Claim.Waiting NOTHING = new Claim.Waiting(false, false, false);
 
+    /** No generation: the sessions count theirs from one. */
+    private static final long NO_OPENING = 0;
+
     private final LimboLogin login;
     private final ProxySessions sessions;
     private final Remember remember;
@@ -75,8 +78,17 @@ public final class LimboVisit {
     private final Audience reader;
     private final Exit exit;
     private final Reach reach;
+    private final Runnable freed;
     private final AtomicBoolean over = new AtomicBoolean();
+    private final AtomicBoolean released = new AtomicBoolean();
 
+    /** The generation the wait opened under; none before the player arrives. */
+    private volatile long opening = NO_OPENING;
+
+    /**
+     * @param freed lets go what the proxy holds for the connection, when the visit ends without letting the player
+     *     out: a player let out keeps it until the proxy knows them
+     */
     public LimboVisit(
             LimboLogin login,
             ProxySessions sessions,
@@ -87,7 +99,9 @@ public final class LimboVisit {
             String host,
             Audience reader,
             Exit exit,
-            Reach reach) {
+            Reach reach,
+            Runnable freed) {
+        this.freed = Objects.requireNonNull(freed, "freed");
         this.login = Objects.requireNonNull(login, "login");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.remember = Objects.requireNonNull(remember, "remember");
@@ -102,10 +116,17 @@ public final class LimboVisit {
 
     /** The player arrived in the waiting world. */
     public void arrive() {
+        LimboLogin.Opened opened =
+                login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING), host, sessions.passed(id));
+        opening = opened.opening();
         reach.arrived(id, this);
-        login.arrive(reader, id, name, sessions.door(id).orElse(NOTHING), host, sessions.passed(id))
-                .forEach(exit::tell);
+        opened.said().forEach(exit::tell);
         login.standing(reader, id).ifPresent(this::answer);
+    }
+
+    /** Whether the visit is over: the player was let out, sent away, or left. */
+    boolean over() {
+        return over.get();
     }
 
     /** Tell the player again what to type. */
@@ -123,14 +144,18 @@ public final class LimboVisit {
     /** The player said this line; the answer comes once the use case has. */
     public CompletableFuture<Void> said(String line) {
         Objects.requireNonNull(line, "line");
-        return login.say(reader, id, name, line, address).thenAccept(this::answer);
+        long mine = opening;
+        if (mine == NO_OPENING) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return login.say(reader, id, mine, name, line, address).thenAccept(this::answer);
     }
 
     /** The time to log in ran out: a player still waiting is sent away. */
     public void timeUp(Component reason) {
         Objects.requireNonNull(reason, "reason");
         if (over.compareAndSet(false, true)) {
-            login.leave(id);
+            login.leave(id, opening);
             exit.sendAway(reason);
         }
     }
@@ -138,8 +163,11 @@ public final class LimboVisit {
     /** The player left the waiting world, however they left it. */
     public void left() {
         over.set(true);
-        login.leave(id);
+        login.leave(id, opening);
         reach.left(id, this);
+        if (!released.get()) {
+            freed.run();
+        }
     }
 
     /** Staff let the player in: they leave the world logged in, as forced. */
@@ -164,15 +192,16 @@ public final class LimboVisit {
             }
             case LimboLogin.Outcome.In in -> {
                 if (over.compareAndSet(false, true)) {
+                    released.set(true);
                     sessions.loggedIn(id, in.method());
                     remember.loggedIn(id, address, host);
-                    login.leave(id);
+                    login.leave(id, opening);
                     exit.release();
                 }
             }
             case LimboLogin.Outcome.Out out -> {
                 if (over.compareAndSet(false, true)) {
-                    login.leave(id);
+                    login.leave(id, opening);
                     exit.sendAway(out.reason());
                 }
             }

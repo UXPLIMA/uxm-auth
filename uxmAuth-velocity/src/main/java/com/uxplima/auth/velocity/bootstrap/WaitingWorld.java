@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -89,6 +90,7 @@ final class WaitingWorld implements AutoCloseable {
      * Hold every player who waits for the proxy's password in the world, when the settings ask for it.
      *
      * @param door what the door makes of a player when LimboAPI asks, before the proxy's login events
+     * @param leftTheWorld what the door lets go of a player who left the world without being let out
      * @throws NoWaitingWorld when the settings ask for the world and the proxy cannot build it
      */
     void open(
@@ -97,6 +99,7 @@ final class WaitingWorld implements AutoCloseable {
             Messages words,
             ProxySessions network,
             BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> door,
+            Consumer<Player> leftTheWorld,
             Guards guards) {
         if (settings.current().network().waitIn() != AuthSettings.WaitIn.LIMBO) {
             return;
@@ -116,7 +119,7 @@ final class WaitingWorld implements AutoCloseable {
                     null);
         }
         try {
-            hold(kit.get(), limboApi.get(), settings, accounts, words, network, door, guards);
+            hold(kit.get(), limboApi.get(), settings, accounts, words, network, door, leftTheWorld, guards);
         } catch (RuntimeException | LinkageError foreign) {
             close();
             throw new NoWaitingWorld("LimboAPI could not build the waiting world: " + foreign, foreign);
@@ -131,6 +134,7 @@ final class WaitingWorld implements AutoCloseable {
             Messages words,
             ProxySessions network,
             BiFunction<Player, Predicate<GameProfile>, DoorListener.Early> door,
+            Consumer<Player> leftTheWorld,
             Guards guards) {
         LimboLogin.Words labels = labels(folder.resolve(COMMANDS));
         LimboLogin passwords = passwords(settings, accounts, words, labels, guards);
@@ -139,7 +143,15 @@ final class WaitingWorld implements AutoCloseable {
         LimboWait wait = new LimboWait(
                 kit.open(limboApi, folder, settings.current().network(), metas(labels), logger),
                 player -> waiter(door.apply(player, this::taken), player, words),
-                (player, waiter, exit) -> visit(passwords, network, guards.remember(), player, waiter, exit, reach),
+                (player, waiter, exit) -> visit(
+                        passwords,
+                        network,
+                        guards.remember(),
+                        player,
+                        waiter,
+                        exit,
+                        reach,
+                        () -> leftTheWorld.accept(player)),
                 () -> settings.current().timeouts(),
                 player -> words.render(player, Keys.KICK_TIMEOUT),
                 logger);
@@ -147,7 +159,7 @@ final class WaitingWorld implements AutoCloseable {
         logger.info("Players who must log in wait in the proxy's own world, built with LimboAPI.");
     }
 
-    /** Who a player waits as; a second connection under a name already online is turned away instead. */
+    /** Who a player waits as; a second connection under a name already online or waiting is turned away instead. */
     private static Optional<LimboWait.Waiter> waiter(DoorListener.Early early, Player player, Messages words) {
         return switch (early) {
             case DoorListener.Early.Waits waits ->
@@ -308,7 +320,8 @@ final class WaitingWorld implements AutoCloseable {
             Player player,
             LimboWait.Waiter waiter,
             LimboVisit.Exit exit,
-            LimboVisit.Reach reach) {
+            LimboVisit.Reach reach,
+            Runnable freed) {
         return new LimboVisit(
                 passwords,
                 network,
@@ -319,7 +332,8 @@ final class WaitingWorld implements AutoCloseable {
                 player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(""),
                 player,
                 exit,
-                reach);
+                reach,
+                freed);
     }
 
     /** Each command the waiting world answers, in every word commands.conf gives it. */
