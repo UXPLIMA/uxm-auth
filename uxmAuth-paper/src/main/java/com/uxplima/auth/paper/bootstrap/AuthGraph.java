@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -235,6 +236,9 @@ final class AuthGraph implements AutoCloseable {
     private final JoinMessages joinMessages;
     private final Rescue rescue;
     private final DeopWatch deopWatch;
+    /** What the hold took from waiting players, given back to them all when the plugin stops. */
+    private final HoldKeeper keeper;
+
     final RecoverCommand recover;
     private final MailGraph mail;
     final CaptchaCommand captchaCommand;
@@ -268,6 +272,9 @@ final class AuthGraph implements AutoCloseable {
     private static final int DISCORD_QUEUE = 100;
 
     private final ChannelReports channelReports;
+    /** Whether the console was told that the network is on without this server's name. */
+    private final AtomicBoolean namelessWarned = new AtomicBoolean();
+
     /** The nonces of the proxy's claims this server took, kept across reloads so a copy is never taken twice. */
     private final Nonces seenClaims = new Nonces();
 
@@ -377,6 +384,7 @@ final class AuthGraph implements AutoCloseable {
                 Player::teleportAsync,
                 rescue::safe,
                 player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)));
+        this.keeper = keeper;
         this.deopWatch = new DeopWatch(keeper, name -> onlineId(plugin, name));
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
         WaitingBars bars = new WaitingBars(sessions);
@@ -512,7 +520,8 @@ final class AuthGraph implements AutoCloseable {
                 fired,
                 failures,
                 lockout);
-        RecoverPassword recovering = mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches);
+        RecoverPassword recovering =
+                mail.recoverPassword(sessions, accounts, hashing, remembered, events, breaches, lockout::passed);
         ScreenAnswers answers = new ScreenAnswers(
                 screens,
                 registering,
@@ -841,6 +850,7 @@ final class AuthGraph implements AutoCloseable {
 
     @Override
     public void close() {
+        keeper.releaseAll();
         historyTask.cancel();
         purgeTask.cancel();
         upkeepTask.cancel();
@@ -914,12 +924,27 @@ final class AuthGraph implements AutoCloseable {
         return online != null ? hold.isHeld(online) : dialogs.waitsAs(name);
     }
 
-    /** The reader of the proxy's claims while this server is on a network, read from the settings of the moment. */
+    /**
+     * The reader of the proxy's claims, while the network is on. A reload that turned it on without this server's
+     * name takes no claim and writes no report, as a start refuses to: players are asked their password, and the
+     * console says why once.
+     */
     private Optional<Claims> claims(PluginSettings settings) {
         AuthSettings.Network network = settings.current().network();
-        return network.enabled()
-                ? Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor(), seenClaims))
-                : Optional.empty();
+        if (!network.enabled()) {
+            return Optional.empty();
+        }
+        if (network.serverName().isBlank()) {
+            if (!namelessWarned.getAndSet(true)) {
+                plugin.getLogger()
+                        .severe("network.enabled is true and network.server-name is empty, so no claim of the proxy"
+                                + " is taken and every player is asked the password. Set it to this server's name"
+                                + " in the proxy's list and reload.");
+            }
+            return Optional.empty();
+        }
+        namelessWarned.set(false);
+        return Optional.of(new Claims(NetworkSecret.parse(network.secret()), network.claimFor(), seenClaims));
     }
 
     /**

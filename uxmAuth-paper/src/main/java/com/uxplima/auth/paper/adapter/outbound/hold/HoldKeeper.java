@@ -185,6 +185,32 @@ public final class HoldKeeper {
         restore(player, true);
     }
 
+    /**
+     * The plugin stops while players wait, as at a server stop, where the server disables plugins before it
+     * removes players and no quit reaches the hold. Each held player gets everything back now, operator status
+     * included, as at a quit, and the file goes in the same step: a file left behind would be read at the next
+     * join as a crash's, which never gives operator status back. A player this fails for keeps the file.
+     */
+    public void releaseAll() {
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            UUID id = player.getUniqueId();
+            if (!taken.containsKey(id)) {
+                continue;
+            }
+            HeldPlace place = taken.get(id).place();
+            try {
+                restore(player, true);
+                if (place != null) {
+                    store.savePlace(id, place);
+                }
+                store.delete(id);
+            } catch (RuntimeException | LinkageError failed) {
+                plugin.getLogger()
+                        .log(Level.WARNING, "Could not give " + player.getName() + " back what the hold kept", failed);
+            }
+        }
+    }
+
     /** Whether the hold took something from this player that it has not given back yet. */
     public boolean holds(Player player) {
         return taken.containsKey(Objects.requireNonNull(player, "player").getUniqueId());
@@ -209,6 +235,15 @@ public final class HoldKeeper {
             // Gone before the hold was set up. A leftover stays on disk for their next join.
             return;
         }
+        if (taken.containsKey(id)) {
+            // Held already, as a player whose sessions ended goes back to the password. The file on disk is this
+            // hold's own snapshot, not a crash's leftover: giving it back now would hand a player who is not
+            // logged in their things, their game mode and their place. What they hold now is not taken twice.
+            if (isHeld.test(player)) {
+                hideTheWaitingFrom(player);
+            }
+            return;
+        }
         leftover.ifPresent(state -> giveBackLeftover(player, state));
         hideTheWaitingFrom(player);
         if (!isHeld.test(player)) {
@@ -219,11 +254,6 @@ public final class HoldKeeper {
                     store.deletePlace(id);
                 });
             }
-            return;
-        }
-        if (taken.containsKey(id)) {
-            // Held already, as a player whose sessions ended goes back to the password: the state kept from
-            // before the hold is the one to give back, and what they hold now is not taken a second time.
             return;
         }
         // A player still on their way back from the login world stood where the leftover says, not here.
