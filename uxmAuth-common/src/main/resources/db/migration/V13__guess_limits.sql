@@ -27,3 +27,8 @@ CREATE TABLE IF NOT EXISTS uxmauth_mail_send (
     revision   BIGINT      NOT NULL,
     PRIMARY KEY (account_id, purpose)
 );
+
+-- The host a remembered session's login came through, as the door reads it: the name without a port, in lower
+-- case. Only a join from the same address through the same host resumes the session. A session kept before this
+-- column holds no host and is resumed by no join, so its player types the password once more.
+ALTER TABLE uxmauth_session ADD COLUMN host VARCHAR(255) DEFAULT '' NOT NULL;

@@ -7,8 +7,10 @@ applies it unless the block says otherwise.
 
 `sessions.mode` is `off` (every join asks the password), `everyone` (every login is remembered) or `chosen`
 (only a player who ticked the box, used the Bedrock toggle or typed `/session on`). A player back from the same
-address within `sessions.minutes` skips the password. A password change, `/logout`, `/session off` and a new
-address end the session. `sessions.skip-second-factor` decides whether a session also skips the app code.
+address, through the same host they typed, within `sessions.minutes` skips the password. The host narrows who
+may resume where players share an address, as a mobile network's do, but a player can type any host, so it
+proves nothing alone. Through a shared-address filter nobody is remembered. A password change, `/logout`,
+`/session off` and a new address end the session. `sessions.skip-second-factor` decides whether a session also skips the app code.
 
 ## Address bans
 

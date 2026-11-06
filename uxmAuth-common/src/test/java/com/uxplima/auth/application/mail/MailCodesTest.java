@@ -222,10 +222,10 @@ class MailCodesTest {
     /** No remembered sessions at all. */
     private static final class NoSessions implements RememberedSessions {
         @Override
-        public void remember(UUID account, String address, Instant until) {}
+        public void remember(UUID account, String address, String host, Instant until) {}
 
         @Override
-        public boolean holds(UUID account, String address, Instant now) {
+        public boolean holds(UUID account, String address, String host, Instant now) {
             return false;
         }
 
