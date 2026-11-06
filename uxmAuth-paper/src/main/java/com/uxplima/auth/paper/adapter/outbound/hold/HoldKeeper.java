@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -32,9 +33,12 @@ import org.jspecify.annotations.Nullable;
 /**
  * Takes from a waiting player what the hold hides, and gives it back.
  *
- * <p>What is taken is written to disk before it is taken, so a crash never keeps it: the next join reads the
- * file and gives it back first. The disk is touched on the async scheduler and the player only on their own
- * thread, so this is safe on Folia.
+ * <p>What is taken is read and taken in one task on the player's own thread, with their inventory window closed
+ * first, so no item moves between the two: an item in the crafting grid or on the cursor is back in the inventory
+ * when it is read, and nothing a client sends lands in between. The record of it is written to disk right after,
+ * so a crash never keeps it: the next join reads the file and gives it back first. A write that fails sends the
+ * player away, which gives everything back as they leave, rather than keeping them stripped with nothing on disk.
+ * The disk is touched on the async scheduler and the player only on their own thread, so this is safe on Folia.
  *
  * <p>The disk work of one player runs in one chain, in the order it was asked for. Two async tasks are
  * otherwise free to finish in any order, and a write that landed after the delete of a quick login would
@@ -56,6 +60,7 @@ public final class HoldKeeper {
     private final Map<UUID, HeldState> taken = new ConcurrentHashMap<>();
     private final Set<UUID> blinded = ConcurrentHashMap.newKeySet();
     private final Map<UUID, CompletableFuture<Void>> disk = new ConcurrentHashMap<>();
+    private final Consumer<Player> unwritten;
 
     public HoldKeeper(
             Plugin plugin,
@@ -108,6 +113,25 @@ public final class HoldKeeper {
             Passes passes,
             BiFunction<Player, Location, CompletableFuture<Boolean>> mover,
             UnaryOperator<Location> safe) {
+        this(plugin, scheduler, store, hold, isHeld, room, passes, mover, safe, Player::kick);
+    }
+
+    /**
+     * @param unwritten what happens, on their own thread, to a stripped player whose state could not be written
+     *     to disk: they are sent away, and their quit gives everything back
+     */
+    public HoldKeeper(
+            Plugin plugin,
+            Scheduler scheduler,
+            HeldStateStore store,
+            Supplier<AuthSettings.Hold> hold,
+            Predicate<Player> isHeld,
+            Supplier<Optional<Location>> room,
+            Passes passes,
+            BiFunction<Player, Location, CompletableFuture<Boolean>> mover,
+            UnaryOperator<Location> safe,
+            Consumer<Player> unwritten) {
+        this.unwritten = Objects.requireNonNull(unwritten, "unwritten");
         this.safe = Objects.requireNonNull(safe, "safe");
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
@@ -168,8 +192,11 @@ public final class HoldKeeper {
         }
         // A player still on their way back from the login world stood where the leftover says, not here.
         HeldPlace place = room.get().isEmpty() ? null : placeOf(player, leftover, left);
+        // The crafting grid and the cursor are no inventory slots; closing the window puts them back into it.
+        player.closeInventory();
         HeldState snapshot = capture(player, hold.get(), place);
         taken.put(id, snapshot);
+        strip(player);
         // A /logout holds a player whose client has every command; the hold's listener cuts the tree it sends.
         player.updateCommands();
         onDisk(id, () -> {
@@ -177,9 +204,22 @@ public final class HoldKeeper {
             if (taken.get(id) != snapshot) {
                 return;
             }
-            store.save(id, snapshot);
+            try {
+                store.save(id, snapshot);
+            } catch (RuntimeException unwritable) {
+                plugin.getLogger()
+                        .log(
+                                Level.WARNING,
+                                "The held state of " + id + " could not be written, so the player is sent away",
+                                unwritable);
+                scheduler.entity(player, () -> {
+                    if (player.isOnline() && taken.get(id) == snapshot) {
+                        unwritten.accept(player);
+                    }
+                });
+                return;
+            }
             store.deletePlace(id);
-            scheduler.entity(player, () -> strip(player));
         });
     }
 

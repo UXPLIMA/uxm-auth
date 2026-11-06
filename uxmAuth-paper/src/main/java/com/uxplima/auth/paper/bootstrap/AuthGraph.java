@@ -56,6 +56,7 @@ import com.uxplima.auth.application.account.SwitchToCracked;
 import com.uxplima.auth.application.factor.FactorStates;
 import com.uxplima.auth.application.lane.HashingLane;
 import com.uxplima.auth.application.mail.RecoverPassword;
+import com.uxplima.auth.application.message.Keys;
 import com.uxplima.auth.application.migrate.ChangeScheme;
 import com.uxplima.auth.application.migrate.MoveDatabase;
 import com.uxplima.auth.application.perf.TimedAccounts;
@@ -333,7 +334,8 @@ final class AuthGraph implements AutoCloseable {
                 () -> loginWorld.room().or(loginSpot::where),
                 passes,
                 Player::teleportAsync,
-                rescue::safe);
+                rescue::safe,
+                player -> player.kick(messages.render(player, Keys.KICK_HOLD_UNSAVED)));
         WaitingTimes times = new WaitingTimes(sessions, () -> settings.current().timeouts(), clock);
         WaitingBars bars = new WaitingBars(sessions);
         MomentRunner moments = WaitingBars.endWithTheWait(
