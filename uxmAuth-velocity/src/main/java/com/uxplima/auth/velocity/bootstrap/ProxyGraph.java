@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -310,7 +311,18 @@ final class ProxyGraph implements AutoCloseable {
                         () -> settings.current().passwords().maxAttempts()),
                 () -> settings.current().ownership().crackedMark(),
                 scheme,
-                clock);
+                clock,
+                () -> longestWait(settings.current().timeouts()));
+    }
+
+    /**
+     * How long a connection's door decision is kept: the login comes after the wait in the proxy's world, which
+     * lasts at most the longer of the times to log in and to register, and a minute more for the rest of the login.
+     */
+    private static Duration longestWait(AuthSettings.Timeouts timeouts) {
+        Duration longest =
+                timeouts.login().compareTo(timeouts.register()) >= 0 ? timeouts.login() : timeouts.register();
+        return longest.plus(Duration.ofMinutes(1));
     }
 
     /**

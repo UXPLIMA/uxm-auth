@@ -32,8 +32,9 @@ import org.jspecify.annotations.Nullable;
  * handshake, so a connection the door asks is put in online mode and one it lets through stays offline.
  *
  * <p>What the door decided is kept per connection, by its address, from the pre-login to the login, and let go
- * when the connection leaves or after a minute. A connection put in online mode that never reaches its profile
- * failed the handshake, and the next one under the name from that address is told so.
+ * when the connection leaves or once it is older than the longest wait before a login. A connection put in online
+ * mode that never reaches its profile failed the handshake, and the next one under the name from that address
+ * within a minute is told so.
  */
 public final class ProxyDoor {
 
@@ -92,10 +93,14 @@ public final class ProxyDoor {
     /** What the door decided at the pre-login, kept until the profile. */
     private record Kept(Arrival arrival, @Nullable AuthState state, Instant at) {}
 
-    /** How long the proxy keeps what it decided for a connection that never logs in. */
+    /**
+     * How long the proxy keeps that it asked a connection for its key, and, by default, what it decided for a
+     * connection that never logs in.
+     */
     private static final Duration KEEP = Duration.ofMinutes(1);
 
     private final AtTheDoor door;
+    private final Supplier<Duration> keep;
     private final LetPremiumIn premium;
     private final Moves moves;
     private final ReadTheName names;
@@ -113,6 +118,23 @@ public final class ProxyDoor {
             Supplier<DomainMark> mark,
             UuidScheme scheme,
             Clock clock) {
+        this(door, premium, moves, names, mark, scheme, clock, () -> KEEP);
+    }
+
+    /**
+     * @param keep how long what the door decided is kept for a connection that has not logged in: at least as long
+     *     as a player may wait in the proxy's world before the login, which comes after the wait
+     */
+    public ProxyDoor(
+            AtTheDoor door,
+            LetPremiumIn premium,
+            Moves moves,
+            ReadTheName names,
+            Supplier<DomainMark> mark,
+            UuidScheme scheme,
+            Clock clock,
+            Supplier<Duration> keep) {
+        this.keep = Objects.requireNonNull(keep, "keep");
         this.door = Objects.requireNonNull(door, "door");
         this.premium = Objects.requireNonNull(premium, "premium");
         this.moves = Objects.requireNonNull(moves, "moves");
@@ -240,8 +262,10 @@ public final class ProxyDoor {
     }
 
     private void letGo() {
-        Instant before = clock.instant().minus(KEEP);
-        kept.values().removeIf(entry -> entry.at().isBefore(before));
+        Instant now = clock.instant();
+        Instant decided = now.minus(keep.get());
+        kept.values().removeIf(entry -> entry.at().isBefore(decided));
+        Instant before = now.minus(KEEP);
         asked.values().removeIf(at -> at.isBefore(before));
     }
 
