@@ -69,6 +69,9 @@ blysis {
   the website's own sign in.
 - **A member renamed on the website** keeps their account in game under the old name: an account is tied to the
   member's id, not to the username. The new username does not open a second account.
+- **An account moved to another name in game**, as when the paid owner of a name proves it and the cracked
+  account moves aside, keeps its member, whose username on the website stays as it was. A name another member
+  holds is refused for such a move, as for a registration.
 
 ## Accounts the plugin held before
 
