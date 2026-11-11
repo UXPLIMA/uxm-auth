@@ -22,6 +22,7 @@ import com.uxplima.auth.domain.hash.LegacyDigestHasher;
 import com.uxplima.auth.domain.hash.PasswordHasher;
 import com.uxplima.auth.domain.hash.Pbkdf2DjangoHasher;
 import com.uxplima.auth.domain.hash.Pbkdf2Hasher;
+import com.uxplima.auth.domain.hash.ScryptHasher;
 import com.uxplima.auth.domain.name.NamePolicy;
 import com.uxplima.auth.domain.password.CommonPasswords;
 import com.uxplima.auth.domain.password.PasswordPolicy;
@@ -126,6 +127,7 @@ public final class PluginSettings {
             PlaceholderSettings placeholders,
             DiscordSettings discord,
             WebsiteTable websiteTable,
+            BlysisSettings blysis,
             Importing importing,
             AuthSettings.PasswordLists passwordLists,
             CommonPasswords common) {
@@ -151,6 +153,13 @@ public final class PluginSettings {
             Objects.requireNonNull(placeholders, "placeholders");
             Objects.requireNonNull(discord, "discord");
             Objects.requireNonNull(websiteTable, "websiteTable");
+            Objects.requireNonNull(blysis, "blysis");
+            if (websiteTable.enabled() && blysis.enabled()) {
+                // Both would keep the password, each in its own table, and a change in one would not reach the other.
+                throw new IllegalArgumentException("website-table and blysis are both on, and a password lives in"
+                        + " one place: turn one of them off. Blysis keeps its members' passwords itself, so it needs"
+                        + " no website table.");
+            }
             Objects.requireNonNull(importing, "importing");
             Objects.requireNonNull(effects, "effects");
             Objects.requireNonNull(bedrock, "bedrock");
@@ -159,17 +168,19 @@ public final class PluginSettings {
             Objects.requireNonNull(network, "network");
             Objects.requireNonNull(passwordLists, "passwordLists");
             Objects.requireNonNull(common, "common");
-            if (writtenIn(hashing, websiteTable) == HashAlgorithm.BCRYPT
+            if (writtenIn(hashing, websiteTable, blysis) == HashAlgorithm.BCRYPT
                     && passwords.maxLength() > AuthSettings.BCRYPT_BYTES) {
                 throw new IllegalArgumentException("passwords.max-length is " + passwords.maxLength()
                         + ", and bcrypt reads only the first " + AuthSettings.BCRYPT_BYTES
                         + " bytes: lower it, or choose another "
-                        + (websiteTable.enabled() ? "website-table.hash" : "hashing.algorithm"));
+                        + (websiteTable.enabled()
+                                ? "website-table.hash"
+                                : blysis.enabled() ? "blysis.hash" : "hashing.algorithm"));
             }
             // Built once here, so a value the domain refuses is refused when the file is read.
             namePolicyOf(names);
-            passwordPolicyOf(passwords, writtenIn(hashing, websiteTable), common);
-            hashersOf(hashing, websiteTable);
+            passwordPolicyOf(passwords, writtenIn(hashing, websiteTable, blysis), common);
+            hashersOf(hashing, websiteTable, blysis);
         }
 
         /** The language every message falls back to. */
@@ -183,20 +194,24 @@ public final class PluginSettings {
 
         /** The password rules. Under bcrypt they also refuse a password past its 72 bytes. */
         public PasswordPolicy passwordPolicy() {
-            return passwordPolicyOf(passwords, writtenIn(hashing, websiteTable), common);
+            return passwordPolicyOf(passwords, writtenIn(hashing, websiteTable, blysis), common);
         }
 
         /**
-         * The current algorithm for new hashes, and every one for reading old ones. While the website table is on, its
-         * format is the current one.
+         * The current algorithm for new hashes, and every one for reading old ones. While the website table or Blysis
+         * is on, the format the website reads is the current one.
          */
         public Hashing hashers() {
-            return hashersOf(hashing, websiteTable);
+            return hashersOf(hashing, websiteTable, blysis);
         }
 
-        /** The algorithm new passwords are written in: the website's while its table is on. */
-        private static HashAlgorithm writtenIn(AuthSettings.HashSettings hashing, WebsiteTable website) {
-            return website.enabled() ? website.hash().hasher().algorithm() : hashing.algorithm();
+        /** The algorithm new passwords are written in: the website's while its table or Blysis is on. */
+        private static HashAlgorithm writtenIn(
+                AuthSettings.HashSettings hashing, WebsiteTable website, BlysisSettings blysis) {
+            if (website.enabled()) {
+                return website.hash().hasher().algorithm();
+            }
+            return blysis.enabled() ? blysis.hash().hasher(hashing.bcryptCost()).algorithm() : hashing.algorithm();
         }
 
         private static NamePolicy namePolicyOf(AuthSettings.Names names) {
@@ -217,7 +232,8 @@ public final class PluginSettings {
                     passwords.screenLogins());
         }
 
-        private static Hashing hashersOf(AuthSettings.HashSettings hashing, WebsiteTable website) {
+        private static Hashing hashersOf(
+                AuthSettings.HashSettings hashing, WebsiteTable website, BlysisSettings blysis) {
             List<PasswordHasher> all = List.of(
                     new Argon2idHasher(
                             hashing.argon2MemoryKib(), hashing.argon2Iterations(), hashing.argon2Parallelism()),
@@ -227,9 +243,13 @@ public final class PluginSettings {
                     WebsiteTable.Hash.PBKDF2.hasher(),
                     WebsiteTable.Hash.ARGON2.hasher(),
                     new LegacyDigestHasher(),
-                    new Pbkdf2DjangoHasher());
+                    new Pbkdf2DjangoHasher(),
+                    new ScryptHasher());
             if (website.enabled()) {
                 return new Hashing(website.hash().hasher(), all);
+            }
+            if (blysis.enabled()) {
+                return new Hashing(blysis.hash().hasher(hashing.bcryptCost()), all);
             }
             PasswordHasher current = all.stream()
                     .filter(hasher -> hasher.algorithm() == hashing.algorithm())
@@ -369,6 +389,7 @@ public final class PluginSettings {
                 PlaceholderSettings.read(config),
                 DiscordSettings.read(config),
                 WebsiteTable.read(config),
+                BlysisSettings.read(config),
                 importing(config),
                 lists,
                 common(lists));

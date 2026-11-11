@@ -435,6 +435,8 @@ public final class ScreenAnswers {
             case LoginResult.CaptchaNeeded needed ->
                 captcha.offer(reader, guest.id(), messages.render(reader, Keys.CAPTCHA_NEEDED));
             case LoginResult.CodeNeeded needed -> factor.offer(reader, null);
+            case LoginResult.Closed closed ->
+                shower.show(reader, screens.login(reader, messages.render(reader, Keys.LOGIN_CLOSED)));
             case LoginResult.NotRegistered notRegistered -> shower.show(reader, screens.register(reader, null));
             case LoginResult.AlreadyLoggedIn already -> shower.close(reader);
             case LoginResult.Refused refused ->

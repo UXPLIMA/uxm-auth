@@ -106,6 +106,19 @@ class LogInTest {
     }
 
     @Test
+    void anAccountTheWebsiteClosedIsRefusedOnlyForTheRightPassword() {
+        Account steve = register(hashing.hash(Password.of("hunter22")));
+        accounts.closed.add(steve.id());
+        waitForLogin(steve, 3);
+        LogIn logIn = logIn();
+
+        assertThat(logIn(logIn, "nope")).isEqualTo(new LoginResult.Wrong(2));
+        assertThat(logIn(logIn, "hunter22")).isEqualTo(new LoginResult.Closed());
+        assertThat(sessions.state(connection)).containsInstanceOf(AuthState.Registered.class);
+        assertThat(accounts.lastLogin).doesNotContainKey(steve.id());
+    }
+
+    @Test
     void anImportedHashIsReplacedWithTheCurrentAlgorithmOnLogin() {
         Account steve = register(AUTHME_HUNTER22);
         waitForLogin(steve, 3);
@@ -228,6 +241,7 @@ class LogInTest {
 
         private final Map<UUID, Account> byId = new HashMap<>();
         private final Map<UUID, Instant> lastLogin = new HashMap<>();
+        private final Set<UUID> closed = new java.util.HashSet<>();
 
         @Override
         public Optional<Account> findByName(PlayerName name) {
@@ -310,5 +324,10 @@ class LogInTest {
 
         @Override
         public void moveId(UUID from, UUID to) {}
+
+        @Override
+        public boolean closed(UUID id) {
+            return closed.contains(id);
+        }
     }
 }

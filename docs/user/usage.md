@@ -36,7 +36,7 @@ wrote. The previous file is kept as `config.conf.bak`. A copy of each shipped me
 changed stays.
 
 Settings that apply only at the next start are marked in `config.conf`: the `hashing` block, `lane.threads`
-and `lane.max-threads`, `mail.threads`, `website-table`, and `commands.conf`.
+and `lane.max-threads`, `mail.threads`, `website-table`, `blysis`, and `commands.conf`.
 
 ## Where a waiting player stands
 

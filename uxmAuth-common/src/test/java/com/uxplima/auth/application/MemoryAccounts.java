@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,6 +18,12 @@ import org.jspecify.annotations.Nullable;
 public final class MemoryAccounts implements AccountRepository {
 
     private final Map<UUID, Account> byId = new ConcurrentHashMap<>();
+    private final Set<UUID> closed = ConcurrentHashMap.newKeySet();
+
+    /** The website that keeps the account's password bans it. */
+    public void close(UUID id) {
+        closed.add(id);
+    }
 
     @Override
     public Optional<Account> findByName(PlayerName name) {
@@ -99,4 +106,9 @@ public final class MemoryAccounts implements AccountRepository {
 
     @Override
     public void moveId(UUID from, UUID to) {}
+
+    @Override
+    public boolean closed(UUID id) {
+        return closed.contains(id);
+    }
 }

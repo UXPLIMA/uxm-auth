@@ -190,4 +190,9 @@ public final class MemoryAccounts implements AccountRepository {
         @Override
         public void keep(PlayerName name, UUID holder) {}
     }
+
+    @Override
+    public boolean closed(UUID id) {
+        return false;
+    }
 }

@@ -46,7 +46,9 @@ packages. `domain` and `application` import no Adventure, slf4j, Configurate or 
 Accounts live behind uxmLib's storage module: SQLite by default, MySQL, MariaDB, PostgreSQL or H2 by URL.
 Migrations are the `db/migration/V<n>__<name>.sql` resources of `common`, applied in order at start. The UUID
 scheme is written to the database at the first start and a later start under another scheme is refused. The
-website table is a second table in the same database, written beside the plugin's own row. Wrong-password
+website table is a second table in the same database, written beside the plugin's own row. A Blysis website's
+members are read and written in the Blysis database through a pool of its own (`BlysisAccounts`), and only the
+link from an account to its member's id stays here. Wrong-password
 bans, sessions and the login history are kept in the same database, so every server of a network sees them.
 
 ## Configuration

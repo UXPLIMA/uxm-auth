@@ -56,4 +56,22 @@ class SqlRememberedSessionsTest {
             assertThat(remember.resumes(account, FILTER, "play.example.com")).isFalse();
         }
     }
+
+    @ParameterizedTest
+    @MethodSource("databases")
+    void anAccountTheWebsiteClosedResumesNoSession(String url) {
+        try (Database database = AuthDatabase.open(new PluginSettings.Storage(url, "", "", 2), "sessions-test")) {
+            UUID account = UUID.randomUUID();
+            Remember remember = new Remember(
+                    new SqlRememberedSessions(database),
+                    () -> new Remember.Settings(Remember.Mode.EVERYONE, Duration.ofHours(1)),
+                    () -> new SharedAddresses(new HostPatterns(List.of()), new AddressRanges(List.of())),
+                    () -> Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                    account::equals);
+
+            remember.loggedIn(account, HOME, "play.example.com");
+
+            assertThat(remember.resumes(account, HOME, "play.example.com")).isFalse();
+        }
+    }
 }

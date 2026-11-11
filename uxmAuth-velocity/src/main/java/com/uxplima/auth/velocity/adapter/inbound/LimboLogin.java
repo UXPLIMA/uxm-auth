@@ -474,6 +474,7 @@ public final class LimboLogin {
                         .orElseGet(() -> reminder(reader, id)));
             case LoginResult.CaptchaNeeded needed -> captcha(reader, id, Keys.CAPTCHA_NEEDED);
             case LoginResult.CodeNeeded needed -> new Outcome.Stay(messages.render(reader, Keys.FACTOR_CODE_NEEDED));
+            case LoginResult.Closed closed -> new Outcome.Stay(messages.render(reader, Keys.LOGIN_CLOSED));
             case LoginResult.NotRegistered notRegistered ->
                 new Outcome.Stay(messages.render(reader, Keys.LOGIN_NOT_REGISTERED));
             case LoginResult.Refused refused ->

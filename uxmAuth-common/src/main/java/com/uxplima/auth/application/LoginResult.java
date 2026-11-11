@@ -51,6 +51,12 @@ public sealed interface LoginResult {
     /** A captcha stands before this login: the connection must solve the one it is shown first. No try was spent. */
     record CaptchaNeeded() implements LoginResult {}
 
+    /**
+     * The password was right, but the website that keeps it has banned or closed the account: it logs in nowhere.
+     * Nothing was recorded.
+     */
+    record Closed() implements LoginResult {}
+
     /** There is no password to log in with: no account, or one that never set a password. */
     record NotRegistered() implements LoginResult {}
 

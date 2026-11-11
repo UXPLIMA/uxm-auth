@@ -92,6 +92,12 @@ public interface AccountRepository {
     /** Gives an account another id, as a scheme that follows Mojang's does when a cracked account turns premium. */
     void moveId(UUID from, UUID to);
 
+    /**
+     * Whether the website that keeps this account's password has banned or closed it. Such an account logs in
+     * nowhere, with any password or session. Without such a website the answer is always false.
+     */
+    boolean closed(UUID id);
+
     /** An account moved from one name to another. */
     record Renamed(PlayerName from, PlayerName to) {
         public Renamed {

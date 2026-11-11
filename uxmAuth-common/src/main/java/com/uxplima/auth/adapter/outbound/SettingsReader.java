@@ -410,8 +410,9 @@ final class SettingsReader {
             if (chosen == HashAlgorithm.PBKDF2_HEX
                     || chosen == HashAlgorithm.ARGON2I
                     || chosen == HashAlgorithm.LEGACY_DIGEST
-                    || chosen == HashAlgorithm.PBKDF2_DJANGO) {
-                throw new IllegalArgumentException("only a website table writes " + written);
+                    || chosen == HashAlgorithm.PBKDF2_DJANGO
+                    || chosen == HashAlgorithm.SCRYPT) {
+                throw new IllegalArgumentException("only a website table or Blysis writes " + written);
             }
             return chosen;
         } catch (IllegalArgumentException unknown) {

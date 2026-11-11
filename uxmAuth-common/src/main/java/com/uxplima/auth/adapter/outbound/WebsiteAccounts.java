@@ -324,4 +324,10 @@ public final class WebsiteAccounts implements AccountRepository {
     public void moveId(UUID from, UUID to) {
         accounts.moveId(from, to);
     }
+
+    /** The website's table holds no ban, so only the plugin's own accounts answer. */
+    @Override
+    public boolean closed(UUID id) {
+        return accounts.closed(id);
+    }
 }
