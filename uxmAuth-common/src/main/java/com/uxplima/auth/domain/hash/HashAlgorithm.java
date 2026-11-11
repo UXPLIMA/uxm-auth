@@ -17,5 +17,7 @@ public enum HashAlgorithm {
      */
     LEGACY_DIGEST,
     /** Django's PBKDF2 with its key in base64, as some login plugins and websites wrote it. Read only. */
-    PBKDF2_DJANGO
+    PBKDF2_DJANGO,
+    /** scrypt in Blysis' own form, written only while Blysis keeps the passwords and is set to scrypt. */
+    SCRYPT
 }

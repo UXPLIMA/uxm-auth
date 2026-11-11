@@ -23,6 +23,9 @@ public final class HashFormats {
         if (encoded.startsWith("pbkdf2-sha256$")) {
             return Optional.of(HashAlgorithm.PBKDF2);
         }
+        if (encoded.startsWith("$scrypt$")) {
+            return Optional.of(HashAlgorithm.SCRYPT);
+        }
         if (encoded.startsWith("$argon2i$")) {
             return Optional.of(HashAlgorithm.ARGON2I);
         }
