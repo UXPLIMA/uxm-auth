@@ -46,7 +46,8 @@ Bedrock players coming through Floodgate are logged in by their Xbox account and
 ### Bring your accounts with you
 
 Import accounts from AuthMe, nLogin, LibreLogin, JPremium, LimboAuth, FastLogin and six more login plugins.
-Share your website's login table, or move the whole database to another one with one command. SQLite works out
+Share your website's login table, or use a [Blysis](docs/user/blysis.md) website's members as the game's accounts
+with one password for both, or move the whole database to another one with one command. SQLite works out
 of the box; MySQL, MariaDB and PostgreSQL are a line in `config.conf`.
 
 ### Built for networks

@@ -51,12 +51,19 @@ names of `columns` when it is missing; an existing one is used as it is. Everyth
   the one hash. `sha256` is one salted SHA-256, which a copy of the database gives up in hours rather than years:
   choose it only for a website that reads nothing else. The start and `/uxmauth doctor` warn while it is on.
 
+## A Blysis website
+
+A server whose website is [Blysis](https://github.com/INOVIXI/blysis) turns on the `blysis` block instead of
+`website-table`: the website's members are the password accounts, with no second table. See
+[One account with Blysis](blysis.md). The two cannot both be on.
+
 ## Moving the database
 
 1. Fill `storage.move-to` with the target database, empty of this plugin's tables. A target that holds an
    account is refused and nothing is written. A move that fails halfway empties the tables it copied again, so
    it can simply run again; when even that fails, the console says to empty this plugin's tables at the target.
 2. Run `/uxmauth database move` from the console while nobody plays. The website table moves too when it is on.
+   With `blysis` on, the links to its members move; the members stay in the Blysis database.
 3. Put the target's three lines in place of `storage.jdbc-url`, `username` and `password`, empty `move-to`, and
    restart.
 
