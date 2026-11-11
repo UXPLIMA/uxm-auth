@@ -49,6 +49,7 @@ public final class TableCopy implements DatabaseCopy {
             "uxmauth_mail_code",
             "uxmauth_login",
             "uxmauth_website_link",
+            "uxmauth_blysis_link",
             "uxmauth_import_account",
             "uxmauth_account_lock",
             "uxmauth_mail_send");

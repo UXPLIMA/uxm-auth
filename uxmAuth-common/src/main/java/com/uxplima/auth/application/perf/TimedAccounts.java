@@ -185,4 +185,14 @@ public final class TimedAccounts implements AccountRepository {
             done(start);
         }
     }
+
+    @Override
+    public boolean closed(UUID id) {
+        long start = timings.start();
+        try {
+            return table.closed(id);
+        } finally {
+            done(start);
+        }
+    }
 }

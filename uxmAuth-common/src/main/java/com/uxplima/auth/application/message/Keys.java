@@ -184,6 +184,9 @@ public enum Keys implements MessageKey {
             "login.locked",
             "<etag:'ERROR'> <body>Too many wrong passwords or codes were typed for this account lately. Try again in"
                     + " <value><time><body>."),
+    LOGIN_CLOSED(
+            "login.closed",
+            "<etag:'ERROR'> <body>This account is banned or closed on the website, so it cannot log in here."),
     CLAIM_UNAVAILABLE(
             "claim.unavailable",
             "<etag:'ERROR'> <body>This server cannot ask Mojang who owns a name, so there is nothing to claim here."),

@@ -22,4 +22,6 @@ dependencies {
     // The platforms provide these at runtime.
     compileOnly(libs.bundles.adventure)
     compileOnly(libs.gson)
+    // The settings read the premium sources, whose types name Gson's.
+    testRuntimeOnly(libs.gson)
 }

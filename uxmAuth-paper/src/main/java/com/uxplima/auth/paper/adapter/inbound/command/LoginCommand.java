@@ -144,6 +144,7 @@ public final class LoginCommand {
                 messages.send(player, Keys.FACTOR_CODE_NEEDED);
                 factor.offer(player, null);
             }
+            case LoginResult.Closed closed -> messages.send(player, Keys.LOGIN_CLOSED);
             case LoginResult.NotRegistered notRegistered -> messages.send(player, Keys.LOGIN_NOT_REGISTERED);
             case LoginResult.AlreadyLoggedIn already -> messages.send(player, Keys.LOGIN_ALREADY);
             case LoginResult.Refused refused ->

@@ -385,7 +385,12 @@ public final class LogIn {
         if (current == null || stored == null) {
             return new LoginResult.NotRegistered();
         }
-        return switch (hashing.verify(password, stored)) {
+        Verification verified = hashing.verify(password, stored);
+        if (!(verified instanceof Verification.Wrong) && accounts.closed(current.id())) {
+            // Asked only of the right password, so a wrong guess learns nothing of the account's standing.
+            return new LoginResult.Closed();
+        }
+        return switch (verified) {
             case Verification.Wrong wrong -> {
                 captcha.failed(current.name());
                 yield wrongAnswer(connection, spent.attempts(), address, held.host(), taken);
